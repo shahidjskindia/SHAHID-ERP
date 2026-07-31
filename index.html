@@ -1119,22 +1119,56 @@
                 <div class="duplicate-alert" id="sea-dup-alert">⚠️ <strong>Duplicate Detected!</strong> <span id="sea-dup-msg"></span></div>
                 <div class="negative-margin-warning" id="sea-margin-warning">⚠️ WARNING: Negative margin detected! Buy rate exceeds sell rate.</div>
 
-                <div class="form-section">
-                    <h3>📋 Customer & Shipment Details</h3>
-                    <div class="form-grid-3col">
-                        <div class="form-group"><label>Client Name *</label><input type="text" id="sea-client" oninput="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-                        <div class="form-group"><label>Carrier *</label><select id="sea-carrier" onchange="onCarrierChange('sea');markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">Select Carrier</option></select></div>
-                        <div class="form-group"><label>POL *</label><select id="sea-pol" onchange="onPolChange('sea');markUnsaved('sea');checkSeaRateAuto()" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">Select POL</option></select></div>
-                        <div class="form-group"><label>POD *</label><select id="sea-pod" onchange="markUnsaved('sea');checkSeaRateAuto()" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">Select POD</option></select></div>
-                        <div class="form-group"><label>Incoterm</label><select id="sea-incoterm" onchange="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">Select Incoterm</option></select></div>
-                        <div class="form-group"><label>Container *</label><select id="sea-container" onchange="onContainerChange('sea');markUnsaved('sea');checkSeaRateAuto()" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">Select Size</option></select></div>
-                        <div class="form-group"><label>Commodity</label><select id="sea-commodity" onchange="markUnsaved('sea');checkSeaRateAuto()" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">Select Commodity</option><option value="NON HAZ">NON HAZ</option><option value="HAZ">HAZ</option></select></div>
-                        <div class="form-group"><label>Weight (KGS)</label><input type="number" id="sea-weight" oninput="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-                        <div class="form-group"><label>Transit Time (Days)</label><input type="number" id="sea-transit" placeholder="e.g., 5" oninput="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-                        <div class="form-group"><label>Validity Date</label><input type="date" id="sea-validityDate" onchange="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-                        <div class="form-group" style="grid-column:1/-1;"><label>Remarks</label><textarea id="sea-remarks" rows="2" oninput="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></textarea></div>
-                    </div>
-                </div>
+				<div class="form-section">
+					<h3>📋 Customer & Shipment Details</h3>
+					<div class="form-grid-3col">
+						<div class="form-group"><label>Client Name *</label><input type="text" id="sea-client" oninput="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
+
+						<div class="form-group">
+							<label>Carrier *</label>
+							<input type="text" id="sea-carrier" list="sea-carrier-list" placeholder="Type Carrier..." onchange="onCarrierChange('sea');markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+							<datalist id="sea-carrier-list"></datalist>
+						</div>
+
+						<div class="form-group">
+							<label>POL *</label>
+							<input type="text" id="sea-pol" list="sea-pol-list" placeholder="Type POL..." onchange="onPolChange('sea');markUnsaved('sea');checkSeaRateAuto()" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+							<datalist id="sea-pol-list"></datalist>
+						</div>
+
+						<div class="form-group">
+							<label>POD *</label>
+							<input type="text" id="sea-pod" list="sea-pod-list" placeholder="Type POD..." onchange="markUnsaved('sea');checkSeaRateAuto()" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+							<datalist id="sea-pod-list"></datalist>
+						</div>
+
+						<div class="form-group">
+							<label>Incoterm</label>
+							<input type="text" id="sea-incoterm" list="sea-incoterm-list" placeholder="Type Incoterm..." onchange="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+							<datalist id="sea-incoterm-list"></datalist>
+						</div>
+
+						<div class="form-group">
+							<label>Container *</label>
+							<input type="text" id="sea-container" list="sea-container-list" placeholder="Type Container..." onchange="onContainerChange('sea');markUnsaved('sea');checkSeaRateAuto()" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+							<datalist id="sea-container-list"></datalist>
+						</div>
+
+						<div class="form-group">
+							<label>Commodity</label>
+							<input type="text" id="sea-commodity" list="sea-commodity-list" placeholder="Type Commodity..." onchange="markUnsaved('sea');checkSeaRateAuto()" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+							<datalist id="sea-commodity-list">
+								<option value="NON HAZ">
+								<option value="HAZ">
+							</datalist>
+						</div>
+
+						<div class="form-group"><label>Weight (KGS)</label><input type="number" id="sea-weight" oninput="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
+						<div class="form-group"><label>Transit Time (Days)</label><input type="number" id="sea-transit" placeholder="e.g., 5" oninput="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
+						<div class="form-group"><label>Validity Date</label><input type="date" id="sea-validityDate" onchange="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
+						<div class="form-group" style="grid-column:1/-1;"><label>Remarks</label><textarea id="sea-remarks" rows="2" oninput="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></textarea></div>
+					</div>
+				</div>
 
                 <div class="charges-section">
                     <h3>💰 Freight & Local Charges <span style="font-size:0.72rem;color:var(--buy-red);font-weight:400;">(Drag to reorder • Buy rates in RED)</span></h3>
@@ -1173,23 +1207,52 @@
                 <div class="duplicate-alert" id="air-dup-alert">⚠️ <strong>Duplicate Detected!</strong> <span id="air-dup-msg"></span></div>
                 <div class="negative-margin-warning" id="air-margin-warning">⚠️ WARNING: Negative margin detected! Buy rate exceeds sell rate.</div>
 
-                <div class="form-section">
-                    <h3>📋 Customer & Shipment Details</h3>
-                    <div class="form-grid-3col">
-                        <div class="form-group"><label>Client Name *</label><input type="text" id="air-client" oninput="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-                        <div class="form-group"><label>Carrier *</label><select id="air-carrier" onchange="onCarrierChange('air');markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">Select Carrier</option></select></div>
-                        <div class="form-group"><label>POL *</label><select id="air-pol" onchange="onPolChange('air');markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">Select POL</option></select></div>
-                        <div class="form-group"><label>POD *</label><select id="air-pod" onchange="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">Select POD</option></select></div>
-                        <div class="form-group"><label>Incoterm</label><select id="air-incoterm" onchange="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">Select Incoterm</option></select></div>
-                        <div class="form-group"><label>Commodity</label><select id="air-commodity" onchange="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">Select Commodity</option><option value="NON HAZ">NON HAZ</option><option value="HAZ">HAZ</option></select></div>
-                        <div class="form-group"><label>Chargeable Weight (KGS)</label><input type="number" id="air-weight" oninput="calculateAirCharges();markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-                        <div class="form-group"><label>Volume (CBM)</label><input type="number" id="air-volume" oninput="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-                        <div class="form-group"><label>Number of Pallets</label><input type="number" id="air-pallets" oninput="calculateAirCharges();markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-                        <div class="form-group"><label>Transit Time (Days)</label><input type="number" id="air-transit" placeholder="e.g., 3" oninput="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-                        <div class="form-group"><label>Validity Date</label><input type="date" id="air-validityDate" onchange="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-                        <div class="form-group" style="grid-column:1/-1;"><label>Remarks</label><textarea id="air-remarks" rows="2" oninput="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></textarea></div>
-                    </div>
-                </div>
+			<div class="form-section">
+				<h3>📋 Customer & Shipment Details</h3>
+				<div class="form-grid-3col">
+					<div class="form-group"><label>Client Name *</label><input type="text" id="air-client" oninput="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
+
+					<div class="form-group">
+						<label>Carrier *</label>
+						<input type="text" id="air-carrier" list="air-carrier-list" placeholder="Type Carrier..." onchange="onCarrierChange('air');markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+						<datalist id="air-carrier-list"></datalist>
+					</div>
+
+					<div class="form-group">
+						<label>POL *</label>
+						<input type="text" id="air-pol" list="air-pol-list" placeholder="Type POL..." onchange="onPolChange('air');markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+						<datalist id="air-pol-list"></datalist>
+					</div>
+
+					<div class="form-group">
+						<label>POD *</label>
+						<input type="text" id="air-pod" list="air-pod-list" placeholder="Type POD..." onchange="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+						<datalist id="air-pod-list"></datalist>
+					</div>
+
+					<div class="form-group">
+						<label>Incoterm</label>
+						<input type="text" id="air-incoterm" list="air-incoterm-list" placeholder="Type Incoterm..." onchange="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+						<datalist id="air-incoterm-list"></datalist>
+					</div>
+
+					<div class="form-group">
+						<label>Commodity</label>
+						<input type="text" id="air-commodity" list="air-commodity-list" placeholder="Type Commodity..." onchange="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+						<datalist id="air-commodity-list">
+							<option value="NON HAZ">
+							<option value="HAZ">
+						</datalist>
+					</div>
+
+					<div class="form-group"><label>Chargeable Weight (KGS)</label><input type="number" id="air-weight" oninput="calculateAirCharges();markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
+					<div class="form-group"><label>Volume (CBM)</label><input type="number" id="air-volume" oninput="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
+					<div class="form-group"><label>Number of Pallets</label><input type="number" id="air-pallets" oninput="calculateAirCharges();markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
+					<div class="form-group"><label>Transit Time (Days)</label><input type="number" id="air-transit" placeholder="e.g., 3" oninput="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
+					<div class="form-group"><label>Validity Date</label><input type="date" id="air-validityDate" onchange="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
+					<div class="form-group" style="grid-column:1/-1;"><label>Remarks</label><textarea id="air-remarks" rows="2" oninput="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></textarea></div>
+				</div>
+			</div>
 
                 <div class="charges-section">
                     <h3>💰 Freight & Local Charges <span style="font-size:0.72rem;color:var(--buy-red);font-weight:400;">(Drag to reorder • Auto-calculated)</span></h3>
@@ -1228,22 +1291,51 @@
                 <div class="duplicate-alert" id="lcl-dup-alert">⚠️ <strong>Duplicate Detected!</strong> <span id="lcl-dup-msg"></span></div>
                 <div class="negative-margin-warning" id="lcl-margin-warning">⚠️ WARNING: Negative margin detected! Buy rate exceeds sell rate.</div>
 
-                <div class="form-section">
-                    <h3>📋 Customer & Shipment Details</h3>
-                    <div class="form-grid-3col">
-                        <div class="form-group"><label>Client Name *</label><input type="text" id="lcl-client" oninput="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-                        <div class="form-group"><label>Carrier *</label><select id="lcl-carrier" onchange="onCarrierChange('lcl');markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">Select Carrier</option></select></div>
-                        <div class="form-group"><label>POL *</label><select id="lcl-pol" onchange="onPolChange('lcl');markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">Select POL</option></select></div>
-                        <div class="form-group"><label>POD *</label><select id="lcl-pod" onchange="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">Select POD</option></select></div>
-                        <div class="form-group"><label>Incoterm</label><select id="lcl-incoterm" onchange="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">Select Incoterm</option></select></div>
-                        <div class="form-group"><label>Commodity</label><select id="lcl-commodity" onchange="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">Select Commodity</option><option value="NON HAZ">NON HAZ</option><option value="HAZ">HAZ</option></select></div>
-                        <div class="form-group"><label>Weight (KGS)</label><input type="number" id="lcl-weight" oninput="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-                        <div class="form-group"><label>Volume (CBM)</label><input type="number" id="lcl-volume" oninput="updateLCLPerCBM();markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-                        <div class="form-group"><label>Transit Time (Days)</label><input type="number" id="lcl-transit" placeholder="e.g., 30" oninput="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-                        <div class="form-group"><label>Validity Date</label><input type="date" id="lcl-validityDate" onchange="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-                        <div class="form-group" style="grid-column:1/-1;"><label>Remarks</label><textarea id="lcl-remarks" rows="2" oninput="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></textarea></div>
-                    </div>
-                </div>
+			<div class="form-section">
+				<h3>📋 Customer & Shipment Details</h3>
+				<div class="form-grid-3col">
+					<div class="form-group"><label>Client Name *</label><input type="text" id="lcl-client" oninput="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
+
+					<div class="form-group">
+						<label>Carrier *</label>
+						<input type="text" id="lcl-carrier" list="lcl-carrier-list" placeholder="Type Carrier..." onchange="onCarrierChange('lcl');markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+						<datalist id="lcl-carrier-list"></datalist>
+					</div>
+
+					<div class="form-group">
+						<label>POL *</label>
+						<input type="text" id="lcl-pol" list="lcl-pol-list" placeholder="Type POL..." onchange="onPolChange('lcl');markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+						<datalist id="lcl-pol-list"></datalist>
+					</div>
+
+					<div class="form-group">
+						<label>POD *</label>
+						<input type="text" id="lcl-pod" list="lcl-pod-list" placeholder="Type POD..." onchange="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+						<datalist id="lcl-pod-list"></datalist>
+					</div>
+
+					<div class="form-group">
+						<label>Incoterm</label>
+						<input type="text" id="lcl-incoterm" list="lcl-incoterm-list" placeholder="Type Incoterm..." onchange="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+						<datalist id="lcl-incoterm-list"></datalist>
+					</div>
+
+					<div class="form-group">
+						<label>Commodity</label>
+						<input type="text" id="lcl-commodity" list="lcl-commodity-list" placeholder="Type Commodity..." onchange="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+						<datalist id="lcl-commodity-list">
+							<option value="NON HAZ">
+							<option value="HAZ">
+						</datalist>
+					</div>
+
+					<div class="form-group"><label>Weight (KGS)</label><input type="number" id="lcl-weight" oninput="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
+					<div class="form-group"><label>Volume (CBM)</label><input type="number" id="lcl-volume" oninput="updateLCLPerCBM();markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
+					<div class="form-group"><label>Transit Time (Days)</label><input type="number" id="lcl-transit" placeholder="e.g., 30" oninput="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
+					<div class="form-group"><label>Validity Date</label><input type="date" id="lcl-validityDate" onchange="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
+					<div class="form-group" style="grid-column:1/-1;"><label>Remarks</label><textarea id="lcl-remarks" rows="2" oninput="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></textarea></div>
+				</div>
+			</div>
 
                 <div class="charges-section">
                     <h3>💰 Freight & Local Charges <span style="font-size:0.72rem;color:var(--buy-red);font-weight:400;">(Drag to reorder • FREIGHT & THC per CBM)</span></h3>
@@ -2621,12 +2713,17 @@
 			<!-- ===== SEA LOCAL CHARGES ===== -->
 			<div class="tab-panel" id="sealocal">
 				<div class="tab-heading">
-					<h2>🚢 Sea Local Charges</h2>
+					<h2>🚢 Sea Local Charges</h2>				
 					<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+					<div style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
+						<button class="btn btn-sm btn-danger" onclick="bulkDeleteSelectedLocal()">🗑️ Delete Selected</button>
+						<span id="selected-count" style="font-size:0.8rem; color:var(--text-light);">0 selected</span>
+					</div>						
 						<button class="btn btn-export btn-sm" onclick="bulkExportDefaultCharges()">📤 Export Default</button>
 						<button class="btn btn-export btn-sm" onclick="bulkExportCarrierCharges()">📤 Export Carrier</button>
 						<button class="btn btn-import btn-sm" onclick="document.getElementById('bulk-import-carrier-file').click()">📥 Import Carrier</button>
 						<input type="file" id="bulk-import-carrier-file" accept=".xlsx" style="display:none;" onchange="bulkImportCarrierCharges(this)" />
+						
 					</div>
 				</div>
 				<div id="sealocal-content">
@@ -2663,6 +2760,10 @@
 				<div class="tab-heading">
 					<h2>✈️ Air Local Charges</h2>
 					<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+					<div style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
+						<button class="btn btn-sm btn-danger" onclick="bulkDeleteSelectedLocal()">🗑️ Delete Selected</button>
+						<span id="selected-count" style="font-size:0.8rem; color:var(--text-light);">0 selected</span>
+					</div>						
 						<button class="btn btn-export btn-sm" onclick="bulkExportDefaultCharges()">📤 Export Default</button>
 						<button class="btn btn-export btn-sm" onclick="bulkExportCarrierCharges()">📤 Export Carrier</button>
 						<button class="btn btn-import btn-sm" onclick="document.getElementById('bulk-import-carrier-file').click()">📥 Import Carrier</button>
@@ -2698,8 +2799,12 @@
 			<!-- ===== LCL LOCAL CHARGES ===== -->
 			<div class="tab-panel" id="lcllocal">
 				<div class="tab-heading">
-					<h2>📦 LCL Local Charges</h2>
+					<h2>📦 LCL Local Charges</h2>					
 					<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+					<div style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
+						<button class="btn btn-sm btn-danger" onclick="bulkDeleteSelectedLocal()">🗑️ Delete Selected</button>
+						<span id="selected-count" style="font-size:0.8rem; color:var(--text-light);">0 selected</span>
+					</div>						
 						<button class="btn btn-export btn-sm" onclick="bulkExportDefaultCharges()">📤 Export Default</button>
 						<button class="btn btn-export btn-sm" onclick="bulkExportCarrierCharges()">📤 Export Carrier</button>
 						<button class="btn btn-import btn-sm" onclick="document.getElementById('bulk-import-carrier-file').click()">📥 Import Carrier</button>
