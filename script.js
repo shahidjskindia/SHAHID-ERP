@@ -1,17 +1,3 @@
-// ========================================================================
-// COMPLETE JAVASCRIPT – Gateway EXIM Freight Quotation System
-// ========================================================================
-// CRITICAL FIXES APPLIED:
-// - Login System & User Management (password preservation on edit)
-// - Removed duplicate measurement calculator code
-// - Removed renderContainerDimensions call from switchToTab
-// - Added US Import Duty calculator (new tab)
-// - Added Measurement Defaults (Database) and auto-population
-// - Dual-currency output for Product Pricing & US Duty
-// ========================================================================
-
-
-// ==================== DATA DEFINITIONS ====================
 // ==================== DATA DEFINITIONS ====================
 const defaultCharges = {
     sea: ["FREIGHT", "THC", "SEAL", "MUC", "DOCS", "SWITCH BL", "ETS", "HAZ DOCS", "AMS", "CFS", "CLEARANCE", "VGM",
