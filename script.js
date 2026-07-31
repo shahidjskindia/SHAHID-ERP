@@ -12,6 +12,7 @@
 
 
 // ==================== DATA DEFINITIONS ====================
+// ==================== DATA DEFINITIONS ====================
 const defaultCharges = {
     sea: ["FREIGHT", "THC", "SEAL", "MUC", "DOCS", "SWITCH BL", "ETS", "HAZ DOCS", "AMS", "CFS", "CLEARANCE", "VGM",
         "TOLL", "LASHING & CHOKING", "HAZ STICKER", "TRANSPORTATION", "LOLO", "ON WHEEL", "OTHER LOCALS"
@@ -64,59 +65,320 @@ const defaultContainerDimensions = [
     { type: "40 TK", length: "12.032m", width: "2.352m", height: "2.393m", maxWeight: "26,000 kg", cbm: "67.7" }
 ];
 
-const defaultDB = {
-    carriers: [],
-    pol: ["HAZIRA, IN", "NHAVA SHEVA, IN", "MUNDRA, IN", "DXB Airport", "DEL Airport"],
-    pod: ["Rotterdam", "Hamburg", "New York", "FRA Airport", "LHR Airport", "Jebel Ali"],
-    incoterms: ["EXW", "FOB", "CIF", "CFR", "DAP", "DDP", "FCA", "CPT"],
-    containers: ["20 GP", "40 GP", "40 HC", "20 RF", "40 RF", "20 TK", "40 TK"],
-    containerDimensions: JSON.parse(JSON.stringify(defaultContainerDimensions)),
-    companyName: "GATEWAY EXIM",
-    companyAddress: "OFFICE NO.523, TOWER 1A, 73, EAST AVENUE, NR. GENDA CIRCLE, SARA BHAI CAMPUS, VADODARA, GUJARAT 390007 - INDIA",
-    defaultUser: "Shaikh Shahid",
-    exchangeRates: { USD: 94.50, GBP: 105.20, RMB: 11.50, EUR: 90.10, AED: 22.75, INR: 1.00 },
-    defaultSeaCharges: [],
-    defaultAirCharges: [],
-    defaultLclCharges: [],
-    carrierChargesSeaLcl: [],
-    carrierChargesAir: [],
-    drafts: { sea: [], air: [], lcl: [] },
-    rates: { sea: [], air: [], lcl: [] },
-    rateSheet: [],
-    hiddenItems: { pol: [], pod: [], incoterms: [], containers: [], carriers: [] },
-    theme: "light",
-    lastBackup: null,
-    duplicateDetectionDays: 30,
-    navState: { expandedCategories: ['newQuote', 'quoteSheet', 'dsrCat', 'reports', 'admin'], lastTab: 'sea' },
-    shipments: [],
-    bldrafts: [],
-
-    cargoStatusMaster: ["Booked", "Confirmed", "In Transit", "Delivered", "Cancelled"],
-    docsStatusMaster: ["Pending", "In Progress", "Ready", "Sent", "Received"],
-    users: [],
-    defaults: {
-        gst: 18,
-        insurance: 0.05,
-        profitMargin: 15,
-        defaultCurrency: 'USD',
-        usDuty: 0,
-        usTariff: 0,
-        usMPF: 0.3464,
-        usHMF: 0.125,
-        inDuty: 7.5,
-        inSocialWelfare: 10,
-        drawback: 0,
-        rodtep: 0
-    },
-    // ===== ADD THESE TWO LINES =====
-    plannerNotes: [],
-    plannerTasks: []
+// ==================== EMBEDDED BACKUP DATA (FULL) ====================
+const EMBEDDED_BACKUP = {
+  "carriers": [
+    "MSC", "COSCO", "CMA", "HAPAG", "EVERGREEN", "WAN HAI", "UNI FEEDER", "SAMSARA", "ESL", "AIYER",
+    "SCI", "WIN WIN", "SEA BRIDGE", "SEA HORSE", "ECON", "KMTC", "PIL", "OOCL", "SINOKOR", "ONE",
+    "SAMUDERA", "HMM", "ANL", "MAERSK", "25", "GOOD RICH", "SEA LEAD", "INTER ASIA", "SIMA MARINE",
+    "RCL", "YML", "T S LINE", "33", "BEN LINE", "ZIM", "FESCO", "Z LINE", "SEMA MARINE",
+    "QNL / MILAHA", "GIGA", "GOLD", "DGR", "NVOCC", "ALADIN EXP", "SEAPOL", "MAXICON", "RADIANT",
+    "HUB & LINK", "TURKON", "GOLDAIR"
+  ],
+  "pol": [
+    "-", "MUMBAI, IN", "AHMEDABAD, IN", "HYDERABAD, IN", "DELHI, IN", "NHAVA SHEVA, IN",
+    "MUNDRA, IN", "HAZIRA, IN", "ANKLESWAR, IN", "VADODRA, IN", "PIPAVAV, IN", "CHENNAI, IN",
+    "JAIPUR, IN"
+  ],
+  "pod": [
+    "ALGIERS, DZ", "ANNABA, DZ", "ORAN, DZ", "LOBITO, AO", "LUANDA, AO", "BAHIA BLANCA, AR",
+    "BUENOS AIRES, AR", "PUERTO BELGRANO, AR", "ROSARIO, AR", "ADELAIDE, AU", "BRISBANE, AU",
+    "FREMANTLE, AU", "GLADSTONE, AU", "MELBOURNE, AU", "NEWCASTLE, AU", "PORT HEDLAND, AU",
+    "SYDNEY, AU", "VIENNA, AT", "BAHRAIN, BH", "CHATTOGRAM, BD", "ICD DHAKA, BD", "ANTWERP, BE",
+    "BELIZE CITY, BZ", "COTONOU, BJ", "FORTALEZA, BR", "ITAJAI, BR", "ITAPOA, BR", "NAVEGANTES, BR",
+    "PARANAGUA, BR", "PECEM, BR", "RIO DE JANEIRO, BR", "SANTOS, BR", "SUAPE, BR", "VILA DO CONDE, BR",
+    "PHNOM PENH, KH", "SIHANOUKVILLE, KH", "DOUALA, CM", "HALIFAX, CA", "MONTREAL, CA",
+    "PRINCE RUPERT, CA", "VANCOUVER, CA", "TORONTO, CA", "ARICA, CL", "IQUIQUE, CL", "SAN ANTONIO, CL",
+    "VALPARAISO, CL", "BEICUN, CN", "BEIJAO, CN", "CHANGSHA, CN", "CHANGZHOU, CN", "CHIWAN, CN",
+    "CHONGQING, CN", "DALIAN, CN", "DOU MEN, CN", "FOSHAN JIUJIANG, CN", "GAOMING, CN", "GAOYAO, CN",
+    "GAOLAN, CN", "GAOSHA, CN", "HAIKOU, CN", "HEFEI, CN", "HONGWAN, CN", "HUADU, CN", "HUANGPU, CN",
+    "HUMEN, CN", "JIANGMEN, CN", "JIANGYIN, CN", "JIAOXIN, CN", "JIUJIANG, CN", "LIANHUA SHAN, CN",
+    "LIANYUNGANG, CN", "MAWEI, CN", "NANCHANG, CN", "NANJING, CN", "NANSHA, CN", "NANTONG, CN",
+    "NINGBO, CN", "PSA DONGGUAN, CN", "QINGDAO, CN", "QINGYUAN, CN", "QINZHOU, CN", "SANSHAN, CN",
+    "SANSHUI, CN", "SHANGHAI, CN", "SHANTOU, CN", "SHATIAN, CN", "SHEKOU, CN", "SHENZHEN, CN",
+    "SHUNDE LELIU, CN", "SHUNDE NEW PORT, CN", "SI HUI, CN", "TAICANG, CN", "TIANJIN, CN",
+    "XINGANG, CN", "WENZHOU, CN", "WU ZHOU, CN", "WUHAN, CN", "WUHU, CN", "XIAMEN, CN",
+    "XIAOLAN, CN", "XINHUI, CN", "YANGZHOU, CN", "YANGPU, CN", "YANTIAN, CN", "YICHANG, CN",
+    "YUEYANG, CN", "ZHANGJIAGANG, CN", "ZHANJIANG, CN", "ZHAOQING, CN", "ZHAPU, CN", "ZHONGSHAN, CN",
+    "BARRANQUILLA, CO", "BUENAVENTURA, CO", "CARTAGENA, CO", "COMUNION, CO", "MATADI, CD",
+    "POINTE-NOIRE, CG", "PUERTO CALDERA, CR", "PUERTO LIMON, CR", "HAVANA, CU", "MARIEL, CU",
+    "ESBJERG, DK", "AARHUS, DK", "DJIBOUTI, DJ", "CAUCEDO, DO", "GUAYAQUIL, EC", "MANTA, EC",
+    "PUERTO BOLIVAR, EC", "AL SOKHNA, EG", "ALEXANDRIA, EG", "DAMIETTA, EG", "PORT SAID, EG",
+    "ACAJUTLA, SV", "MASSAWA, ER", "HELSINKI, FI", "FOS SUR MER, FR", "LE HAVRE, FR", "MARSEILLE, FR",
+    "LIBREVILLE, GA", "BREMERHAVEN, DE", "HAMBURG, DE", "ACCRA (TEMA), GH", "TAKORADI, GH",
+    "HERAKLION, GR", "PIRAEUS, GR", "THESSALONIKI, GR", "PUERTO QUETZAL, GT", "CONAKRY, GN",
+    "MALABO, GQ", "PUERTO CORTES, HN", "HONG KONG, HK", "BUDAPEST, HU", "BALIKPAPAN, ID",
+    "BATAM, ID", "BELAWAN, ID", "JAKARTA, ID", "PALEMBANG, ID", "PANJANG, ID", "PONTIANAK, ID",
+    "SEMARANG, ID", "SURABAYA, ID", "BANDAR ABBAS, IR", "CHABAHAR, IR", "BUSHEHR, IR", "BASRA, IQ",
+    "UMM QASR, IQ", "ASHDOD, IL", "HAIFA, IL", "GENOA, IT", "GIOIA TAURO, IT", "NAPLES, IT",
+    "RAVENNA, IT", "TRIESTE, IT", "LA SPEZIA, IT", "LIVORNO, IT", "TARANTO, IT", "ABIDJAN, CI",
+    "SAN PEDRO, CI", "KINGSTON, JM", "FUKUYAMA, JP", "HAKATA, JP", "HIROSHIMA, JP", "KAWASAKI, JP",
+    "KOBE, JP", "MATSUYAMA, JP", "MIZUSHIMA, JP", "MOJI, JP", "NAGOYA, JP", "OSAKA, JP",
+    "SENDAI, JP", "SHIMIZU, JP", "TOKYO, JP", "YOKKAICHI, JP", "YOKOHAMA, JP", "LAMU, KE",
+    "MOMBASA, KE", "NAIROBI, KE", "KUWAIT, KW", "SHUAIBA, KW", "RIGA, LV", "KLAIPEDA, LT",
+    "TOAMASINA, MG", "BINTULU, MY", "KOTA KINABALU, MY", "KUCHING, MY", "MIRI, MY",
+    "PASIR GUDANG, MY", "PENANG, MY", "PORT KLANG, MY", "SANDAKAN, MY", "SIBU, MY",
+    "TANJUNG PELEPAS, MY", "TAWAO, MY", "MALTA FREEPORT, MT", "PORT LOUIS, MU", "ALTAMIRA, MX",
+    "ENSENADA, MX", "LAZARO CARDENAS, MX", "MANZANILLO, MX", "TAMPICO, MX", "VERACRUZ, MX",
+    "AGADIR, MA", "CASABLANCA, MA", "TANGER MED, MA", "BEIRA, MZ", "MAPUTO, MZ", "NACALA, MZ",
+    "YANGON, MM", "ROTTERDAM, NL", "AUCKLAND, NZ", "LYTTELTON, NZ", "NAPIER, NZ", "TAURANGA, NZ",
+    "WELLINGTON, NZ", "CORINTO, NI", "LAGOS, NG", "APAPA, NG", "ONNE, NG", "PORT HARCOURT, NG",
+    "OSLO, NO", "STAVANGER, NO", "SALALAH, OM", "SOHAR, OM", "KARACHI, PK", "CALLAO, PE",
+    "CHIMBOTE, PE", "MATARANI, PE", "PAITA, PE", "BATANGAS, PH", "CAGAYAN DE ORO, PH", "CEBU, PH",
+    "DAVAO, PH", "GENERAL SANTOS, PH", "MANILA NORTH, PH", "MANILA SOUTH, PH", "MANILA, PH",
+    "SUBIC BAY, PH", "GDANSK, PL", "GDYNIA, PL", "LISBON, PT", "SINES, PT", "HAMAD, QA",
+    "CONSTANTA, RO", "NOVOROSSIYSK, RU", "ST PETERSBURG, RU", "VLADIVOSTOK, RU", "DAMMAM, SA",
+    "JEDDAH, SA", "RIYADH, SA", "YANBU, SA", "DAKAR, SN", "SINGAPORE, SG", "BERBERA, SO",
+    "BOSASO, SO", "KISMAYO, SO", "MERCA, SO", "MOGADISHU, SO", "CAPE TOWN, ZA", "DURBAN, ZA",
+    "JOHANNESBURG, ZA", "PORT ELIZABETH, ZA", "RICHARDS BAY, ZA", "BUSAN, KR", "GWANGYANG, KR",
+    "INCHON, KR", "ULSAN, KR", "ALGECIRAS, ES", "BARCELONA, ES", "BILBAO, ES", "VALENCIA, ES",
+    "VIGO, ES", "COLOMBO, LK", "HAMBANTOTA, LK", "PORT SUDAN, SD", "GOTHENBURG, SE", "KAOHSIUNG, TW",
+    "KEELUNG, TW", "TAICHUNG, TW", "TAIPEI, TW", "TAOYUAN, TW", "BAGAMOYO, TZ", "DAR ES SALAAM, TZ",
+    "ZANZIBAR, TZ", "BANGKOK PAT, TH", "BANGKOK, TH", "LAEM CHABANG, TH", "LAT KRABANG, TH",
+    "LOME, TG", "BIZERTE, TN", "RADES, TN", "SFAX, TN", "GABZE, TR", "GEMLIK, TR", "ISKENDERUN, TR",
+    "ISTANBUL, TR", "IZMIR, TR", "IZMIT, TR", "MERSIN, TR", "ABU DHABI, AE", "JEBEL ALI, AE",
+    "KHALIFA PORT, AE", "SHARJAH, AE", "FELIXSTOWE, GB", "LIVERPOOL, GB", "LONDON GATEWAY, GB",
+    "SOUTHAMPTON, GB", "MONTEVIDEO, UY", "NUEVA PALMIRA, UY", "LONG BEACH, US", "LOS ANGELES, US",
+    "OAKLAND, US", "SEATTLE, US", "TACOMA, US", "PORTLAND, US", "SAN DIEGO, US", "NEW YORK, US",
+    "NEW JERSEY, US", "SAVANNAH, US", "NORFOLK, VA", "CHARLESTON, US", "JACKSONVILLE, US",
+    "BALTIMORE, US", "COLUMBUS, OH", "BOSTON, US", "HOUSTON, US", "GALVESTON, US", "FREEPORT, US",
+    "MOBILE, US", "MIAMI, US", "PORT EVERGLADES, US", "TAMPA, US", "NEW ORLEANS, US", "NORFOLK, US",
+    "PHILADELPHIA, US", "CHICAGO, US", "KINGSBURY, US", "DALLAS, US", "MEMPHIS, US",
+    "MINNEAPOLIS, US", "ATLANTA, US", "KANSAS CITY, US", "LA GUAIRA, VE", "MARACAIBO, VE",
+    "PUERTO CABELLO, VE", "CAI MEP, VN", "CAT LAI, VN", "DANANG, VN", "HAIPHONG, VN",
+    "HO CHI MINH, VN", "PHUOC LONG ICD, VN", "QUY NHON, VN", "VUNG TAU, VN", "ADEN, YE",
+    "AL HODEIDAH, YE", "AL MUKALLA, YE", "ASH SHIHR, YE", "MOKHA, YE", "NASHTOON, YE",
+    "RAS ISA, YE", "SALEEF, YE", "SOCOTRA, YE", "MUARA, BN", "SAN JUAN, PR", "TAMATAVE, MG",
+    "LEIXOES, PT", "PORT OF SPAIN", "BRIDGETOWN, BB", "PARANGUA, BR", "BEIRUT, LB",
+    "LOUISVILLE, KY", "NOUAKCHOTT, MR", "FUJAIRAH, AE", "KHOR FAKKAN, AE", "AQABA, JD",
+    "INDIANAPOLIS, US", "KOPER, SI"
+  ],
+  "incoterms": ["EXW", "FOB", "CIF", "CFR", "DAP", "DDP", "FCA", "CPT"],
+  "containers": ["20 GP", "40 GP", "40 HC", "20 RF", "40 RF", "20 TK", "40 TK"],
+  "containerDimensions": [
+    {"type":"20 GP","length":5.898,"width":2.352,"height":2.393,"maxWeight":28200,"cbm":33.2,"tareWeight":"0 kg","unit":"m"},
+    {"type":"40 GP","length":12.032,"width":2.352,"height":2.393,"maxWeight":26580,"cbm":67.7,"tareWeight":"0 kg","unit":"m"},
+    {"type":"40 HC","length":12.032,"width":2.352,"height":2.698,"maxWeight":26480,"cbm":76.3,"tareWeight":"0 kg","unit":"m"},
+    {"type":"20 RF","length":5.444,"width":2.286,"height":2.275,"maxWeight":27700,"cbm":28.4,"tareWeight":"0 kg","unit":"m"},
+    {"type":"40 RF","length":11.572,"width":2.286,"height":2.275,"maxWeight":26500,"cbm":54.3,"tareWeight":"0 kg","unit":"m"},
+    {"type":"20 TK","length":5.898,"width":2.352,"height":2.393,"maxWeight":24000,"cbm":33.2,"tareWeight":"0 kg","unit":"m"},
+    {"type":"40 TK","length":12.032,"width":2.352,"height":2.393,"maxWeight":26000,"cbm":67.7,"tareWeight":"0 kg","unit":"m"}
+  ],
+  "companyName": "GATEWAY EXIM",
+  "companyAddress": "OFFICE NO.523, TOWER 1A, 73, EAST AVENUE, NR. GENDA CIRCLE, SARA BHAI CAMPUS, VADODARA, GUJARAT 390007 - INDIA",
+  "defaultUser": "Shaikh Shahid",
+  "exchangeRates": {"USD":97,"GBP":105.2,"RMB":11.5,"EUR":90.1,"AED":22.75,"INR":1},
+  "defaultSeaCharges": [
+    {"pol":"HAZIRA, IN","commodity":"NON HAZ","charges":{"CFS":{"amount":16950,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"CLEARANCE":{"amount":2500,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"VGM":{"amount":25,"currency":"USD","buyAmount":0,"buyCurrency":"USD","basis":"Normal"},"LASHING & CHOKING":{"amount":2000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"ON WHEEL":{"amount":5000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"OTHER LOCALS":{"amount":2020,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"}},"carrier":"ALL","container":"20 GP"},
+    {"pol":"HAZIRA, IN","commodity":"NON HAZ","charges":{"CFS":{"amount":23950,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"CLEARANCE":{"amount":3000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"VGM":{"amount":25,"currency":"USD","buyAmount":0,"buyCurrency":"USD","basis":"Normal"},"LASHING & CHOKING":{"amount":3000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"ON WHEEL":{"amount":5000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"OTHER LOCALS":{"amount":3320,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"}},"carrier":"ALL","container":"40 HC"},
+    {"pol":"NHAVA SHEVA, IN","commodity":"NON HAZ","charges":{"CFS":{"amount":15300,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"CLEARANCE":{"amount":2500,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"VGM":{"amount":25,"currency":"USD","buyAmount":0,"buyCurrency":"USD","basis":"Normal"},"TOLL":{"amount":600,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"LASHING & CHOKING":{"amount":2500,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"}},"carrier":"ALL","container":"20 GP"},
+    {"pol":"NHAVA SHEVA, IN","commodity":"NON HAZ","charges":{"CFS":{"amount":25500,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"CLEARANCE":{"amount":3000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"VGM":{"amount":25,"currency":"USD","buyAmount":0,"buyCurrency":"USD","basis":"Normal"},"TOLL":{"amount":1200,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"LASHING & CHOKING":{"amount":3500,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"}},"carrier":"ALL","container":"40 HC"},
+    {"pol":"MUNDRA, IN","commodity":"NON HAZ","charges":{"CFS":{"amount":17900,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"CLEARANCE":{"amount":2500,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"VGM":{"amount":25,"currency":"USD","buyAmount":0,"buyCurrency":"USD","basis":"Normal"},"LASHING & CHOKING":{"amount":2000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"ON WHEEL":{"amount":5000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"LOLO":{"amount":3000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"OTHER LOCALS":{"amount":2020,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"}},"carrier":"ALL","container":"20 GP"},
+    {"pol":"MUNDRA, IN","commodity":"NON HAZ","charges":{"CFS":{"amount":29950,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"CLEARANCE":{"amount":3000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"VGM":{"amount":25,"currency":"USD","buyAmount":0,"buyCurrency":"USD","basis":"Normal"},"LASHING & CHOKING":{"amount":3000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"ON WHEEL":{"amount":5000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"LOLO":{"amount":5000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"OTHER LOCALS":{"amount":3320,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"}},"carrier":"ALL","container":"40 HC"},
+    {"pol":"HAZIRA, IN","commodity":"HAZ","charges":{"CFS":{"amount":16950,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"CLEARANCE":{"amount":2500,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"VGM":{"amount":25,"currency":"USD","buyAmount":0,"buyCurrency":"USD","basis":"Normal"},"LASHING & CHOKING":{"amount":2000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"ON WHEEL":{"amount":5000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"OTHER LOCALS":{"amount":2020,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"}},"carrier":"ALL","container":"20 GP"},
+    {"pol":"HAZIRA, IN","commodity":"HAZ","charges":{"CFS":{"amount":23950,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"CLEARANCE":{"amount":3000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"VGM":{"amount":25,"currency":"USD","buyAmount":0,"buyCurrency":"USD","basis":"Normal"},"LASHING & CHOKING":{"amount":3000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"ON WHEEL":{"amount":5000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"OTHER LOCALS":{"amount":3320,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"}},"carrier":"ALL","container":"40 HC"},
+    {"pol":"NHAVA SHEVA, IN","commodity":"HAZ","charges":{"CFS":{"amount":15300,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"CLEARANCE":{"amount":2500,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"VGM":{"amount":25,"currency":"USD","buyAmount":0,"buyCurrency":"USD","basis":"Normal"},"TOLL":{"amount":600,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"LASHING & CHOKING":{"amount":2500,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"HAZ STCKER":{"amount":700,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"}},"carrier":"ALL","container":"20 GP"},
+    {"pol":"NHAVA SHEVA, IN","commodity":"HAZ","charges":{"CFS":{"amount":25500,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"CLEARANCE":{"amount":3000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"VGM":{"amount":25,"currency":"USD","buyAmount":0,"buyCurrency":"USD","basis":"Normal"},"TOLL":{"amount":1200,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"LASHING & CHOKING":{"amount":3500,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"HAZ STCKER":{"amount":900,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"}},"carrier":"ALL","container":"40 HC"},
+    {"pol":"MUNDRA, IN","commodity":"HAZ","charges":{"CFS":{"amount":17900,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"CLEARANCE":{"amount":2500,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"VGM":{"amount":25,"currency":"USD","buyAmount":0,"buyCurrency":"USD","basis":"Normal"},"LASHING & CHOKING":{"amount":2000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"ON WHEEL":{"amount":5000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"LOLO":{"amount":3000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"OTHER LOCALS":{"amount":2020,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"}},"carrier":"ALL","container":"20 GP"},
+    {"pol":"MUNDRA, IN","commodity":"HAZ","charges":{"CFS":{"amount":29950,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"CLEARANCE":{"amount":3000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"VGM":{"amount":25,"currency":"USD","buyAmount":0,"buyCurrency":"USD","basis":"Normal"},"LASHING & CHOKING":{"amount":3000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"ON WHEEL":{"amount":5000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"LOLO":{"amount":5000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"OTHER LOCALS":{"amount":3320,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"}},"carrier":"ALL","container":"40 HC"}
+  ],
+  "defaultAirCharges": [
+    {"pol":"MUMBAI, IN","commodity":"NON HAZ","charges":{"CARTAGE":{"amount":850,"currency":"INR"},"MCC":{"amount":850,"currency":"INR"},"XRAY":{"amount":850,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":2500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"}}},
+    {"pol":"MUMBAI, IN","commodity":"HAZ","charges":{"CARTAGE":{"amount":850,"currency":"INR"},"MCC":{"amount":850,"currency":"INR"},"XRAY":{"amount":850,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":2500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"},"DG FEES":{"amount":10000,"currency":"INR"},"DG AGENT FEE":{"amount":3500,"currency":"INR"}},"createdAt":"2026-07-30T16:23:38.785Z","updatedAt":"2026-07-30T16:23:38.785Z"},
+    {"pol":"AHMEDABAD, IN","commodity":"NON HAZ","charges":{"CARTAGE":{"amount":850,"currency":"INR"},"MCC":{"amount":850,"currency":"INR"},"XRAY":{"amount":850,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":2500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"}},"createdAt":"2026-07-30T16:26:44.137Z","updatedAt":"2026-07-30T16:26:44.137Z"},
+    {"pol":"AHMEDABAD, IN","commodity":"HAZ","charges":{"CARTAGE":{"amount":850,"currency":"INR"},"MCC":{"amount":850,"currency":"INR"},"XRAY":{"amount":850,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":2500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"},"DG FEES":{"amount":10000,"currency":"INR"},"DG AGENT FEE":{"amount":3500,"currency":"INR"}},"createdAt":"2026-07-30T16:27:00.870Z","updatedAt":"2026-07-30T16:27:00.870Z"}
+  ],
+  "defaultLclCharges": [
+    {"pol":"NHAVA SHEVA, IN","commodity":"NON HAZ","charges":{"THC":{"amount":1000,"currency":"INR"},"CLEARANCE":{"amount":2500,"currency":"INR"},"VGM":{"amount":25,"currency":"USD"},"DOCS":{"amount":3200,"currency":"INR"}}},
+    {"pol":"NHAVA SHEVA, IN","commodity":"HAZ","charges":{"THC":{"amount":1350,"currency":"INR"},"CLEARANCE":{"amount":2500,"currency":"INR"},"VGM":{"amount":25,"currency":"USD"},"DOCS":{"amount":3200,"currency":"INR"},"HAZ DOCS":{"amount":2500,"currency":"INR"}},"createdAt":"2026-07-30T16:25:47.841Z","updatedAt":"2026-07-30T16:25:47.841Z"}
+  ],
+  "carrierChargesSeaLcl": [
+    {"mode":"sea","carrier":"HAPAG","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":18408,"currency":"INR","buyAmount":18408,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":2118,"currency":"INR","buyAmount":2118,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5300,"currency":"INR","buyAmount":5300,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":3750,"currency":"INR","buyAmount":3750,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HAPAG","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":23238,"currency":"INR","buyAmount":23238,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HAPAG","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":11560,"currency":"INR","buyAmount":11560,"buyCurrency":"INR"},"SEAL":{"amount":1120,"currency":"INR","buyAmount":1120,"buyCurrency":"INR"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR"},"DOCS":{"amount":5300,"currency":"INR","buyAmount":5300,"buyCurrency":"INR"},"AMS":{"amount":3750,"currency":"INR","buyAmount":3750,"buyCurrency":"INR"}},"updated":"2026-07-30T16:29:17.129Z"},
+    {"mode":"sea","carrier":"HAPAG","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":17805,"currency":"INR","buyAmount":17805,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HAPAG","pol":"AHMEDABAD, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":11700,"currency":"INR","buyAmount":11700,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":920,"currency":"INR","buyAmount":920,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5300,"currency":"INR","buyAmount":5300,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":45450,"currency":"INR","buyAmount":45450,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":3750,"currency":"INR","buyAmount":3750,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HAPAG","pol":"AHMEDABAD, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":17668,"currency":"INR","buyAmount":17668,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HAPAG","pol":"AHMEDABAD, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":20498,"currency":"INR","buyAmount":20498,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":920,"currency":"INR","buyAmount":920,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5300,"currency":"INR","buyAmount":5300,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":3750,"currency":"INR","buyAmount":3750,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HAPAG","pol":"AHMEDABAD, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":25877,"currency":"INR","buyAmount":25877,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HAPAG","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":20725,"currency":"INR","buyAmount":20725,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":920,"currency":"INR","buyAmount":920,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5300,"currency":"INR","buyAmount":5300,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":3750,"currency":"INR","buyAmount":3750,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HAPAG","pol":"HAZIRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":30796,"currency":"INR","buyAmount":30796,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HAPAG","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":10512,"currency":"INR","buyAmount":10512,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":920,"currency":"INR","buyAmount":920,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5300,"currency":"INR","buyAmount":5300,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":3750,"currency":"INR","buyAmount":3750,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HAPAG","pol":"HAZIRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":14808,"currency":"INR","buyAmount":14808,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HAPAG","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":20498,"currency":"INR","buyAmount":20498,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":920,"currency":"INR","buyAmount":920,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5300,"currency":"INR","buyAmount":5300,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":3750,"currency":"INR","buyAmount":3750,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HAPAG","pol":"MUNDRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":25877,"currency":"INR","buyAmount":25877,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HAPAG","pol":"MUNDRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":13200,"currency":"INR","buyAmount":13200,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":1120,"currency":"INR","buyAmount":1120,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5300,"currency":"INR","buyAmount":5300,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":3750,"currency":"INR","buyAmount":3750,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HAPAG","pol":"MUNDRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":16075,"currency":"INR","buyAmount":16075,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"CMA","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":10940,"currency":"INR","buyAmount":10940,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":38,"currency":"USD","buyAmount":38,"buyCurrency":"USD","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"CMA","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":17925,"currency":"INR","buyAmount":17925,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"CMA","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":14305,"currency":"INR","buyAmount":14305,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":38,"currency":"USD","buyAmount":38,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":3300,"currency":"INR","buyAmount":3300,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"CMA","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":21775,"currency":"INR","buyAmount":21775,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"CMA","pol":"MUNDRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":12385,"currency":"INR","buyAmount":12385,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":38,"currency":"USD","buyAmount":38,"buyCurrency":"USD","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"CMA","pol":"MUNDRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":17170,"currency":"INR","buyAmount":17170,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"CMA","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":18050,"currency":"INR","buyAmount":18050,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":33,"currency":"USD","buyAmount":33,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":3300,"currency":"INR","buyAmount":3300,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"CMA","pol":"MUNDRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":23645,"currency":"INR","buyAmount":23645,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"CMA","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":9795,"currency":"INR","buyAmount":9795,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":33,"currency":"USD","buyAmount":33,"buyCurrency":"USD","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"CMA","pol":"HAZIRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":14455,"currency":"INR","buyAmount":14455,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"CMA","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":14255,"currency":"INR","buyAmount":14255,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":38,"currency":"USD","buyAmount":38,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":3300,"currency":"INR","buyAmount":3300,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"CMA","pol":"HAZIRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":21675,"currency":"INR","buyAmount":21675,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MSC","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":9070,"currency":"INR","buyAmount":9070,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"},"ETS":{"amount":2800,"currency":"INR","buyAmount":2800,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MSC","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":15000,"currency":"INR","buyAmount":15000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MSC","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":11500,"currency":"INR","buyAmount":11500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":9,"currency":"USD","buyAmount":9,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"},"ETS":{"amount":2800,"currency":"INR","buyAmount":2800,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MSC","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":16700,"currency":"INR","buyAmount":16700,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MSC","pol":"MUNDRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":11590,"currency":"INR","buyAmount":11590,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":9,"currency":"USD","buyAmount":9,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"},"ETS":{"amount":2800,"currency":"INR","buyAmount":2800,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MSC","pol":"MUNDRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":15690,"currency":"INR","buyAmount":15690,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MSC","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":15690,"currency":"INR","buyAmount":15690,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":9,"currency":"USD","buyAmount":9,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"},"ETS":{"amount":2800,"currency":"INR","buyAmount":2800,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MSC","pol":"MUNDRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":17790,"currency":"INR","buyAmount":17790,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MSC","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":9400,"currency":"INR","buyAmount":9400,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"},"ETS":{"amount":2800,"currency":"INR","buyAmount":2800,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MSC","pol":"HAZIRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":13850,"currency":"INR","buyAmount":13850,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MSC","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":12000,"currency":"INR","buyAmount":12000,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":9,"currency":"USD","buyAmount":9,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"},"ETS":{"amount":2800,"currency":"INR","buyAmount":2800,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MSC","pol":"HAZIRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":17500,"currency":"INR","buyAmount":17500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ZIM","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":11575,"currency":"INR","buyAmount":11575,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":1050,"currency":"INR","buyAmount":1050,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5500,"currency":"INR","buyAmount":5500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":1250,"currency":"INR","buyAmount":1250,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ZIM","pol":"HAZIRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":17100,"currency":"INR","buyAmount":17100,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ZIM","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":20300,"currency":"INR","buyAmount":20300,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":1050,"currency":"INR","buyAmount":1050,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5500,"currency":"INR","buyAmount":5500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":1250,"currency":"INR","buyAmount":1250,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ZIM","pol":"HAZIRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":30200,"currency":"INR","buyAmount":30200,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ZIM","pol":"MUNDRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":12850,"currency":"INR","buyAmount":12850,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":1050,"currency":"INR","buyAmount":1050,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5500,"currency":"INR","buyAmount":5500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":1250,"currency":"INR","buyAmount":1250,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ZIM","pol":"MUNDRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":19800,"currency":"INR","buyAmount":19800,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ZIM","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":30100,"currency":"INR","buyAmount":30100,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":1050,"currency":"INR","buyAmount":1050,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5500,"currency":"INR","buyAmount":5500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":1250,"currency":"INR","buyAmount":1250,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ZIM","pol":"MUNDRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":45125,"currency":"INR","buyAmount":45125,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ZIM","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":11625,"currency":"INR","buyAmount":11625,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":1050,"currency":"INR","buyAmount":1050,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5500,"currency":"INR","buyAmount":5500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":1250,"currency":"INR","buyAmount":1250,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ZIM","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":18775,"currency":"INR","buyAmount":18775,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ZIM","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":16125,"currency":"INR","buyAmount":16125,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":1050,"currency":"INR","buyAmount":1050,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5500,"currency":"INR","buyAmount":5500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":1250,"currency":"INR","buyAmount":1250,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ZIM","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":26100,"currency":"INR","buyAmount":26100,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ESL","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4300,"currency":"INR","buyAmount":4300,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1600,"currency":"INR","buyAmount":1600,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ESL","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4300,"currency":"INR","buyAmount":4300,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1600,"currency":"INR","buyAmount":1600,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ESL","pol":"MUNDRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4300,"currency":"INR","buyAmount":4300,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1600,"currency":"INR","buyAmount":1600,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ESL","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4300,"currency":"INR","buyAmount":4300,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1600,"currency":"INR","buyAmount":1600,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ESL","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4300,"currency":"INR","buyAmount":4300,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1600,"currency":"INR","buyAmount":1600,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ESL","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4300,"currency":"INR","buyAmount":4300,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1600,"currency":"INR","buyAmount":1600,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"EVERGREEN","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":12400,"currency":"INR","buyAmount":12400,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":700,"currency":"INR","buyAmount":700,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"EVERGREEN","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":11500,"currency":"INR","buyAmount":11500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"EVERGREEN","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":700,"currency":"INR","buyAmount":700,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5000,"currency":"INR","buyAmount":5000,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1000,"currency":"INR","buyAmount":1000,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":14,"currency":"USD","buyAmount":14,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ONE","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4200,"currency":"INR","buyAmount":4200,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ONE","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4200,"currency":"INR","buyAmount":4200,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ONE","pol":"MUNDRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":16225,"currency":"INR","buyAmount":16225,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ONE","pol":"MUNDRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4200,"currency":"INR","buyAmount":4200,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ONE","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4200,"currency":"INR","buyAmount":4200,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ONE","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4200,"currency":"INR","buyAmount":4200,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ONE","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4200,"currency":"INR","buyAmount":4200,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MAERSK","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":11,"currency":"USD","buyAmount":11,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":20,"currency":"USD","buyAmount":20,"buyCurrency":"USD","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MAERSK","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":11,"currency":"USD","buyAmount":11,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":40,"currency":"USD","buyAmount":40,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MAERSK","pol":"MUNDRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":15700,"currency":"INR","buyAmount":15700,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MAERSK","pol":"MUNDRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":11,"currency":"USD","buyAmount":11,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":40,"currency":"USD","buyAmount":40,"buyCurrency":"USD","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MAERSK","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":11,"currency":"USD","buyAmount":11,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":40,"currency":"USD","buyAmount":40,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MAERSK","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":11,"currency":"USD","buyAmount":11,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":20,"currency":"USD","buyAmount":20,"buyCurrency":"USD","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MAERSK","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":15515,"currency":"INR","buyAmount":15515,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":11,"currency":"USD","buyAmount":11,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":40,"currency":"USD","buyAmount":40,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MAERSK","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":21200,"currency":"INR","buyAmount":21200,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ALADINEXP","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4000,"currency":"INR","buyAmount":4000,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1200,"currency":"INR","buyAmount":1200,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ALADINEXP","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4000,"currency":"INR","buyAmount":4000,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1200,"currency":"INR","buyAmount":1200,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ALADINEXP","pol":"MUNDRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4000,"currency":"INR","buyAmount":4000,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1200,"currency":"INR","buyAmount":1200,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ALADINEXP","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":24500,"currency":"INR","buyAmount":24500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4000,"currency":"INR","buyAmount":4000,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1200,"currency":"INR","buyAmount":1200,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ALADINEXP","pol":"MUNDRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":38500,"currency":"INR","buyAmount":38500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ALADINEXP","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":10222,"currency":"INR","buyAmount":10222,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4000,"currency":"INR","buyAmount":4000,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1200,"currency":"INR","buyAmount":1200,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ALADINEXP","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":16608,"currency":"INR","buyAmount":16608,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ALADINEXP","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":15000,"currency":"INR","buyAmount":15000,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4000,"currency":"INR","buyAmount":4000,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1200,"currency":"INR","buyAmount":1200,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ALADINEXP","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":22470,"currency":"INR","buyAmount":22470,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HMM","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":9250,"currency":"INR","buyAmount":9250,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5000,"currency":"INR","buyAmount":5000,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HMM","pol":"HAZIRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":14200,"currency":"INR","buyAmount":14200,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HMM","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":17000,"currency":"INR","buyAmount":17000,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5000,"currency":"INR","buyAmount":5000,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HMM","pol":"HAZIRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":26000,"currency":"INR","buyAmount":26000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HMM","pol":"MUNDRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":12650,"currency":"INR","buyAmount":12650,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5000,"currency":"INR","buyAmount":5000,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HMM","pol":"MUNDRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":19767,"currency":"INR","buyAmount":19767,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HMM","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":28462,"currency":"INR","buyAmount":28462,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5000,"currency":"INR","buyAmount":5000,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HMM","pol":"MUNDRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":44476,"currency":"INR","buyAmount":44476,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HMM","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":10968,"currency":"INR","buyAmount":10968,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5000,"currency":"INR","buyAmount":5000,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HMM","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":17655,"currency":"INR","buyAmount":17655,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HMM","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":13108,"currency":"INR","buyAmount":13108,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5000,"currency":"INR","buyAmount":5000,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"HMM","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":21935,"currency":"INR","buyAmount":21935,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ECON","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":11500,"currency":"INR","buyAmount":11500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":400,"currency":"INR","buyAmount":400,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ECON","pol":"HAZIRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":17000,"currency":"INR","buyAmount":17000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ECON","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":20500,"currency":"INR","buyAmount":20500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":400,"currency":"INR","buyAmount":400,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ECON","pol":"HAZIRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":30000,"currency":"INR","buyAmount":30000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ECON","pol":"MUNDRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":400,"currency":"INR","buyAmount":400,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ECON","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":400,"currency":"INR","buyAmount":400,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ECON","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":12500,"currency":"INR","buyAmount":12500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":400,"currency":"INR","buyAmount":400,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ECON","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":400,"currency":"INR","buyAmount":400,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"NVOCC","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":13500,"currency":"INR","buyAmount":13500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":3500,"currency":"INR","buyAmount":3500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"NVOCC","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":18500,"currency":"INR","buyAmount":18500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"NVOCC","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":18500,"currency":"INR","buyAmount":18500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":3500,"currency":"INR","buyAmount":3500,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"EVERGREEN","pol":"HAZIRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":25500,"currency":"INR","buyAmount":25500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"EVERGREEN","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":700,"currency":"INR","buyAmount":700,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5000,"currency":"INR","buyAmount":5000,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":3500,"currency":"INR","buyAmount":3500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"WANHAI","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":11300,"currency":"INR","buyAmount":11300,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":400,"currency":"INR","buyAmount":400,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"WANHAI","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":18300,"currency":"INR","buyAmount":18300,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"WANHAI","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":13100,"currency":"INR","buyAmount":13100,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":400,"currency":"INR","buyAmount":400,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"WANHAI","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":21100,"currency":"INR","buyAmount":21100,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"COSCO","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":18000,"currency":"INR","buyAmount":18000,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":5,"currency":"USD","buyAmount":5,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5500,"currency":"INR","buyAmount":5500,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"COSCO","pol":"HAZIRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":27000,"currency":"INR","buyAmount":27000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"COSCO","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":9000,"currency":"INR","buyAmount":9000,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":5,"currency":"USD","buyAmount":5,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5500,"currency":"INR","buyAmount":5500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"COSCO","pol":"HAZIRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":13500,"currency":"INR","buyAmount":13500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"COSCO","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":29000,"currency":"INR","buyAmount":29000,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":5,"currency":"USD","buyAmount":5,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5500,"currency":"INR","buyAmount":5500,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"COSCO","pol":"MUNDRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":43450,"currency":"INR","buyAmount":43450,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"COSCO","pol":"MUNDRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":11900,"currency":"INR","buyAmount":11900,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":5,"currency":"USD","buyAmount":5,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5500,"currency":"INR","buyAmount":5500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"COSCO","pol":"MUNDRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":17800,"currency":"INR","buyAmount":17800,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"COSCO","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":13700,"currency":"INR","buyAmount":13700,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":5,"currency":"USD","buyAmount":5,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5500,"currency":"INR","buyAmount":5500,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"COSCO","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":21250,"currency":"INR","buyAmount":21250,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"COSCO","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":10000,"currency":"INR","buyAmount":10000,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":5,"currency":"USD","buyAmount":5,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5500,"currency":"INR","buyAmount":5500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"COSCO","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":15900,"currency":"INR","buyAmount":15900,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"SEAPOL","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":15500,"currency":"INR","buyAmount":15500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":3000,"currency":"INR","buyAmount":3000,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"SEAPOL","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":22500,"currency":"INR","buyAmount":22500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"KMTC","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":11400,"currency":"INR","buyAmount":11400,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"KMTC","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":17900,"currency":"INR","buyAmount":17900,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"KMTC","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":14500,"currency":"INR","buyAmount":14500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":3000,"currency":"INR","buyAmount":3000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"KMTC","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":22500,"currency":"INR","buyAmount":22500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MAXICON","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":13500,"currency":"INR","buyAmount":13500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":750,"currency":"INR","buyAmount":750,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5000,"currency":"INR","buyAmount":5000,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"RADIANT","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":13000,"currency":"INR","buyAmount":13000,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":750,"currency":"INR","buyAmount":750,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":3000,"currency":"INR","buyAmount":3000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"RADIANT","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":19500,"currency":"INR","buyAmount":19500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"RADIANT","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":18500,"currency":"INR","buyAmount":18500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":750,"currency":"INR","buyAmount":750,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":3000,"currency":"INR","buyAmount":3000,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"RADIANT","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":28000,"currency":"INR","buyAmount":28000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"SINOKOR","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":15779,"currency":"INR","buyAmount":15779,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"SINOKOR","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":3000,"currency":"INR","buyAmount":3000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"CMA","pol":"AHMEDABAD, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":17270,"currency":"INR","buyAmount":17270,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"CMA","pol":"AHMEDABAD, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":33,"currency":"USD","buyAmount":33,"buyCurrency":"USD","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"TURKON","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":12000,"currency":"INR","buyAmount":12000,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":2068,"currency":"INR","buyAmount":2068,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"TURKON","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":19000,"currency":"INR","buyAmount":19000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"TURKON","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":14250,"currency":"INR","buyAmount":14250,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":2068,"currency":"INR","buyAmount":2068,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2000,"currency":"INR","buyAmount":2000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"TURKON","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":22000,"currency":"INR","buyAmount":22000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"}
+  ],
+  "carrierChargesAir": [],
+  "drafts": {"sea":[],"air":[],"lcl":[]},
+  "rates": {"sea":[],"air":[],"lcl":[]},
+  "rateSheet": [],
+  "hiddenItems": {"pol":[],"pod":[],"incoterms":[],"containers":[],"carriers":[]},
+  "theme": "light",
+  "lastBackup": "2026-07-30T18:09:22.760Z",
+  "duplicateDetectionDays": 30,
+  "navState": {"expandedCategories":["newQuote","quoteSheet","dsrCat","reports","admin"],"lastTab":"database"},
+  "shipments": [],
+  "bldrafts": [],
+  "cargoStatusMaster": ["RATES REQUESTED","RATES RECEIVED","RATES QUOTED","INQUERY","LOST","NO SERVICE","HIGH RATES","RATES APPROVED","BOOKING PLACED","BOOKING RECEIVED","BOOKING SENT","CARGO PICKED","TRANSPORATION","AT CFS","UNDER CLEARANCE","CONTAINER GATEIN","BY ROAD MOVEMENT","BY RAIL MOVEMENT","SOB DONE","COMPLETED","PLANNING","DUPLICATE"],
+  "docsStatusMaster": ["DOCS RECEIVED","CHECKLIST PENDING","CHECKLIST SHARED","CHECKLIST CORRECTION","CHECKLIST APPROVED","LEO RECEIVED","SI SUBMITED","DRAFT SHARED","BL CORRECTION","BL APPROVED","SELL GIVEN","INVOICE PENDING","PERFORMA INVOICE SENT","INVOICE APPROVED","TAX INVOICE SEND"],
+  "users": [{"id":"Shaikh Shahid","password":"123789","name":"Shaikh Shahid","role":"master","permissions":"all"}],
+  "defaults": {"gst":18,"insurance":0.05,"profitMargin":15,"defaultCurrency":"USD","usDuty":0,"usTariff":0,"usMPF":0.3464,"usHMF":0.125,"inDuty":7.5,"inSocialWelfare":10,"drawback":0,"rodtep":0},
+  "stuffing": [],
+  "truckingShipments": [],
+  "detentionLots": [
+    {"id":"lot-1","name":"20 GP Standard","freeDays":5,"slabs":[{"from":1,"to":5,"rate":10},{"from":6,"to":10,"rate":30},{"from":11,"to":20,"rate":50},{"from":21,"to":30,"rate":70},{"from":31,"to":999,"rate":100}]},
+    {"id":"lot-2","name":"40 GP Standard","freeDays":5,"slabs":[{"from":1,"to":5,"rate":10},{"from":6,"to":10,"rate":30},{"from":11,"to":20,"rate":50},{"from":21,"to":30,"rate":70},{"from":31,"to":999,"rate":100}]},
+    {"id":"lot-3","name":"40 HC Standard","freeDays":5,"slabs":[{"from":1,"to":5,"rate":10},{"from":6,"to":10,"rate":30},{"from":11,"to":20,"rate":50},{"from":21,"to":30,"rate":70},{"from":31,"to":999,"rate":100}]},
+    {"id":"lot-4","name":"Reefer 20 RF","freeDays":3,"slabs":[{"from":1,"to":5,"rate":10},{"from":6,"to":10,"rate":30},{"from":11,"to":20,"rate":50},{"from":21,"to":30,"rate":70},{"from":31,"to":999,"rate":100}]},
+    {"id":"lot-5","name":"Reefer 40 RF","freeDays":3,"slabs":[{"from":1,"to":5,"rate":10},{"from":6,"to":10,"rate":30},{"from":11,"to":20,"rate":50},{"from":21,"to":30,"rate":70},{"from":31,"to":999,"rate":100}]}
+  ],
+  "detentionRecords": [],
+  "freightCalculations": [],
+  "plannerNotes": [],
+  "plannerTasks": []
 };
+
+// ==================== MAIN DB OBJECT ====================
+// Initialize defaultDB from the embedded backup (deep clone to avoid mutation)
+const defaultDB = JSON.parse(JSON.stringify(EMBEDDED_BACKUP));
 
 // ---------- Global Variables ----------
 let plannerCurrentDate = new Date();
 let plannerSelectedDate = new Date();
 let plannerEditingNote = null;
+
+
 
 // ---------- Helper Functions ----------
 function formatDateKey(date) {
@@ -854,26 +1116,26 @@ function initPlanner() {
 }
 
 // ==================== DATABASE INIT ====================
-let db = JSON.parse(localStorage.getItem('freight_db_v20'));
+let db = localStorage.getItem('freight_db_v20')
+  ? JSON.parse(localStorage.getItem('freight_db_v20'))
+  : null;
+
 if (!db) {
-    db = JSON.parse(JSON.stringify(defaultDB));
-    if (!db.carriers || db.carriers.length === 0) {
-        db.carriers = ["Maersk", "MSC", "CMA CGM", "Hapag-Lloyd", "ONE", "Emirates SkyCargo", "Lufthansa Cargo"];
+  // First time – use the embedded backup
+  db = JSON.parse(JSON.stringify(EMBEDDED_BACKUP));
+  
+  // Merge any missing fields from defaultDB (safety net)
+  for (let key in defaultDB) {
+    if (!(key in db)) {
+      db[key] = defaultDB[key];
     }
-    db.defaultSeaCharges = [
-        { carrier: "ALL", pol: "HAZIRA, IN", container: "20 GP", charges: { CFS: { amount: 16950, currency: "INR" }, CLEARANCE: { amount: 2500, currency: "INR" }, VGM: { amount: 25, currency: "USD" }, "LASHING & CHOKING": { amount: 2000, currency: "INR" }, "HAZ STICKER": { amount: 500, currency: "INR" }, LOLO: { amount: 2020, currency: "INR" }, "OTHER LOCALS": { amount: 5000, currency: "INR" } } },
-        { carrier: "ALL", pol: "HAZIRA, IN", container: "40 HC", charges: { CFS: { amount: 23950, currency: "INR" }, CLEARANCE: { amount: 3000, currency: "INR" }, VGM: { amount: 25, currency: "USD" }, "LASHING & CHOKING": { amount: 3000, currency: "INR" }, "HAZ STICKER": { amount: 900, currency: "INR" }, LOLO: { amount: 3320, currency: "INR" }, "OTHER LOCALS": { amount: 5000, currency: "INR" } } },
-        { carrier: "ALL", pol: "NHAVA SHEVA, IN", container: "20 GP", charges: { CFS: { amount: 15300, currency: "INR" }, CLEARANCE: { amount: 2500, currency: "INR" }, VGM: { amount: 25, currency: "USD" }, TOLL: { amount: 600, currency: "INR" }, "LASHING & CHOKING": { amount: 2500, currency: "INR" }, "HAZ STICKER": { amount: 700, currency: "INR" } } },
-        { carrier: "ALL", pol: "MUNDRA, IN", container: "20 GP", charges: { CFS: { amount: 17900, currency: "INR" }, CLEARANCE: { amount: 2500, currency: "INR" }, VGM: { amount: 25, currency: "USD" }, "LASHING & CHOKING": { amount: 2000, currency: "INR" }, "HAZ STICKER": { amount: 500, currency: "INR" }, TRANSPORTATION: { amount: 3000, currency: "INR" }, LOLO: { amount: 2020, currency: "INR" }, "OTHER LOCALS": { amount: 5000, currency: "INR" } } }
-    ];
-    db.defaultAirCharges = [
-        { pol: "DEL Airport", charges: { "AIR FREIGHT": { amount: 850, currency: "INR" }, "CARTAGE": { amount: 850, currency: "INR" }, "MCC": { amount: 850, currency: "INR" }, "XRAY": { amount: 850, currency: "INR" }, "CUSTOM CLEARANCE": { amount: 2500, currency: "INR" }, "AWB FEES": { amount: 500, currency: "INR" } } }
-    ];
-    db.defaultLclCharges = [
-        { pol: "NHAVA SHEVA, IN", charges: { FREIGHT: { amount: 0, currency: "INR" }, THC: { amount: 1500, currency: "INR" }, CLEARANCE: { amount: 2500, currency: "INR" }, VGM: { amount: 25, currency: "USD" } } }
-    ];
-    saveDB();
+  }
+  
+  // Save the embedded data to localStorage so it persists
+  saveDB();
 }
+
+
 if (!db.exchangeRates) db.exchangeRates = { ...defaultDB.exchangeRates };
 if (!db.defaultSeaCharges) db.defaultSeaCharges = [];
 if (!db.defaultAirCharges) db.defaultAirCharges = [];
@@ -5366,36 +5628,45 @@ function populateDropdowns() {
     const hiddenPod = db.hiddenItems?.pod || [];
     const hiddenIncoterms = db.hiddenItems?.incoterms || [];
     const hiddenContainers = db.hiddenItems?.containers || [];
+
     const visibleCarriers = ['ALL', ...db.carriers.filter(c => !hiddenCarriers.includes(c))];
     const visiblePol = db.pol.filter(p => !hiddenPol.includes(p));
     const visiblePod = db.pod.filter(p => !hiddenPod.includes(p));
     const visibleIncoterms = db.incoterms.filter(i => !hiddenIncoterms.includes(i));
     const visibleContainers = db.containers.filter(c => !hiddenContainers.includes(c));
+
+    // For each mode, populate datalists and selects
     ['sea', 'air', 'lcl'].forEach(mode => {
-        populateSelect(`${mode}-carrier`, visibleCarriers);
-        populateSelect(`${mode}-pol`, visiblePol);
-        populateSelect(`${mode}-pod`, visiblePod);
-        populateSelect(`${mode}-incoterm`, visibleIncoterms);
-        if (mode === 'sea') populateSelect(`${mode}-container`, visibleContainers);
+        // POL datalist
+        const polList = document.getElementById(`${mode}-pol-list`);
+        if (polList) polList.innerHTML = visiblePol.map(p => `<option value="${p}">`).join('');
+        // POD datalist
+        const podList = document.getElementById(`${mode}-pod-list`);
+        if (podList) podList.innerHTML = visiblePod.map(p => `<option value="${p}">`).join('');
+        // Carrier datalist
+        const carrierList = document.getElementById(`${mode}-carrier-list`);
+        if (carrierList) carrierList.innerHTML = visibleCarriers.map(c => `<option value="${c}">`).join('');
+
+        // Incoterm datalist
+        const incotermList = document.getElementById(`${mode}-incoterm-list`);
+        if (incotermList) incotermList.innerHTML = visibleIncoterms.map(i => `<option value="${i}">`).join('');
+
+        // Container datalist (only for sea)
+        if (mode === 'sea') {
+            const containerList = document.getElementById(`${mode}-container-list`);
+            if (containerList) containerList.innerHTML = visibleContainers.map(c => `<option value="${c}">`).join('');
+        }
+
+        // Commodity datalist (common for all modes) – we can either use a fixed list or from db; we'll create a fixed one.
+        // We'll define a global commodity list or use the existing <select> options.
+        // For simplicity, we'll populate with the same values as the select: NON HAZ, HAZ.
+        const commodityList = document.getElementById(`${mode}-commodity-list`);
+        if (commodityList) {
+            commodityList.innerHTML = `<option value="NON HAZ"><option value="HAZ">`;
+        }
     });
-    populateSelect('dc-sea-filter-carrier', ['ALL', ...visibleCarriers]);
-    populateSelect('dc-sea-filter-pol', visiblePol);
-    populateSelect('dc-air-filter-pol', visiblePol);
-    populateSelect('dc-lcl-filter-pol', visiblePol);
-    populateSelect('cc-sealcl-filter-mode', ['', 'sea', 'lcl']);
-    populateSelect('cc-sealcl-filter-carrier', visibleCarriers);
-    populateSelect('cc-air-filter-carrier', visibleCarriers);
-    populateSelect('cc-lcl-filter-carrier', visibleCarriers);
 }
-function populateSelect(id, options, selectedValue) {
-    const sel = document.getElementById(id);
-    if (!sel) return;
-    options = options || [];
-    sel.innerHTML = '<option value="">Select</option>' + options.map(o => `<option value="${o}">${o}</option>`).join('');
-    if (selectedValue && options.includes(selectedValue)) {
-        sel.value = selectedValue;
-    }
-}
+
 
 // ==================== DEFAULT CHARGES MASTER ====================
 function renderDefaultChargesMaster(mode) {
@@ -5404,8 +5675,10 @@ function renderDefaultChargesMaster(mode) {
     if (mode === 'sea') records = db.defaultSeaCharges;
     else if (mode === 'air') records = db.defaultAirCharges;
     else if (mode === 'lcl') records = db.defaultLclCharges;
+
     const filterCarrier = mode === 'sea' ? (document.getElementById(`dc-sea-filter-carrier`)?.value || '') : '';
     const filterPol = document.getElementById(`dc-${mode}-filter-pol`)?.value || '';
+
     const filtered = records.map((rec, originalIdx) => ({ rec, originalIdx }))
         .filter(({ rec }) => {
             let text = '';
@@ -5416,23 +5689,31 @@ function renderDefaultChargesMaster(mode) {
             if (filterPol && rec.pol !== filterPol) return false;
             return true;
         });
+
     const disp = document.getElementById(`dc-${mode}-master-table`);
-    let html = `<table class="master-table"><thead><tr>`;
+    if (!disp) return;
+
+    let html = `<table class="master-table"><thead><tr>
+        <th style="width:30px;"><input type="checkbox" class="select-all-dc" data-mode="${mode}" /></th>`;
     if (mode === 'sea') html += `<th>Carrier</th>`;
     html += `<th>POL</th>`;
     if (mode === 'sea') html += `<th>Container</th>`;
     html += `<th>Commodity / Cargo</th>`;
-    html += `<th>Action</th></tr></thead><tbody>`;
+    html += `<th>Charges</th><th>Action</th></tr></thead><tbody>`;
+
     if (filtered.length === 0) {
-        const cols = (mode === 'sea' ? 4 : 3);
+        const cols = (mode === 'sea' ? 5 : 4) + 1; // +1 for checkbox
         html += `<tr><td colspan="${cols}" style="text-align:center;padding:16px;color:var(--text-light);">No records.</td></tr>`;
     } else {
         filtered.forEach(({ rec, originalIdx }) => {
+            const chargeCount = Object.keys(rec.charges || {}).length;
             html += `<tr>`;
+            html += `<td><input type="checkbox" class="dc-checkbox" data-mode="${mode}" data-idx="${originalIdx}" data-type="default" /></td>`;
             if (mode === 'sea') html += `<td><strong>${rec.carrier}</strong></td>`;
             html += `<td>${rec.pol}</td>`;
             if (mode === 'sea') html += `<td>${rec.container}</td>`;
             html += `<td>${rec.commodity || '—'}</td>`;
+            html += `<td style="text-align:center;"><strong>${chargeCount}</strong></td>`;
             html += `<td>
                 <button class="btn btn-sm btn-preview" onclick="previewDefaultCharge('${mode}',${originalIdx})">👁</button>
                 <button class="btn btn-sm btn-preview" onclick="openEditDefaultChargeModal('${mode}',${originalIdx})">✏️</button>
@@ -5443,6 +5724,19 @@ function renderDefaultChargesMaster(mode) {
     }
     html += '</tbody></table>';
     disp.innerHTML = html;
+
+    // Add event listeners for select-all
+    document.querySelectorAll('.select-all-dc').forEach(cb => {
+        cb.addEventListener('change', function() {
+            const mode = this.dataset.mode;
+            document.querySelectorAll(`.dc-checkbox[data-mode="${mode}"][data-type="default"]`).forEach(c => c.checked = this.checked);
+            updateSelectedCount();
+        });
+    });
+    document.querySelectorAll('.dc-checkbox').forEach(cb => {
+        cb.addEventListener('change', updateSelectedCount);
+    });
+    updateSelectedCount();
 }
 
 // ==================== CARRIER CHARGES MASTER ====================
@@ -5457,26 +5751,23 @@ function renderCarrierChargesMaster(type) {
     } else if (type === 'air') {
         records = db.carrierChargesAir;
     } else if (type === 'lcl') {
-        // 🔧 FIX: For LCL, use carrierChargesSeaLcl but filter by mode === 'lcl'
         records = db.carrierChargesSeaLcl;
-        filterMode = 'lcl'; // always filter for LCL
+        filterMode = 'lcl';
     }
 
     const filtered = records.map((rec, originalIdx) => ({ rec, originalIdx }))
         .filter(({ rec }) => {
             const text = `${rec.mode||''} ${rec.carrier} ${rec.pol} ${rec.container||''}`.toLowerCase();
             if (search && !text.includes(search)) return false;
-
-            // Apply mode filter
             if (filterMode && rec.mode !== filterMode) return false;
-
             return true;
         });
 
     const disp = document.getElementById(`cc-${type}-master-table`);
     if (!disp) return;
 
-    let html = `<table class="master-table"><thead><tr>`;
+    let html = `<table class="master-table"><thead><tr>
+        <th style="width:30px;"><input type="checkbox" class="select-all-cc" data-type="${type}" /></th>`;
     if (type === 'sealcl' || type === 'lcl') html += `<th>Mode</th>`;
     html += `<th>Carrier</th><th>POL</th>`;
     if (type === 'sealcl' || type === 'lcl') html += `<th>Container</th>`;
@@ -5491,6 +5782,7 @@ function renderCarrierChargesMaster(type) {
             const chargeCount = Object.keys(rec.charges || {}).length;
             const updated = rec.updated ? new Date(rec.updated).toLocaleDateString('en-IN') : '—';
             html += `<tr>`;
+            html += `<td><input type="checkbox" class="cc-checkbox" data-type="${type}" data-idx="${originalIdx}" /></td>`;
             if (type === 'sealcl' || type === 'lcl') html += `<td><strong style="color:var(--primary);">${(rec.mode||'').toUpperCase()}</strong></td>`;
             html += `<td>${rec.carrier}</td><td>${rec.pol}</td>`;
             if (type === 'sealcl' || type === 'lcl') html += `<td>${rec.container || '—'}</td>`;
@@ -5506,6 +5798,19 @@ function renderCarrierChargesMaster(type) {
     }
     html += '</tbody></table>';
     disp.innerHTML = html;
+
+    // Add event listeners
+    document.querySelectorAll('.select-all-cc').forEach(cb => {
+        cb.addEventListener('change', function() {
+            const type = this.dataset.type;
+            document.querySelectorAll(`.cc-checkbox[data-type="${type}"]`).forEach(c => c.checked = this.checked);
+            updateSelectedCount();
+        });
+    });
+    document.querySelectorAll('.cc-checkbox').forEach(cb => {
+        cb.addEventListener('change', updateSelectedCount);
+    });
+    updateSelectedCount();
 }
 
 // ==================== ADD/EDIT DEFAULT CHARGES ====================
@@ -5515,90 +5820,180 @@ function openEditDefaultChargeModal(mode, idx) {
     else if (mode === 'air') rec = db.defaultAirCharges[idx];
     else rec = db.defaultLclCharges[idx];
     if (!rec) return alert('Record not found');
+
+    const modeCharges = getDefaultChargeTypes(mode);
+
     let html = `<h3 style="color:var(--primary);margin-bottom:12px;">Edit Default ${mode.toUpperCase()} Charge</h3>`;
     if (mode === 'sea') {
         html += `<div class="form-grid-2col">
-            <div class="form-group"><label>Carrier</label><select id="modal-dc-carrier-edit"><option value="ALL" ${rec.carrier==='ALL'?'selected':''}>ALL</option>${db.carriers.map(c => `<option value="${c}" ${rec.carrier===c?'selected':''}>${c}</option>`).join('')}</select></div>
-            <div class="form-group"><label>POL</label><select id="modal-dc-pol-edit"><option value="">Select</option>${db.pol.map(p => `<option value="${p}" ${rec.pol===p?'selected':''}>${p}</option>`).join('')}</select></div>
-            <div class="form-group"><label>Container</label><select id="modal-dc-container-edit"><option value="">Select</option>${db.containers.map(c => `<option value="${c}" ${rec.container===c?'selected':''}>${c}</option>`).join('')}</select></div>
-            <div class="form-group"><label>Commodity</label><select id="modal-dc-commodity-edit"><option value="">Select</option><option value="NON HAZ" ${rec.commodity==='NON HAZ'?'selected':''}>Non Haz</option><option value="HAZ" ${rec.commodity==='HAZ'?'selected':''}>Haz</option></select></div>
+            <div class="form-group"><label>Carrier</label>
+                <select id="modal-dc-carrier-edit">
+                    <option value="ALL" ${rec.carrier==='ALL'?'selected':''}>ALL</option>
+                    ${db.carriers.map(c => `<option value="${c}" ${rec.carrier===c?'selected':''}>${c}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-group"><label>POL</label>
+                <select id="modal-dc-pol-edit">
+                    <option value="">Select</option>
+                    ${db.pol.map(p => `<option value="${p}" ${rec.pol===p?'selected':''}>${p}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-group"><label>Container</label>
+                <select id="modal-dc-container-edit">
+                    <option value="">Select</option>
+                    ${db.containers.map(c => `<option value="${c}" ${rec.container===c?'selected':''}>${c}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-group"><label>Commodity</label>
+                <select id="modal-dc-commodity-edit">
+                    <option value="">Select</option>
+                    <option value="NON HAZ" ${rec.commodity==='NON HAZ'?'selected':''}>Non Haz</option>
+                    <option value="HAZ" ${rec.commodity==='HAZ'?'selected':''}>Haz</option>
+                </select>
+            </div>
         </div>`;
     } else {
         html += `<div class="form-grid-2col">
-            <div class="form-group"><label>POL</label><select id="modal-dc-pol-edit"><option value="">Select</option>${db.pol.map(p => `<option value="${p}" ${rec.pol===p?'selected':''}>${p}</option>`).join('')}</select></div>
-            <div class="form-group"><label>Commodity</label><select id="modal-dc-commodity-edit"><option value="">Select</option><option value="NON HAZ" ${rec.commodity==='NON HAZ'?'selected':''}>Non Haz</option><option value="HAZ" ${rec.commodity==='HAZ'?'selected':''}>Haz</option></select></div>
+            <div class="form-group"><label>POL</label>
+                <select id="modal-dc-pol-edit">
+                    <option value="">Select</option>
+                    ${db.pol.map(p => `<option value="${p}" ${rec.pol===p?'selected':''}>${p}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-group"><label>Commodity</label>
+                <select id="modal-dc-commodity-edit">
+                    <option value="">Select</option>
+                    <option value="NON HAZ" ${rec.commodity==='NON HAZ'?'selected':''}>Non Haz</option>
+                    <option value="HAZ" ${rec.commodity==='HAZ'?'selected':''}>Haz</option>
+                </select>
+            </div>
         </div>`;
     }
-    html += `<h4 style="color:var(--primary);margin:12px 0 8px;">Charges</h4><div id="modal-dc-charges-list">`;
+
+    html += `<h4 style="color:var(--primary);margin:12px 0 8px;">Charges</h4>
+        <div id="modal-dc-charges-list">`;
+
     const charges = rec.charges || {};
     Object.entries(charges).forEach(([key, val]) => {
         html += `<div style="margin-bottom:6px;background:var(--bg);padding:6px;border-radius:5px;border:1px solid var(--border);" data-charge-key="${key}">
-            <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${key} <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button></div>
+            <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${key}
+                <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button>
+            </div>
             <div style="display:flex;gap:6px;">
-                <input type="number" step="0.01" class="modal-chg-amt" value="${val.amount}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
-                <select class="modal-chg-cur" style="width:80px;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">${getCurrencyOptions(val.currency)}</select>
+                <input type="number" step="0.01" class="modal-chg-amt" value="${val.amount||''}" placeholder="Amount" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                <select class="modal-chg-cur" style="width:80px;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    ${getCurrencyOptions(val.currency||'INR')}
+                </select>
             </div>
         </div>`;
     });
+
     html += `</div>
-    <div style="margin-top:8px;display:flex;gap:8px;align-items:end;">
-        <div class="form-group" style="flex:1;"><label>Add Charge</label><select id="modal-dc-add-charge">${getDefaultChargeTypes(mode).map(c => `<option value="${c}">${c}</option>`).join('')}</select></div>
-        <div class="form-group" style="width:100px;"><label>Amount</label><input type="number" id="modal-dc-add-amt" step="0.01" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-        <div class="form-group" style="width:90px;"><label>Currency</label><select id="modal-dc-add-cur">${getCurrencyOptions('INR')}</select></div>
-        <button class="btn btn-sm btn-success" style="height:33px;" onclick="addChargeToDCModal()">+</button>
-    </div>
-    <div style="margin-top:16px;text-align:right;">
-        <button class="btn btn-clear" onclick="closeModal('previewModal')">Cancel</button>
-        <button class="btn btn-quoted" onclick="saveEditDefaultCharge('${mode}',${idx})">Save</button>
-    </div>`;
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:end;">
+            <div class="form-group" style="flex:1;"><label>Add Charge</label>
+                <select id="modal-dc-add-charge">
+                    ${modeCharges.map(c => `<option value="${c}">${c}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-group" style="width:100px;"><label>Amount</label><input type="number" id="modal-dc-add-amt" step="0.01"></div>
+            <div class="form-group" style="width:90px;"><label>Currency</label>
+                <select id="modal-dc-add-cur">${getCurrencyOptions('INR')}</select>
+            </div>
+            <button class="btn btn-sm btn-success" style="height:33px;" onclick="addChargeToDCModal()">+</button>
+        </div>
+        <div style="margin-top:16px;text-align:right;display:flex;gap:8px;justify-content:flex-end;">
+            <button class="btn btn-clear" onclick="closeModal('previewModal')">Cancel</button>
+            <button class="btn btn-quoted" onclick="saveEditDefaultCharge('${mode}',${idx})">Save</button>
+        </div>`;
+
     document.getElementById('modal-title').textContent = `Edit Default ${mode.toUpperCase()} Charge`;
     document.getElementById('previewBody').innerHTML = html;
     openModal('previewModal');
 }
+
 function saveEditDefaultCharge(mode, idx) {
-    let rec;
-    if (mode === 'sea') rec = db.defaultSeaCharges[idx];
-    else if (mode === 'air') rec = db.defaultAirCharges[idx];
-    else rec = db.defaultLclCharges[idx];
-    if (!rec) return alert('Record not found');
-    let updatedRecord;
+    let arr;
+    if (mode === 'sea') arr = db.defaultSeaCharges;
+    else if (mode === 'air') arr = db.defaultAirCharges;
+    else arr = db.defaultLclCharges;
+
+    if (!arr || idx < 0 || idx >= arr.length) {
+        alert('Record not found.');
+        return;
+    }
+    const rec = arr[idx];
+
+    // Collect data
+    let carrier, pol, container, commodity;
     if (mode === 'sea') {
-        const carrier = document.getElementById('modal-dc-carrier-edit').value.trim() || 'ALL';
-        const pol = document.getElementById('modal-dc-pol-edit').value;
-        const container = document.getElementById('modal-dc-container-edit').value;
-        const commodity = document.getElementById('modal-dc-commodity-edit').value;
-        if (!pol) return alert('POL is required');
-        if (!container) return alert('Container is required');
-        updatedRecord = { carrier, pol, container, commodity };
+        carrier = document.getElementById('modal-dc-carrier-edit').value.trim() || 'ALL';
+        pol = document.getElementById('modal-dc-pol-edit').value.trim();
+        container = document.getElementById('modal-dc-container-edit').value.trim();
+        commodity = document.getElementById('modal-dc-commodity-edit').value.trim();
+        if (!pol || !container) return alert('POL and Container are required.');
     } else {
-        const pol = document.getElementById('modal-dc-pol-edit').value;
-        const commodity = document.getElementById('modal-dc-commodity-edit').value;
-        if (!pol) return alert('POL is required');
-        updatedRecord = { pol, commodity };
+        pol = document.getElementById('modal-dc-pol-edit').value.trim();
+        commodity = document.getElementById('modal-dc-commodity-edit').value.trim();
+        if (!pol) return alert('POL is required.');
+        carrier = 'ALL';
+        container = '';
     }
-    if (findDefaultChargeDuplicate(mode, updatedRecord, idx)) {
-        return alert('Duplicate entry!');
-    }
-    if (mode === 'sea') {
-        rec.carrier = updatedRecord.carrier;
-        rec.container = updatedRecord.container;
-        rec.commodity = updatedRecord.commodity;
-    }
-    rec.pol = updatedRecord.pol;
-    rec.commodity = updatedRecord.commodity || '';
-    rec.charges = {};
+
+    // Check duplicate (skip current index)
+    const dupCheck = (mode === 'sea')
+        ? arr.some((r, i) => i !== idx && r.carrier === carrier && r.pol === pol && r.container === container && r.commodity === commodity)
+        : arr.some((r, i) => i !== idx && r.pol === pol && r.commodity === commodity);
+    if (dupCheck) return alert('Duplicate entry!');
+
+    // Build charges
+    const charges = {};
     document.querySelectorAll('#modal-dc-charges-list [data-charge-key]').forEach(row => {
         const key = row.getAttribute('data-charge-key');
         const amt = parseFloat(row.querySelector('.modal-chg-amt').value) || 0;
         const cur = row.querySelector('.modal-chg-cur').value;
-        if (amt > 0) rec.charges[key] = { amount: amt, currency: cur };
+        if (amt > 0) charges[key] = { amount: amt, currency: cur };
     });
+
+    // ---- Auto‑segregate if carrier is not "ALL" (only for SEA) ----
+    if (mode === 'sea' && carrier !== 'ALL') {
+        // Remove from default
+        arr.splice(idx, 1);
+        // Add to carrier-specific
+        db.carrierChargesSeaLcl.push({
+            mode: 'sea',
+            carrier: carrier,
+            pol: pol,
+            container: container,
+            commodity: commodity,
+            charges: charges,
+            updated: new Date().toISOString()
+        });
+        saveDB();
+        closeModal('previewModal');
+        renderDefaultChargesMaster('sea');
+        renderCarrierChargesMaster('sealcl');
+        alert('✅ Moved to Carrier-Specific Charges.');
+        autoBackup();
+        return;
+    }
+
+    // Otherwise update in place
+    if (mode === 'sea') {
+        rec.carrier = carrier;
+        rec.container = container;
+        rec.commodity = commodity;
+    } else {
+        rec.commodity = commodity;
+    }
+    rec.pol = pol;
+    rec.charges = charges;
     saveDB();
     closeModal('previewModal');
     renderDefaultChargesMaster(mode);
-    alert('Saved!');
+    alert('✅ Default charge updated.');
     autoBackup();
 }
+
 function openAddDefaultChargeModal(mode) {
     let html = `<h3 style="color:var(--primary);margin-bottom:12px;">Add Default ${mode.toUpperCase()} Charge</h3>`;
     if (mode === 'sea') {
@@ -5635,26 +6030,61 @@ function addChargeToDCModal() {
     const amt = parseFloat(document.getElementById('modal-dc-add-amt').value) || 0;
     const cur = document.getElementById('modal-dc-add-cur').value;
     const list = document.getElementById('modal-dc-charges-list');
+
     if (list.querySelector(`[data-charge-key="${key}"]`)) {
         alert('Charge already added!');
         return;
     }
-    const existingKeys = list.querySelectorAll('[data-charge-key]');
-    for (let el of existingKeys) {
-        if (el.getAttribute('data-charge-key') === key) {
-            alert('Charge already exists!');
-            return;
-        }
-    }
-    list.insertAdjacentHTML('beforeend', `<div style="margin-bottom:6px;background:var(--bg);padding:6px;border-radius:5px;border:1px solid var(--border);" data-charge-key="${key}">
-        <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${key} <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button></div>
-        <div style="display:flex;gap:6px;">
-            <input type="number" step="0.01" class="modal-chg-amt" value="${amt}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
-            <select class="modal-chg-cur" style="width:80px;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">${getCurrencyOptions(cur)}</select>
+
+    list.insertAdjacentHTML('beforeend', `
+        <div style="margin-bottom:6px;background:var(--bg);padding:6px;border-radius:5px;border:1px solid var(--border);" data-charge-key="${key}">
+            <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${key}
+                <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button>
+            </div>
+            <div style="display:flex;gap:6px;">
+                <input type="number" step="0.01" class="modal-chg-amt" value="${amt}" placeholder="Amount" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                <select class="modal-chg-cur" style="width:80px;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    ${getCurrencyOptions(cur)}
+                </select>
+            </div>
         </div>
-    </div>`);
+    `);
     document.getElementById('modal-dc-add-amt').value = '';
 }
+
+function addCCChargeToModal() {
+    const key = document.getElementById('modal-cc-add-charge').value;
+    const list = document.getElementById('modal-cc-charges-list');
+
+    if (list.querySelector(`[data-charge-key="${key}"]`)) {
+        alert('Charge already added!');
+        return;
+    }
+
+    list.insertAdjacentHTML('beforeend', `
+        <div style="margin-bottom:6px;background:var(--bg);padding:6px;border-radius:5px;border:1px solid var(--border);" data-charge-key="${key}">
+            <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${key}
+                <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button>
+            </div>
+            <div class="form-grid-2col">
+                <div style="display:flex;gap:4px;">
+                    <input type="number" step="0.01" class="modal-cc-sell-amt" placeholder="Sell" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    <select class="modal-cc-sell-cur" style="width:70px;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                        ${getCurrencyOptions('INR')}
+                    </select>
+                </div>
+                <div style="display:flex;gap:4px;">
+                    <input type="number" step="0.01" class="modal-cc-buy-amt" placeholder="Buy" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    <select class="modal-cc-buy-cur" style="width:70px;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                        ${getCurrencyOptions('INR')}
+                    </select>
+                </div>
+            </div>
+        </div>
+    `);
+}
+
+
 function saveNewDefaultCharge(mode) {
     const pol = document.getElementById('modal-dc-pol').value.trim();
     if (!pol) return alert('POL is required');
@@ -5692,45 +6122,101 @@ function saveNewDefaultCharge(mode) {
 
 // ==================== CARRIER CHARGE EDIT ====================
 function openEditCarrierChargeModal(type, idx) {
-    const rec = type === 'sealcl' ? db.carrierChargesSeaLcl[idx] : db.carrierChargesAir[idx];
+    let rec;
+    if (type === 'sealcl') rec = db.carrierChargesSeaLcl[idx];
+    else if (type === 'air') rec = db.carrierChargesAir[idx];
+    else rec = db.carrierChargesSeaLcl[idx];
     if (!rec) return alert('Record not found');
+
     const mode = type === 'sealcl' ? (rec.mode || 'sea') : 'air';
     const modeCharges = getDefaultChargeTypes(mode);
-    let html = `<h3 style="color:var(--primary);margin-bottom:12px;">Edit Carrier-Wise Charge</h3><div class="form-grid-2col">`;
-    if (type === 'sealcl') html += `<div class="form-group"><label>Mode</label><select id="modal-cc-mode-edit"><option value="sea" ${rec.mode==='sea'?'selected':''}>SEA</option><option value="lcl" ${rec.mode==='lcl'?'selected':''}>LCL</option></select></div>`;
-    html += `<div class="form-group"><label>Carrier</label><select id="modal-cc-carrier-edit"><option value="">Select</option>${db.carriers.map(c => `<option value="${c}" ${rec.carrier===c?'selected':''}>${c}</option>`).join('')}</select></div>`;
-    html += `<div class="form-group"><label>POL</label><select id="modal-cc-pol-edit"><option value="">Select</option>${db.pol.map(p => `<option value="${p}" ${rec.pol===p?'selected':''}>${p}</option>`).join('')}</select></div>`;
-    if (type === 'sealcl') html += `<div class="form-group"><label>Container</label><select id="modal-cc-container-edit"><option value="">Select</option>${db.containers.map(c => `<option value="${c}" ${rec.container===c?'selected':''}>${c}</option>`).join('')}</select></div>`;
-    html += `<div class="form-group"><label>Commodity</label><select id="modal-cc-commodity-edit"><option value="">Select</option><option value="NON HAZ" ${rec.commodity==='NON HAZ'?'selected':''}>Non Haz</option><option value="HAZ" ${rec.commodity==='HAZ'?'selected':''}>Haz</option></select></div>`;
-    html += `</div><h4 style="color:var(--primary);margin:12px 0 8px;">Charges (Sell & Buy)</h4><div id="modal-cc-charges-list">`;
+
+    let html = `<h3 style="color:var(--primary);margin-bottom:12px;">Edit Carrier-Wise Charge</h3>
+        <div class="form-grid-2col">`;
+
+    if (type === 'sealcl') {
+        html += `<div class="form-group"><label>Mode</label>
+            <select id="modal-cc-mode-edit">
+                <option value="sea" ${rec.mode==='sea'?'selected':''}>SEA</option>
+                <option value="lcl" ${rec.mode==='lcl'?'selected':''}>LCL</option>
+            </select>
+        </div>`;
+    }
+    html += `<div class="form-group"><label>Carrier</label>
+        <select id="modal-cc-carrier-edit">
+            <option value="">Select</option>
+            ${db.carriers.map(c => `<option value="${c}" ${rec.carrier===c?'selected':''}>${c}</option>`).join('')}
+        </select>
+    </div>
+    <div class="form-group"><label>POL</label>
+        <select id="modal-cc-pol-edit">
+            <option value="">Select</option>
+            ${db.pol.map(p => `<option value="${p}" ${rec.pol===p?'selected':''}>${p}</option>`).join('')}
+        </select>
+    </div>`;
+
+    if (type === 'sealcl') {
+        html += `<div class="form-group"><label>Container</label>
+            <select id="modal-cc-container-edit">
+                <option value="">Select</option>
+                ${db.containers.map(c => `<option value="${c}" ${rec.container===c?'selected':''}>${c}</option>`).join('')}
+            </select>
+        </div>`;
+    }
+    html += `<div class="form-group"><label>Commodity</label>
+        <select id="modal-cc-commodity-edit">
+            <option value="">Select</option>
+            <option value="NON HAZ" ${rec.commodity==='NON HAZ'?'selected':''}>Non Haz</option>
+            <option value="HAZ" ${rec.commodity==='HAZ'?'selected':''}>Haz</option>
+        </select>
+    </div>
+</div>`;
+
+    html += `<h4 style="color:var(--primary);margin:12px 0 8px;">Charges (Sell & Buy)</h4>
+        <div id="modal-cc-charges-list">`;
+
     const charges = rec.charges || {};
     Object.entries(charges).forEach(([key, val]) => {
         html += `<div style="margin-bottom:6px;background:var(--bg);padding:6px;border-radius:5px;border:1px solid var(--border);" data-charge-key="${key}">
-            <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${key} <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button></div>
+            <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${key}
+                <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button>
+            </div>
             <div class="form-grid-2col">
                 <div style="display:flex;gap:4px;">
-                    <input type="number" step="0.01" class="modal-cc-sell-amt" value="${val.amount||''}" placeholder="Sell" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
-                    <select class="modal-cc-sell-cur" style="width:70px;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">${getCurrencyOptions(val.currency||'INR')}</select>
+                    <input type="number" step="0.01" class="modal-cc-sell-amt" value="${val.amount||''}" placeholder="Sell" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    <select class="modal-cc-sell-cur" style="width:70px;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                        ${getCurrencyOptions(val.currency||'INR')}
+                    </select>
                 </div>
                 <div style="display:flex;gap:4px;">
-                    <input type="number" step="0.01" class="modal-cc-buy-amt" value="${val.buyAmount||''}" placeholder="Buy" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;color:var(--buy-red);" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
-                    <select class="modal-cc-buy-cur" style="width:70px;padding:4px 6px;border:1px solid var(--border);border-radius:3px;color:var(--buy-red);">${getCurrencyOptions(val.buyCurrency||'INR')}</select>
+                    <input type="number" step="0.01" class="modal-cc-buy-amt" value="${val.buyAmount||''}" placeholder="Buy" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    <select class="modal-cc-buy-cur" style="width:70px;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                        ${getCurrencyOptions(val.buyCurrency||'INR')}
+                    </select>
                 </div>
             </div>
         </div>`;
     });
-    html += `</div><div style="margin-top:8px;display:flex;gap:8px;align-items:end;">
-        <div class="form-group" style="flex:1;"><label>Add Charge</label><select id="modal-cc-add-charge">${modeCharges.map(c => `<option value="${c}">${c}</option>`).join('')}</select></div>
-        <button class="btn btn-sm btn-success" style="height:33px;" onclick="addCCChargeToModal()">+</button>
-    </div>
-    <div style="margin-top:16px;text-align:right;">
-        <button class="btn btn-clear" onclick="closeModal('previewModal')">Cancel</button>
-        <button class="btn btn-quoted" onclick="saveEditCarrierCharge('${type}',${idx})">Save</button>
-    </div>`;
+
+    html += `</div>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:end;">
+            <div class="form-group" style="flex:1;"><label>Add Charge</label>
+                <select id="modal-cc-add-charge">
+                    ${modeCharges.map(c => `<option value="${c}">${c}</option>`).join('')}
+                </select>
+            </div>
+            <button class="btn btn-sm btn-success" style="height:33px;" onclick="addCCChargeToModal()">+</button>
+        </div>
+        <div style="margin-top:16px;text-align:right;display:flex;gap:8px;justify-content:flex-end;">
+            <button class="btn btn-clear" onclick="closeModal('previewModal')">Cancel</button>
+            <button class="btn btn-quoted" onclick="saveEditCarrierCharge('${type}',${idx})">Save</button>
+        </div>`;
+
     document.getElementById('modal-title').textContent = 'Edit Carrier-Wise Charge';
     document.getElementById('previewBody').innerHTML = html;
     openModal('previewModal');
 }
+
 function addCCChargeToModal() {
     const key = document.getElementById('modal-cc-add-charge').value;
     const list = document.getElementById('modal-cc-charges-list');
@@ -5760,37 +6246,37 @@ function addCCChargeToModal() {
     </div>`);
 }
 function saveEditCarrierCharge(type, idx) {
-    const rec = type === 'sealcl' ? db.carrierChargesSeaLcl[idx] : db.carrierChargesAir[idx];
-    if (!rec) return alert('Record not found');
-    let updatedRecord;
+    let arr;
+    if (type === 'sealcl') arr = db.carrierChargesSeaLcl;
+    else if (type === 'air') arr = db.carrierChargesAir;
+    else arr = db.carrierChargesSeaLcl;
+
+    if (!arr || idx < 0 || idx >= arr.length) {
+        alert('Record not found.');
+        return;
+    }
+    const rec = arr[idx];
+
+    // Collect data
+    let carrier, pol, container, commodity, mode;
     if (type === 'sealcl') {
-        const mode = document.getElementById('modal-cc-mode-edit').value;
-        const carrier = document.getElementById('modal-cc-carrier-edit').value;
-        const pol = document.getElementById('modal-cc-pol-edit').value;
-        const container = document.getElementById('modal-cc-container-edit').value || '';
-        const commodity = document.getElementById('modal-cc-commodity-edit').value;
-        if (!carrier || !pol) return alert('Carrier and POL are required');
-        updatedRecord = { mode, carrier, pol, container, commodity };
-    } else {
-        const carrier = document.getElementById('modal-cc-carrier-edit').value;
-        const pol = document.getElementById('modal-cc-pol-edit').value;
-        const commodity = document.getElementById('modal-cc-commodity-edit').value;
-        if (!carrier || !pol) return alert('Carrier and POL are required');
-        updatedRecord = { carrier, pol, commodity };
+        mode = document.getElementById('modal-cc-mode-edit').value || 'sea';
+        carrier = document.getElementById('modal-cc-carrier-edit').value.trim();
+        pol = document.getElementById('modal-cc-pol-edit').value.trim();
+        container = document.getElementById('modal-cc-container-edit').value.trim() || '';
+        commodity = document.getElementById('modal-cc-commodity-edit').value.trim();
+        if (!carrier || !pol) return alert('Carrier and POL are required.');
+    } else if (type === 'air') {
+        carrier = document.getElementById('modal-cc-carrier-edit').value.trim();
+        pol = document.getElementById('modal-cc-pol-edit').value.trim();
+        commodity = document.getElementById('modal-cc-commodity-edit').value.trim();
+        if (!carrier || !pol) return alert('Carrier and POL are required.');
+        container = '';
+        mode = 'air';
     }
-    if (findCarrierChargeDuplicate(type, updatedRecord, idx)) {
-        return alert('Duplicate entry!');
-    }
-    if (type === 'sealcl') {
-        rec.mode = updatedRecord.mode;
-        rec.container = updatedRecord.container;
-        rec.commodity = updatedRecord.commodity;
-    }
-    rec.carrier = updatedRecord.carrier;
-    rec.pol = updatedRecord.pol;
-    rec.commodity = updatedRecord.commodity || '';
-    rec.updated = new Date().toISOString();
-    rec.charges = {};
+
+    // Build charges
+    const charges = {};
     document.querySelectorAll('#modal-cc-charges-list [data-charge-key]').forEach(row => {
         const key = row.getAttribute('data-charge-key');
         const sellAmt = parseFloat(row.querySelector('.modal-cc-sell-amt').value) || 0;
@@ -5798,15 +6284,83 @@ function saveEditCarrierCharge(type, idx) {
         const buyAmt = parseFloat(row.querySelector('.modal-cc-buy-amt').value) || 0;
         const buyCur = row.querySelector('.modal-cc-buy-cur').value;
         if (sellAmt > 0 || buyAmt > 0) {
-            rec.charges[key] = { amount: sellAmt, currency: sellCur, buyAmount: buyAmt, buyCurrency: buyCur };
+            charges[key] = {
+                amount: sellAmt,
+                currency: sellCur,
+                buyAmount: buyAmt,
+                buyCurrency: buyCur,
+                basis: 'Normal'
+            };
         }
     });
+
+    // ---- Auto‑segregate if carrier becomes "ALL" ----
+    if (carrier === 'ALL') {
+        // Remove from carrier array
+        arr.splice(idx, 1);
+
+        // Determine default array
+        let defaultArr;
+        let defaultEntry;
+        if (type === 'air') {
+            defaultArr = db.defaultAirCharges;
+            defaultEntry = { pol, commodity, charges };
+        } else {
+            // sea or lcl
+            const isSea = (mode === 'sea');
+            defaultArr = isSea ? db.defaultSeaCharges : db.defaultLclCharges;
+            defaultEntry = {
+                carrier: 'ALL',
+                pol,
+                container: container || '',
+                commodity,
+                charges
+            };
+        }
+        // Check duplicate in default
+        const dup = defaultArr.some(d => {
+            if (type === 'air') return d.pol === pol && d.commodity === commodity;
+            else return d.pol === pol && d.container === container && d.commodity === commodity;
+        });
+        if (!dup) {
+            defaultArr.push(defaultEntry);
+            saveDB();
+            closeModal('previewModal');
+            renderDefaultChargesMaster(type === 'air' ? 'air' : (mode === 'sea' ? 'sea' : 'lcl'));
+            renderCarrierChargesMaster(type === 'air' ? 'air' : 'sealcl');
+            alert('✅ Moved to Default Charges.');
+            autoBackup();
+            return;
+        } else {
+            alert('A default entry with same POL/Container/Commodity already exists. Not moved.');
+            // Restore record (re‑add to arr)
+            arr.push(rec);
+            saveDB();
+            closeModal('previewModal');
+            renderCarrierChargesMaster(type);
+            return;
+        }
+    }
+
+    // Otherwise update in place
+    if (type === 'sealcl') {
+        rec.mode = mode;
+        rec.container = container;
+        rec.commodity = commodity;
+    } else {
+        rec.commodity = commodity;
+    }
+    rec.carrier = carrier;
+    rec.pol = pol;
+    rec.charges = charges;
+    rec.updated = new Date().toISOString();
     saveDB();
     closeModal('previewModal');
     renderCarrierChargesMaster(type);
-    alert('Saved!');
+    alert('✅ Carrier charge updated.');
     autoBackup();
 }
+
 function openAddCarrierChargeModal(type) {
     const mode = type === 'sealcl' ? 'sea' : 'air';
     const modeCharges = getDefaultChargeTypes(mode);
@@ -5868,23 +6422,29 @@ function saveNewCarrierCharge(type) {
 }
 
 // ==================== DELETE FUNCTIONS ====================
-function deleteCarrierChargeEntry(type, idx) {
+function deleteDefaultChargeEntry(mode, idx) {
     let arr;
-    if (type === 'sealcl') arr = db.carrierChargesSeaLcl;
-    else arr = db.carrierChargesAir;
+    if (mode === 'sea') arr = db.defaultSeaCharges;
+    else if (mode === 'air') arr = db.defaultAirCharges;
+    else arr = db.defaultLclCharges;
 
     if (!arr || idx < 0 || idx >= arr.length) {
         alert('Record not found.');
         return;
     }
 
-    showDeleteConfirm('Delete this entry?', function() {
-        if (type === 'sealcl') db.carrierChargesSeaLcl.splice(idx, 1);
-        else db.carrierChargesAir.splice(idx, 1);
-        saveDB();
-        renderCarrierChargesMaster(type);
-        autoBackup();
-    });
+    const record = arr[idx];
+    if (!confirm(`Delete this default charge?\n\n${record.pol || 'N/A'} (${mode.toUpperCase()})`)) return;
+
+    // Re-check index in case array changed during confirm
+    if (idx >= arr.length) {
+        alert('Record already deleted.');
+        return;
+    }
+    arr.splice(idx, 1);
+    saveDB();
+    renderDefaultChargesMaster(mode);
+    autoBackup();
 }
 
 // ==================== PREVIEW FUNCTIONS ====================
@@ -5972,46 +6532,28 @@ function duplicateDefaultCharge(mode, idx) {
 }
 
 
-function deleteDefaultChargeEntry(mode, idx) {
-    console.log(`deleteDefaultChargeEntry called: mode=${mode}, idx=${idx}`);
-
+function deleteCarrierChargeEntry(type, idx) {
     let arr;
-    if (mode === 'sea') arr = db.defaultSeaCharges;
-    else if (mode === 'air') arr = db.defaultAirCharges;
-    else arr = db.defaultLclCharges;
+    if (type === 'sealcl') arr = db.carrierChargesSeaLcl;
+    else if (type === 'air') arr = db.carrierChargesAir;
+    else arr = db.carrierChargesSeaLcl;
 
-    if (!arr) {
-        alert('Array not found for mode: ' + mode);
-        return;
-    }
-
-    if (idx < 0 || idx >= arr.length) {
-        alert(`Record not found. Array length: ${arr.length}, requested index: ${idx}`);
+    if (!arr || idx < 0 || idx >= arr.length) {
+        alert('Record not found.');
         return;
     }
 
     const record = arr[idx];
-    if (!record) {
-        alert('Record is undefined at index ' + idx);
+    if (!confirm(`Delete this carrier charge?\n\n${record.carrier} (${record.pol})`)) return;
+
+    if (idx >= arr.length) {
+        alert('Record already deleted.');
         return;
     }
-
-    const message = `Delete this entry?<br><br><strong>${record.pol || 'N/A'}</strong> (${mode.toUpperCase()})`;
-    showDeleteConfirm(message, function() {
-        // Double-check index still valid
-        if (idx >= arr.length) {
-            alert('Record already deleted or index changed.');
-            return;
-        }
-        // Remove from the correct array
-        if (mode === 'sea') db.defaultSeaCharges.splice(idx, 1);
-        else if (mode === 'air') db.defaultAirCharges.splice(idx, 1);
-        else db.defaultLclCharges.splice(idx, 1);
-
-        saveDB();
-        renderDefaultChargesMaster(mode);
-        autoBackup();
-    });
+    arr.splice(idx, 1);
+    saveDB();
+    renderCarrierChargesMaster(type);
+    autoBackup();
 }
 
 
@@ -6059,32 +6601,36 @@ function duplicateCarrierCharge(type, idx) {
 function getDefaultChargeTypes(mode) {
     return defaultCharges[mode] || [];
 }
-function findDefaultChargeDuplicate(mode, record, excludeIndex = -1) {
-    const arr = mode === 'sea' ? db.defaultSeaCharges :
-        mode === 'air' ? db.defaultAirCharges :
-        db.defaultLclCharges;
+function findDefaultChargeDuplicate(mode, record, excludeIndex) {
+    let arr;
+    if (mode === 'sea') arr = db.defaultSeaCharges;
+    else if (mode === 'air') arr = db.defaultAirCharges;
+    else arr = db.defaultLclCharges;
     return arr.some((r, i) => {
         if (i === excludeIndex) return false;
         if (mode === 'sea') {
-            return r.carrier === record.carrier &&
-                r.pol === record.pol &&
-                r.container === record.container &&
-                r.commodity === (record.commodity || '');
+            return r.carrier === record.carrier && r.pol === record.pol &&
+                   r.container === record.container && (r.commodity || '') === (record.commodity || '');
         } else {
-            return r.pol === record.pol &&
-                r.commodity === (record.commodity || '');
+            return r.pol === record.pol && (r.commodity || '') === (record.commodity || '');
         }
     });
 }
-function findCarrierChargeDuplicate(type, record, excludeIndex = -1) {
-    const arr = type === 'sealcl' ? db.carrierChargesSeaLcl : db.carrierChargesAir;
+
+function findCarrierChargeDuplicate(type, record, excludeIndex) {
+    let arr;
+    if (type === 'sealcl') arr = db.carrierChargesSeaLcl;
+    else if (type === 'air') arr = db.carrierChargesAir;
+    else arr = db.carrierChargesSeaLcl;
     return arr.some((r, i) => {
         if (i === excludeIndex) return false;
         if (type === 'sealcl') {
             return r.mode === record.mode && r.carrier === record.carrier &&
-                r.pol === record.pol && (r.container || '') === (record.container || '');
+                   r.pol === record.pol && (r.container || '') === (record.container || '') &&
+                   (r.commodity || '') === (record.commodity || '');
         } else {
-            return r.carrier === record.carrier && r.pol === record.pol;
+            return r.carrier === record.carrier && r.pol === record.pol &&
+                   (r.commodity || '') === (record.commodity || '');
         }
     });
 }
@@ -10294,21 +10840,27 @@ function bulkExportCarrierCharges() {
 
 // ---------- 3. Import Carrier-Specific Charges ----------
 function bulkImportCarrierCharges(input) {
-    if (!input.files || !input.files[0]) return;
+    if (!input.files || !input.files[0]) {
+        alert('Please select an Excel file.');
+        return;
+    }
+
     const file = input.files[0];
     const reader = new FileReader();
     reader.onload = function(e) {
         try {
             const data = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, { type: 'array' });
-            const sheet = workbook.Sheets['Carrier Charges'];
+            const sheetName = 'Carrier Charges';
+            const sheet = workbook.Sheets[sheetName];
             if (!sheet) {
-                alert('❌ Sheet "Carrier Charges" not found in the Excel file.');
+                alert(`❌ Sheet "${sheetName}" not found. Available: ${workbook.SheetNames.join(', ')}`);
                 return;
             }
+
             const rows = XLSX.utils.sheet_to_json(sheet);
-            if (!rows.length) {
-                alert('❌ No data found in the sheet.');
+            if (rows.length === 0) {
+                alert('❌ No data found.');
                 return;
             }
 
@@ -10316,11 +10868,13 @@ function bulkImportCarrierCharges(input) {
             const groups = {};
             rows.forEach(row => {
                 const mode = (row.Mode || 'SEA').toUpperCase();
-                const key = `${mode}||${row.Carrier || ''}||${row.POL || ''}||${row.Container || ''}||${row.Commodity || ''}`;
+                if (!['SEA', 'AIR', 'LCL'].includes(mode)) return;
+                const carrier = row.Carrier || '';
+                const key = `${mode}||${carrier}||${row.POL || ''}||${row.Container || ''}||${row.Commodity || ''}`;
                 if (!groups[key]) {
                     groups[key] = {
                         mode: mode,
-                        carrier: row.Carrier || '',
+                        carrier: carrier,
                         pol: row.POL || '',
                         container: row.Container || '',
                         commodity: row.Commodity || '',
@@ -10340,65 +10894,104 @@ function bulkImportCarrierCharges(input) {
             });
 
             const grouped = Object.values(groups);
-            let updated = 0;
-
-            // Separate into SEA, AIR, LCL
-            const seaCharges = grouped.filter(g => g.mode === 'SEA');
-            const lclCharges = grouped.filter(g => g.mode === 'LCL');
-            const airCharges = grouped.filter(g => g.mode === 'AIR');
-
-            // Replace database arrays
-            if (seaCharges.length || lclCharges.length) {
-                // For sea & lcl, we combine them into carrierChargesSeaLcl
-                const combined = [];
-                seaCharges.forEach(g => {
-                    combined.push({
-                        mode: 'sea',
-                        carrier: g.carrier,
-                        pol: g.pol,
-                        container: g.container,
-                        commodity: g.commodity,
-                        charges: g.charges,
-                        updated: new Date().toISOString()
-                    });
-                });
-                lclCharges.forEach(g => {
-                    combined.push({
-                        mode: 'lcl',
-                        carrier: g.carrier,
-                        pol: g.pol,
-                        container: g.container,
-                        commodity: g.commodity,
-                        charges: g.charges,
-                        updated: new Date().toISOString()
-                    });
-                });
-                db.carrierChargesSeaLcl = combined;
-                updated += combined.length;
+            if (grouped.length === 0) {
+                alert('❌ No valid groups created.');
+                return;
             }
 
-            if (airCharges.length) {
-                db.carrierChargesAir = airCharges.map(g => ({
-                    carrier: g.carrier,
-                    pol: g.pol,
-                    commodity: g.commodity,
-                    charges: g.charges,
-                    updated: new Date().toISOString()
-                }));
-                updated += airCharges.length;
+            // Separate into groups based on carrier = "ALL" vs others
+            const defaultGroups = [];
+            const carrierGroups = [];
+
+            grouped.forEach(g => {
+                if (g.carrier.toUpperCase() === 'ALL') {
+                    defaultGroups.push(g);
+                } else {
+                    carrierGroups.push(g);
+                }
+            });
+
+            // Confirm
+            const total = defaultGroups.length + carrierGroups.length;
+            if (!confirm(`Import ${total} charge groups?\n- Default (ALL): ${defaultGroups.length}\n- Carrier-specific: ${carrierGroups.length}`)) return;
+
+            // --- Process Default Groups ---
+            if (defaultGroups.length) {
+                defaultGroups.forEach(g => {
+                    let defaultArr;
+                    if (g.mode === 'SEA') defaultArr = db.defaultSeaCharges;
+                    else if (g.mode === 'AIR') defaultArr = db.defaultAirCharges;
+                    else if (g.mode === 'LCL') defaultArr = db.defaultLclCharges;
+                    if (!defaultArr) return;
+
+                    // Check duplicate
+                    const dup = defaultArr.some(d => {
+                        if (g.mode === 'SEA') {
+                            return d.pol === g.pol && d.container === g.container && d.commodity === g.commodity;
+                        } else {
+                            return d.pol === g.pol && d.commodity === g.commodity;
+                        }
+                    });
+                    if (!dup) {
+                        const entry = {
+                            pol: g.pol,
+                            commodity: g.commodity,
+                            charges: g.charges
+                        };
+                        if (g.mode === 'SEA') {
+                            entry.carrier = 'ALL';
+                            entry.container = g.container;
+                        }
+                        defaultArr.push(entry);
+                    }
+                });
+            }
+
+            // --- Process Carrier-Specific Groups ---
+            if (carrierGroups.length) {
+                carrierGroups.forEach(g => {
+                    if (g.mode === 'AIR') {
+                        // Air charges go to carrierChargesAir
+                        const existing = db.carrierChargesAir;
+                        const dup = existing.some(e => e.carrier === g.carrier && e.pol === g.pol && e.commodity === g.commodity);
+                        if (!dup) {
+                            existing.push({
+                                carrier: g.carrier,
+                                pol: g.pol,
+                                commodity: g.commodity,
+                                charges: g.charges,
+                                updated: new Date().toISOString()
+                            });
+                        }
+                    } else {
+                        // SEA or LCL -> carrierChargesSeaLcl
+                        const existing = db.carrierChargesSeaLcl;
+                        const mode = g.mode === 'SEA' ? 'sea' : 'lcl';
+                        const dup = existing.some(e => e.mode === mode && e.carrier === g.carrier && e.pol === g.pol && e.container === g.container && e.commodity === g.commodity);
+                        if (!dup) {
+                            existing.push({
+                                mode: mode,
+                                carrier: g.carrier,
+                                pol: g.pol,
+                                container: g.container,
+                                commodity: g.commodity,
+                                charges: g.charges,
+                                updated: new Date().toISOString()
+                            });
+                        }
+                    }
+                });
             }
 
             saveDB();
-            alert(`✅ Import successful! ${updated} carrier charge groups updated.`);
 
-            // Refresh active local tabs
-            ['sealocal', 'airlocal', 'lcllocal'].forEach(tab => {
-                const panel = document.getElementById(tab);
-                if (panel && panel.classList.contains('active')) {
-                    const mode = tab === 'sealocal' ? 'sea' : tab === 'airlocal' ? 'air' : 'lcl';
-                    renderCarrierChargesMaster(mode === 'sea' ? 'sealcl' : mode);
-                }
-            });
+            // Refresh all tables
+            ['sea','air','lcl'].forEach(m => renderDefaultChargesMaster(m));
+            renderCarrierChargesMaster('sealcl');
+            renderCarrierChargesMaster('air');
+            renderCarrierChargesMaster('lcl');
+
+            alert(`✅ Import completed.\nDefault groups: ${defaultGroups.length}\nCarrier-specific groups: ${carrierGroups.length}`);
             autoBackup();
         } catch (err) {
             alert('❌ Import failed: ' + err.message);
@@ -10407,4 +11000,74 @@ function bulkImportCarrierCharges(input) {
     };
     reader.readAsArrayBuffer(file);
     input.value = '';
+}
+
+function updateSelectedCount() {
+    const count = document.querySelectorAll('.dc-checkbox:checked, .cc-checkbox:checked').length;
+    const el = document.getElementById('selected-count');
+    if (el) el.textContent = count + ' selected';
+}
+
+function bulkDeleteSelectedLocal() {
+    const selected = document.querySelectorAll('.dc-checkbox:checked, .cc-checkbox:checked');
+    if (selected.length === 0) {
+        alert('No entries selected.');
+        return;
+    }
+    if (!confirm(`Delete ${selected.length} selected entries? This cannot be undone.`)) return;
+
+    // Group by array type: 'default' or 'sealcl' or 'air'
+    const groups = {};
+    selected.forEach(cb => {
+        const type = cb.dataset.type;   // 'default' or 'sealcl' or 'air'
+        const mode = cb.dataset.mode;   // for default only: 'sea', 'air', 'lcl'
+        const idx = parseInt(cb.dataset.idx);
+        const key = (type === 'default') ? `default-${mode}` : type; // 'sealcl' or 'air'
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(idx);
+    });
+
+    for (const [key, indices] of Object.entries(groups)) {
+        const sorted = indices.sort((a, b) => b - a);
+        if (key.startsWith('default-')) {
+            const mode = key.replace('default-', '');
+            let arr;
+            if (mode === 'sea') arr = db.defaultSeaCharges;
+            else if (mode === 'air') arr = db.defaultAirCharges;
+            else if (mode === 'lcl') arr = db.defaultLclCharges;
+            if (arr) {
+                sorted.forEach(i => { if (i < arr.length) arr.splice(i, 1); });
+            }
+        } else if (key === 'sealcl') {
+            const arr = db.carrierChargesSeaLcl;
+            sorted.forEach(i => { if (i < arr.length) arr.splice(i, 1); });
+        } else if (key === 'air') {
+            const arr = db.carrierChargesAir;
+            sorted.forEach(i => { if (i < arr.length) arr.splice(i, 1); });
+        } else {
+            // fallback: treat as carrier? we can ignore.
+        }
+    }
+
+    saveDB();
+    // Refresh all tables
+    ['sea','air','lcl'].forEach(m => renderDefaultChargesMaster(m));
+    renderCarrierChargesMaster('sealcl');
+    renderCarrierChargesMaster('air');
+    renderCarrierChargesMaster('lcl');
+    updateSelectedCount();
+    alert('Selected entries deleted.');
+    autoBackup();
+}
+
+function populateSelect(id, options, selectedValue) {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    options = options || [];
+    // Sort alphabetically
+    const sorted = options.sort((a, b) => a.localeCompare(b));
+    sel.innerHTML = '<option value="">Select</option>' + sorted.map(o => `<option value="${o}">${o}</option>`).join('');
+    if (selectedValue && options.includes(selectedValue)) {
+        sel.value = selectedValue;
+    }
 }
