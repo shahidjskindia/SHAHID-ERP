@@ -1841,58 +1841,118 @@ function onCarrierPolChangeInternal(mode) {
     const container = containerEl ? containerEl.value : '';
     const commodity = document.getElementById(`${mode}-commodity`).value;
 
-    if (!carrier || !pol) { buildChargesGrid(mode); return; }
+    // Log for debugging
+    console.log(db.defaultSeaCharges);(`🔄 Auto-fetch: mode=${mode}, carrier=${carrier}, pol=${pol}, container=${container}, commodity=${commodity}`);
+
+    if (!carrier || !pol) {
+        buildChargesGrid(mode);
+        return;
+    }
+
     let finalCharges = {};
+
+    // ===== 1. DEFAULT CHARGES (always applied first) =====
     if (mode === 'sea') {
-        let custMatch = db.carrierChargesSeaLcl.find(c => c.mode === mode && c.carrier === carrier && c.pol === pol && (c.container || '') === container);
-        if (custMatch) Object.assign(finalCharges, custMatch.charges);
-    } else if (mode === 'air') {
-        let custMatch = db.carrierChargesAir.find(c => c.carrier === carrier && c.pol === pol);
-        if (custMatch) Object.assign(finalCharges, custMatch.charges);
-    } else if (mode === 'lcl') {
-        let custMatch = db.carrierChargesSeaLcl.find(c => c.mode === mode && c.carrier === carrier && c.pol === pol);
-        if (custMatch) Object.assign(finalCharges, custMatch.charges);
-    }
-    if (carrier !== 'ALL') {
-        let allCharges = {};
-        if (mode === 'sea') {
-            let allMatch = db.defaultSeaCharges.find(d => d.carrier === 'ALL' && d.pol === pol && d.container === container && d.commodity === commodity);
-            if (allMatch) Object.assign(allCharges, allMatch.charges);
-        } else if (mode === 'air') {
-            let allMatch = db.defaultAirCharges.find(d => d.pol === pol && d.commodity === commodity);
-            if (allMatch) Object.assign(allCharges, allMatch.charges);
-        } else if (mode === 'lcl') {
-            let allMatch = db.defaultLclCharges.find(d => d.pol === pol && d.commodity === commodity);
-            if (allMatch) Object.assign(allCharges, allMatch.charges);
-        }
-        Object.entries(allCharges).forEach(([key, val]) => {
-            if (!finalCharges[key]) {
-                finalCharges[key] = val;
+        const defaultMatch = db.defaultSeaCharges.find(d =>
+            d.pol === pol &&
+            d.commodity === commodity
+        );
+        if (defaultMatch) {
+            console.log('✅ Default SEA charges found for', pol, commodity);
+            const charges = { ...defaultMatch.charges };
+            // Map split charges based on container
+            let suffix = '';
+            if (container === '20 GP') suffix = '_20';
+            else if (container === '40 GP' || container === '40 HC') suffix = '_40';
+            if (suffix) {
+                // Map e.g., CFS_20 → CFS
+                Object.keys(charges).forEach(key => {
+                    if (key.endsWith(suffix)) {
+                        const base = key.slice(0, -3);
+                        finalCharges[base] = charges[key];
+                    }
+                });
+                // Also add non-split charges (like SEAL, DOCS) – they have no suffix
+                Object.keys(charges).forEach(key => {
+                    if (!key.endsWith('_20') && !key.endsWith('_40')) {
+                        finalCharges[key] = charges[key];
+                    }
+                });
+            } else {
+                // No container selected – fallback: add all charges without suffix
+                Object.keys(charges).forEach(key => {
+                    if (!key.endsWith('_20') && !key.endsWith('_40')) {
+                        finalCharges[key] = charges[key];
+                    }
+                });
             }
-        });
-    }
-    if (mode === 'sea') {
-        let defMatch = db.defaultSeaCharges.find(d => d.carrier === carrier && d.pol === pol && d.container === container && d.commodity === commodity);
-        if (defMatch) {
-            Object.entries(defMatch.charges).forEach(([key, val]) => {
-                if (!finalCharges[key]) finalCharges[key] = val;
-            });
+        } else {
+            console.warn('⚠️ No default SEA charges for', pol, commodity);
         }
     } else if (mode === 'air') {
-        let defMatch = db.defaultAirCharges.find(d => d.pol === pol && d.carrier === carrier && d.commodity === commodity);
-        if (defMatch) {
-            Object.entries(defMatch.charges).forEach(([key, val]) => {
-                if (!finalCharges[key]) finalCharges[key] = val;
+        const defaultMatch = db.defaultAirCharges.find(d => d.pol === pol && d.commodity === commodity);
+        if (defaultMatch) {
+            console.log('✅ Default AIR charges found');
+            Object.assign(finalCharges, defaultMatch.charges);
+        }
+    } else if (mode === 'lcl') {
+        const defaultMatch = db.defaultLclCharges.find(d => d.pol === pol && d.commodity === commodity);
+        if (defaultMatch) {
+            console.log('✅ Default LCL charges found');
+            Object.assign(finalCharges, defaultMatch.charges);
+        }
+    }
+
+    // ===== 2. CARRIER-SPECIFIC CHARGES (override/add) =====
+    if (mode === 'sea') {
+        const carrierMatch = db.carrierChargesSeaLcl.find(c =>
+            c.mode === mode &&
+            c.carrier === carrier &&
+            c.pol === pol &&
+            c.commodity === commodity
+        );
+        if (carrierMatch) {
+            console.log('✅ Carrier-specific SEA charges found for', carrier);
+            const charges = { ...carrierMatch.charges };
+            // Map THC_20/THC_40 → THC based on container
+            let suffix = '';
+            if (container === '20 GP') suffix = '_20';
+            else if (container === '40 GP' || container === '40 HC') suffix = '_40';
+            if (suffix) {
+                const thcKey = 'THC' + suffix;
+                if (charges[thcKey]) {
+                    finalCharges.THC = charges[thcKey];
+                }
+                // Remove the suffixed keys to avoid duplicates
+                delete charges.THC_20;
+                delete charges.THC_40;
+            }
+            // Merge other charges (SEAL, DOCS, etc.) – they override defaults
+            Object.entries(charges).forEach(([key, val]) => {
+                finalCharges[key] = val;
+            });
+        } else {
+            console.warn('⚠️ No carrier-specific SEA charges for', carrier, pol, commodity);
+        }
+    } else if (mode === 'air') {
+        const carrierMatch = db.carrierChargesAir.find(c => c.carrier === carrier && c.pol === pol);
+        if (carrierMatch) {
+            console.log('✅ Carrier-specific AIR charges found');
+            Object.entries(carrierMatch.charges).forEach(([key, val]) => {
+                finalCharges[key] = val;
             });
         }
     } else if (mode === 'lcl') {
-        let defMatch = db.defaultLclCharges.find(d => d.pol === pol && d.carrier === carrier && d.commodity === commodity);
-        if (defMatch) {
-            Object.entries(defMatch.charges).forEach(([key, val]) => {
-                if (!finalCharges[key]) finalCharges[key] = val;
+        const carrierMatch = db.carrierChargesSeaLcl.find(c => c.mode === mode && c.carrier === carrier && c.pol === pol);
+        if (carrierMatch) {
+            console.log('✅ Carrier-specific LCL charges found');
+            Object.entries(carrierMatch.charges).forEach(([key, val]) => {
+                finalCharges[key] = val;
             });
         }
     }
+
+    console.log('📋 Final charges to display:', Object.keys(finalCharges));
     buildChargesGrid(mode, finalCharges);
 }
 
@@ -2384,31 +2444,175 @@ function renderDashboard() {
 
 // ==================== MEASUREMENT TOOLS ====================
 function calculateCBM() {
-    const length = parseFloat(document.getElementById('cbm-length')?.value) || 0;
-    const width = parseFloat(document.getElementById('cbm-width')?.value) || 0;
-    const height = parseFloat(document.getElementById('cbm-height')?.value) || 0;
-    const unit = document.getElementById('cbm-unit')?.value || 'cm';
-    const qty = parseFloat(document.getElementById('cbm-qty')?.value) || 1;
+    const length = parseFloat(document.getElementById('cbm-length').value) || 0;
+    const width = parseFloat(document.getElementById('cbm-width').value) || 0;
+    const height = parseFloat(document.getElementById('cbm-height').value) || 0;
+    const unit = document.getElementById('cbm-unit').value;
+    const qty = parseFloat(document.getElementById('cbm-qty').value) || 1;
     let lengthM = length, widthM = width, heightM = height;
     if (unit === 'cm') { lengthM = length / 100; widthM = width / 100; heightM = height / 100; }
     else if (unit === 'inch') { lengthM = length * 0.0254; widthM = width * 0.0254; heightM = height * 0.0254; }
     else if (unit === 'mm') { lengthM = length / 1000; widthM = width / 1000; heightM = height / 1000; }
     const cbm = lengthM * widthM * heightM * qty;
     document.getElementById('cbm-result').value = cbm.toFixed(4) + ' CBM';
+
+    // Show Save button and store data for saving
+    const saveBtn = document.getElementById('cbm-save-btn');
+    if (saveBtn) {
+        saveBtn.style.display = 'inline-block';
+        saveBtn.dataset.length = length;
+        saveBtn.dataset.width = width;
+        saveBtn.dataset.height = height;
+        saveBtn.dataset.unit = unit;
+        saveBtn.dataset.qty = qty;
+        saveBtn.dataset.cbm = cbm;
+    }
+    renderCBMRecords();
 }
+
+function saveCBMRecord() {
+    const btn = document.getElementById('cbm-save-btn');
+    if (!btn) return;
+    const length = parseFloat(btn.dataset.length) || 0;
+    const width = parseFloat(btn.dataset.width) || 0;
+    const height = parseFloat(btn.dataset.height) || 0;
+    const unit = btn.dataset.unit;
+    const qty = parseFloat(btn.dataset.qty) || 1;
+    const cbm = parseFloat(btn.dataset.cbm) || 0;
+    if (length === 0 || width === 0 || height === 0) {
+        alert('Please fill all dimensions first.');
+        return;
+    }
+    const record = {
+        id: 'CBM-' + Date.now().toString(36).toUpperCase(),
+        length, width, height, unit, qty, cbm,
+        timestamp: new Date().toISOString()
+    };
+    db.cbmRecords.push(record);
+    saveDB();
+    renderCBMRecords();
+    alert('CBM record saved!');
+}
+
+function deleteCBMRecord(id) {
+    if (!confirm('Delete this CBM record?')) return;
+    db.cbmRecords = db.cbmRecords.filter(r => r.id !== id);
+    saveDB();
+    renderCBMRecords();
+}
+
+function renderCBMRecords() {
+    const container = document.getElementById('cbm-records-list');
+    if (!container) return;
+    const records = db.cbmRecords || [];
+    if (records.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-light);padding:10px;text-align:center;">No CBM records saved.</p>';
+        return;
+    }
+    container.innerHTML = `<table class="master-table">
+        <thead><tr>
+            <th>#</th><th>L</th><th>W</th><th>H</th><th>Unit</th><th>Qty</th><th>CBM</th><th>Date</th><th>Action</th>
+        </tr></thead>
+        <tbody>
+            ${records.map((r, i) => `
+                <tr>
+                    <td>${i+1}</td>
+                    <td>${r.length}</td><td>${r.width}</td><td>${r.height}</td>
+                    <td>${r.unit}</td><td>${r.qty}</td>
+                    <td><strong>${r.cbm.toFixed(4)}</strong></td>
+                    <td>${new Date(r.timestamp).toLocaleDateString('en-IN')}</td>
+                    <td><button class="btn btn-sm btn-clear" onclick="deleteCBMRecord('${r.id}')">×</button></td>
+                </tr>
+            `).join('')}
+        </tbody>
+    </table>`;
+}
+
+
 function calculateAirChargeable() {
-    const length = parseFloat(document.getElementById('air-length')?.value) || 0;
-    const width = parseFloat(document.getElementById('air-width')?.value) || 0;
-    const height = parseFloat(document.getElementById('air-height')?.value) || 0;
-    const unit = document.getElementById('air-unit')?.value || 'cm';
-    const qty = parseFloat(document.getElementById('air-qty')?.value) || 1;
+    const length = parseFloat(document.getElementById('air-length').value) || 0;
+    const width = parseFloat(document.getElementById('air-width').value) || 0;
+    const height = parseFloat(document.getElementById('air-height').value) || 0;
+    const unit = document.getElementById('air-unit').value;
+    const qty = parseFloat(document.getElementById('air-qty').value) || 1;
     let volumeCm3 = 0;
     if (unit === 'cm') volumeCm3 = length * width * height;
     else if (unit === 'inch') volumeCm3 = (length * 2.54) * (width * 2.54) * (height * 2.54);
     else if (unit === 'mm') volumeCm3 = (length / 10) * (width / 10) * (height / 10);
     const chargeableWeight = (volumeCm3 / 6000) * qty;
     document.getElementById('air-result').value = chargeableWeight.toFixed(2) + ' KGS';
+
+    const saveBtn = document.getElementById('air-save-btn');
+    if (saveBtn) {
+        saveBtn.style.display = 'inline-block';
+        saveBtn.dataset.length = length;
+        saveBtn.dataset.width = width;
+        saveBtn.dataset.height = height;
+        saveBtn.dataset.unit = unit;
+        saveBtn.dataset.qty = qty;
+        saveBtn.dataset.weight = chargeableWeight;
+    }
+    renderAirWeightRecords();
 }
+
+function saveAirWeightRecord() {
+    const btn = document.getElementById('air-save-btn');
+    if (!btn) return;
+    const length = parseFloat(btn.dataset.length) || 0;
+    const width = parseFloat(btn.dataset.width) || 0;
+    const height = parseFloat(btn.dataset.height) || 0;
+    const unit = btn.dataset.unit;
+    const qty = parseFloat(btn.dataset.qty) || 1;
+    const weight = parseFloat(btn.dataset.weight) || 0;
+    if (length === 0 || width === 0 || height === 0) {
+        alert('Please fill all dimensions first.');
+        return;
+    }
+    const record = {
+        id: 'AIR-' + Date.now().toString(36).toUpperCase(),
+        length, width, height, unit, qty, weight,
+        timestamp: new Date().toISOString()
+    };
+    db.airWeightRecords.push(record);
+    saveDB();
+    renderAirWeightRecords();
+    alert('Air weight record saved!');
+}
+
+function deleteAirWeightRecord(id) {
+    if (!confirm('Delete this air weight record?')) return;
+    db.airWeightRecords = db.airWeightRecords.filter(r => r.id !== id);
+    saveDB();
+    renderAirWeightRecords();
+}
+
+function renderAirWeightRecords() {
+    const container = document.getElementById('air-records-list');
+    if (!container) return;
+    const records = db.airWeightRecords || [];
+    if (records.length === 0) {
+        container.innerHTML = '<p style="color:var(--text-light);padding:10px;text-align:center;">No air weight records saved.</p>';
+        return;
+    }
+    container.innerHTML = `<table class="master-table">
+        <thead><tr>
+            <th>#</th><th>L</th><th>W</th><th>H</th><th>Unit</th><th>Qty</th><th>Chargeable Wt (KGS)</th><th>Date</th><th>Action</th>
+        </tr></thead>
+        <tbody>
+            ${records.map((r, i) => `
+                <tr>
+                    <td>${i+1}</td>
+                    <td>${r.length}</td><td>${r.width}</td><td>${r.height}</td>
+                    <td>${r.unit}</td><td>${r.qty}</td>
+                    <td><strong>${r.weight.toFixed(2)}</strong></td>
+                    <td>${new Date(r.timestamp).toLocaleDateString('en-IN')}</td>
+                    <td><button class="btn btn-sm btn-clear" onclick="deleteAirWeightRecord('${r.id}')">×</button></td>
+                </tr>
+            `).join('')}
+        </tbody>
+    </table>`;
+}
+
 
 // ==================== CALCULATOR KEYBOARD SUPPORT ====================
 document.addEventListener('DOMContentLoaded', function() {
@@ -2536,19 +2740,24 @@ function renderRateSheet() {
         const expiry = getExpiryStatus(r.validTo);
         const rowClass = expiry.status === 'active' ? 'row-active' : expiry.status === 'expiring' ? 'row-expiring' : 'row-expired';
         let statusClass, statusText;
-        if (expiry.status === 'expired') { statusClass = 'status-expired';
-            statusText = 'Expired'; } else if (expiry.status === 'expiring') { statusClass = 'status-expiring';
-            statusText = `Expiring (${expiry.days}d)`; } else { statusClass = 'status-active';
-            statusText = 'Active'; }
+        if (expiry.status === 'expired') { statusClass = 'status-expired'; statusText = 'Expired'; }
+        else if (expiry.status === 'expiring') { statusClass = 'status-expiring'; statusText = `Expiring (${expiry.days}d)`; }
+        else { statusClass = 'status-active'; statusText = 'Active'; }
         return `<tr class="${rowClass}">
-            <td>${r.carrierName || '-'}</td><td>${r.freightType || '-'}</td><td>${r.pol || '-'}</td><td>${r.pod || '-'}</td>
-            <td>${r.containerType || '-'}</td><td>${Number(r.freightAmount || 0).toLocaleString('en-IN')}</td>
-            <td>${r.currency || 'INR'}</td><td>${r.transitTime || '-'}</td>
-            <td>${r.commodity || '-'}</td>
-            <td>${r.validFrom || '-'}</td><td>${r.validTo || '-'}</td>
-            <td>${expiry.days !== null ? expiry.days + ' days' : '-'}</td>
-            <td><span class="status-badge ${statusClass}">${statusText}</span></td>
-            <td>
+            <td style="font-weight:bold;">${r.carrierName || '-'}</td>
+            <td style="font-weight:bold;">${r.freightType || '-'}</td>
+            <td style="font-weight:bold;">${r.pol || '-'}</td>
+            <td style="font-weight:bold;">${r.pod || '-'}</td>
+            <td style="font-weight:bold;">${r.containerType || '-'}</td>
+            <td style="font-weight:bold;">${Number(r.freightAmount || 0).toLocaleString('en-IN')}</td>
+            <td style="font-weight:bold;">${r.currency || 'INR'}</td>
+            <td style="font-weight:bold;">${r.transitTime || '-'}</td>
+            <td style="font-weight:bold;">${r.commodity || '-'}</td>
+            <td style="font-weight:bold;">${r.validFrom || '-'}</td>
+            <td style="font-weight:bold;">${r.validTo || '-'}</td>
+            <td style="font-weight:bold;">${expiry.days !== null ? expiry.days + ' days' : '-'}</td>
+            <td style="font-weight:bold;"><span class="status-badge ${statusClass}">${statusText}</span></td>
+            <td style="font-weight:bold;">
                 <button class="btn btn-sm btn-preview" onclick="previewRateSheet(${realIdx})">👁</button>
                 <button class="btn btn-sm btn-preview" onclick="editRateSheet(${realIdx})">✏️</button>
                 <button class="btn btn-sm btn-duplicate" onclick="duplicateRateSheet(${realIdx})">📋</button>
@@ -2564,6 +2773,8 @@ function renderRateSheet() {
     pagHtml += `<button class="page-btn" onclick="changeRateSheetPage(${rateSheetPage + 1})" ${rateSheetPage === totalPages ? 'disabled' : ''}>Next ›</button>`;
     pagination.innerHTML = pagHtml;
 }
+
+
 function changeRateSheetPage(page) { const filtered = getFilteredRateSheet();
     const totalPages = Math.ceil(filtered.length / rateSheetPerPage) || 1; if (page < 1 || page > totalPages) return;
     rateSheetPage = page;
@@ -2665,22 +2876,42 @@ function previewRateSheet(idx) {
     const r = db.rateSheet[idx];
     if (!r) return alert('Rate not found');
     const expiry = getExpiryStatus(r.validTo);
+    const statusText = expiry.status.charAt(0).toUpperCase() + expiry.status.slice(1);
+    const statusColor = expiry.status === 'active' ? '#10b981' : expiry.status === 'expiring' ? '#f59e0b' : '#ef4444';
+
+    // Build a clean, card-style preview
     const html = `
-        <h3 style="color:var(--primary);margin-bottom:12px;">Rate Details</h3>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-            <div><strong>Carrier:</strong> ${r.carrierName}</div>
-            <div><strong>Freight Type:</strong> ${r.freightType}</div>
-            <div><strong>POL:</strong> ${r.pol}</div>
-            <div><strong>POD:</strong> ${r.pod}</div>
-            <div><strong>Container:</strong> ${r.containerType || '-'}</div>
-            <div><strong>Amount:</strong> ${r.currency} ${Number(r.freightAmount).toLocaleString('en-IN')}</div>
-            <div><strong>Transit Time:</strong> ${r.transitTime || '-'}</div>
-            <div><strong>Commodity:</strong> ${r.commodity || '-'}</div>
-            <div><strong>Valid From:</strong> ${r.validFrom}</div>
-            <div><strong>Valid To:</strong> ${r.validTo}</div>
-            <div><strong>Days Left:</strong> ${expiry.days !== null ? expiry.days + ' days' : '-'}</div>
-            <div><strong>Status:</strong> <span class="status-badge ${expiry.status === 'active' ? 'status-active' : expiry.status === 'expiring' ? 'status-expiring' : 'status-expired'}">${expiry.status.toUpperCase()}</span></div>
-            <div style="grid-column:1/-1;"><strong>Remarks:</strong> ${r.remarks || '-'}</div>
+        <div style="background:#f8fafc; border-radius:16px; padding:20px; max-width:800px; margin:0 auto; box-shadow: 0 4px 20px rgba(0,0,0,0.06); font-family:'Segoe UI',Arial,sans-serif;">
+            <!-- Header -->
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #e2e8f0; padding-bottom:12px; margin-bottom:16px;">
+                <div style="font-size:1.4rem; font-weight:700; color:#1e3a8a;">📋 Rate Details</div>
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <span style="background:${statusColor}; color:white; padding:4px 14px; border-radius:20px; font-weight:600; font-size:0.75rem; text-transform:uppercase;">${statusText}</span>
+                    <span style="background:#f1f5f9; padding:4px 12px; border-radius:20px; font-size:0.7rem; color:#334155;">ID: ${r.id || 'N/A'}</span>
+                </div>
+            </div>
+
+            <!-- Main Grid -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px 24px; background:white; border-radius:12px; padding:16px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                <div><span style="font-weight:600; color:#64748b; display:block; font-size:0.7rem; text-transform:uppercase;">Carrier</span><span style="font-weight:700; font-size:1rem; color:#0f172a;">${r.carrierName || '-'}</span></div>
+                <div><span style="font-weight:600; color:#64748b; display:block; font-size:0.7rem; text-transform:uppercase;">Freight Type</span><span style="font-weight:700; font-size:1rem; color:#0f172a;">${r.freightType || '-'}</span></div>
+                <div><span style="font-weight:600; color:#64748b; display:block; font-size:0.7rem; text-transform:uppercase;">POL</span><span style="font-weight:700; font-size:1rem; color:#0f172a;">${r.pol || '-'}</span></div>
+                <div><span style="font-weight:600; color:#64748b; display:block; font-size:0.7rem; text-transform:uppercase;">POD</span><span style="font-weight:700; font-size:1rem; color:#0f172a;">${r.pod || '-'}</span></div>
+                <div><span style="font-weight:600; color:#64748b; display:block; font-size:0.7rem; text-transform:uppercase;">Container</span><span style="font-weight:700; font-size:1rem; color:#0f172a;">${r.containerType || '-'}</span></div>
+                <div><span style="font-weight:600; color:#64748b; display:block; font-size:0.7rem; text-transform:uppercase;">Amount</span><span style="font-weight:700; font-size:1rem; color:#0f172a;">${r.currency} ${Number(r.freightAmount || 0).toLocaleString('en-IN')}</span></div>
+                <div><span style="font-weight:600; color:#64748b; display:block; font-size:0.7rem; text-transform:uppercase;">Transit Time</span><span style="font-weight:700; font-size:1rem; color:#0f172a;">${r.transitTime || '-'}</span></div>
+                <div><span style="font-weight:600; color:#64748b; display:block; font-size:0.7rem; text-transform:uppercase;">Commodity</span><span style="font-weight:700; font-size:1rem; color:#0f172a;">${r.commodity || '-'}</span></div>
+                <div style="grid-column:1/-1;"><span style="font-weight:600; color:#64748b; display:block; font-size:0.7rem; text-transform:uppercase;">Validity</span>
+                    <span style="font-weight:700; font-size:0.95rem; color:#0f172a;">${r.validFrom || '-'} → ${r.validTo || '-'}  (${expiry.days !== null ? expiry.days + ' days left' : 'N/A'})</span>
+                </div>
+                ${r.remarks ? `<div style="grid-column:1/-1; border-top:1px solid #e2e8f0; padding-top:10px; margin-top:4px;"><span style="font-weight:600; color:#64748b; display:block; font-size:0.7rem; text-transform:uppercase;">Remarks</span><span style="font-weight:500; font-size:0.9rem; color:#334155;">${r.remarks}</span></div>` : ''}
+            </div>
+
+            <!-- Footer meta -->
+            <div style="display:flex; justify-content:space-between; margin-top:12px; font-size:0.7rem; color:#94a3b8; border-top:1px solid #e2e8f0; padding-top:12px;">
+                <span>Created: ${r.createdAt ? new Date(r.createdAt).toLocaleString('en-IN') : '-'}</span>
+                <span>Last updated: ${r.updatedAt ? new Date(r.updatedAt).toLocaleString('en-IN') : '-'}</span>
+            </div>
         </div>
     `;
     document.getElementById('modal-title').textContent = 'Rate Preview';
@@ -3586,39 +3817,47 @@ function buildPDFDefinition(data, mode) {
     const order = data.chargesOrder || getCurrentChargesOrder(mode);
     const toUpper = (val) => val ? String(val).toUpperCase() : '-';
     const { chargesWithINR, grandTotal } = calculateChargesWithINR(data, mode);
-    function buildChargeTableRows(category, charges) {
+
+    function buildChargeTableRows(category, charges, startSr) {
         const catEntries = charges.filter(ch => chargesWithINR[ch]);
         if (catEntries.length === 0) return null;
+
         let rows = [
-            [{ text: '#', style: 'Aptos', alignment: 'center' },
-                { text: 'Charge Type', style: 'Aptos' },
-                { text: 'Sell Amt', style: 'Aptos', alignment: 'center' },
+            [
+                { text: 'Sr. No', style: 'Aptos', alignment: 'center' },
+                { text: 'Charge Type', style: 'Aptos', alignment: 'center' },
                 { text: 'Currency', style: 'Aptos', alignment: 'center' },
-                { text: 'INR Equivalent', style: 'Aptos', alignment: 'center' },
-                { text: 'Basis', style: 'Aptos', alignment: 'center' }]
+                { text: 'Sell Amount', style: 'Aptos', alignment: 'center' },
+                { text: 'Basis', style: 'Aptos', alignment: 'center' },
+                { text: 'INR Equivalent', style: 'Aptos', alignment: 'center' }
+            ]
         ];
         let catTotal = 0;
-        catEntries.forEach((ch, i) => {
+        let sr = startSr;
+        catEntries.forEach((ch) => {
             const c = chargesWithINR[ch];
             catTotal += c.sellINR;
             const isFreight = ch.toUpperCase() === 'FREIGHT' || ch.toUpperCase() === 'AIR FREIGHT';
+            const basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
             rows.push([
-                { text: String(i + 1), alignment: 'center' },
+                { text: String(sr), alignment: 'center' },
                 { text: ch.toUpperCase(), bold: isFreight, color: isFreight ? '#dc2626' : '#000' },
-                { text: Number(c.unitSellAmt).toLocaleString('en-IN'), alignment: 'center' },
                 { text: c.currency, alignment: 'center' },
-                { text: formatINR(c.sellINR), alignment: 'center' },
-                { text: c.basis, alignment: 'center' }
+                { text: Number(c.unitSellAmt).toLocaleString('en-IN'), alignment: 'center' },
+                { text: basisDisplay, alignment: 'center' },
+                { text: formatINR(c.sellINR), alignment: 'center' }
             ]);
+            sr++;
         });
         rows.push([
-            { text: 'Subtotal:', colSpan: 4, alignment: 'center', bold: true },
+            { text: 'Subtotal:', colSpan: 4, alignment: 'right', bold: true },
             {}, {}, {},
-            { text: formatINR(catTotal), alignment: 'center', bold: true },
-            {}
+            {}, // empty cell for Basis
+            { text: formatINR(catTotal), alignment: 'center', bold: true }
         ]);
-        return rows;
+        return { rows, nextSr: sr };
     }
+
     const content = [];
     content.push(
         { text: db.companyName || 'GATEWAY EXIM', style: 'companyName' },
@@ -3632,20 +3871,20 @@ function buildPDFDefinition(data, mode) {
             { text: 'Quote No: ' + (data.quoteNumber || 'DRAFT'), style: 'quoteNum', alignment: 'right' }
         ]
     });
+
+    // Customer details – conditional Container / Volume
     const detailRows = [
-        [{ text: 'Client', style: 'detailLabel' }, { text: toUpper(data.client) },
-        { text: 'Quote Date', style: 'detailLabel' }, { text: data.autoDate || '-' }],
-        [{ text: 'Carrier', style: 'detailLabel' }, { text: toUpper(data.carrier) },
-        { text: 'Incoterm', style: 'detailLabel' }, { text: toUpper(data.incoterm) }],
-        [{ text: 'POL', style: 'detailLabel' }, { text: toUpper(data.pol) },
-        { text: 'POD', style: 'detailLabel' }, { text: toUpper(data.pod) }],
-        [{ text: 'Commodity', style: 'detailLabel' }, { text: toUpper(data.commodity) },
-        { text: 'Weight (KGS)', style: 'detailLabel' }, { text: data.weight || '-' }],
-        [{ text: mode === 'sea' ? 'Container' : 'Volume (CBM)', style: 'detailLabel' },
-        { text: mode === 'sea' ? toUpper(data.container) : (data.volume || '-') },
-        { text: 'Transit Time', style: 'detailLabel' }, { text: data.transit ? data.transit + ' Days' : '-' }],
-        [{ text: 'Validity Date', style: 'detailLabel' }, { text: data.validityDate ? new Date(data.validityDate).toLocaleDateString('en-IN') : '-' },
-        { text: 'Status', style: 'detailLabel' }, { text: toUpper(data.status) }]
+        [{ text: 'Client', style: 'detailLabel' }, { text: toUpper(data.client) }, { text: 'Status', style: 'detailLabel' }, { text: toUpper(data.status) }],
+        [{ text: 'POL', style: 'detailLabel' }, { text: toUpper(data.pol) }, { text: 'POD', style: 'detailLabel' }, { text: toUpper(data.pod) }],
+        [{ text: 'Commodity', style: 'detailLabel' }, { text: toUpper(data.commodity) }, { text: 'Carrier', style: 'detailLabel' }, { text: toUpper(data.carrier) }],
+        [{ text: 'Weight (KGS)', style: 'detailLabel' }, { text: data.weight || '-' }, { text: 'Incoterm', style: 'detailLabel' }, { text: toUpper(data.incoterm) }],
+        [
+            { text: (mode === 'sea' ? 'Container' : 'Volume (CBM)'), style: 'detailLabel' },
+            { text: mode === 'sea' ? toUpper(data.container) : (data.volume || '-') },
+            { text: 'Transit Time', style: 'detailLabel' },
+            { text: data.transit ? data.transit + ' Days' : '-' }
+        ],
+        [{ text: 'Quote Date', style: 'detailLabel' }, { text: data.autoDate || '-' }, { text: 'Validity Date', style: 'detailLabel' }, { text: data.validityDate ? new Date(data.validityDate).toLocaleDateString('en-IN') : '-' }]
     ];
     content.push({
         table: {
@@ -3663,16 +3902,20 @@ function buildPDFDefinition(data, mode) {
         },
         margin: [0, 10, 0, 10]
     });
+
+    // Charges – running Sr. No., Basis before INR
     if (Object.keys(chargesWithINR).length > 0) {
+        let currentSr = 1;
         Object.entries(order).forEach(([category, charges]) => {
             if (charges.length === 0) return;
-            const rows = buildChargeTableRows(category, charges);
-            if (!rows) return;
+            const result = buildChargeTableRows(category, charges, currentSr);
+            if (!result) return;
+            currentSr = result.nextSr;
             content.push({ text: category.toUpperCase(), style: 'categoryHeader' });
             content.push({
                 table: {
                     widths: ['auto', '*', 'auto', 'auto', 'auto', 'auto'],
-                    body: rows
+                    body: result.rows
                 },
                 layout: {
                     hLineWidth: function() { return 1; },
@@ -3681,13 +3924,14 @@ function buildPDFDefinition(data, mode) {
                     vLineColor: '#d1d5db',
                     fillColor: function(rowIndex) {
                         if (rowIndex === 0) return '#1e3a8a';
-                        if (rowIndex === rows.length - 1) return '#f1f5f9';
+                        if (rowIndex === result.rows.length - 1) return '#f1f5f9';
                         return null;
                     }
                 },
                 margin: [0, 5, 0, 10]
             });
         });
+        // Grand total
         content.push({
             table: {
                 widths: ['*', 'auto'],
@@ -3696,12 +3940,11 @@ function buildPDFDefinition(data, mode) {
                     { text: formatINR(grandTotal), alignment: 'right', bold: true, fontSize: 11, color: 'white' }]
                 ]
             },
-            layout: {
-                fillColor: '#10b981'
-            },
+            layout: { fillColor: '#10b981' },
             margin: [0, 0, 0, 10]
         });
     }
+
     if (data.remarks) {
         content.push({
             table: {
@@ -3715,21 +3958,23 @@ function buildPDFDefinition(data, mode) {
             margin: [0, 5, 0, 10]
         });
     }
+
     content.push(
         { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: '#e2e8f0' }] },
         { text: 'This quotation is system-generated. Rates are subject to change based on validity date.', alignment: 'center', fontSize: 8, color: '#64748b', margin: [0, 8, 0, 2] },
         { text: 'Generated on ' + new Date().toLocaleString('en-IN'), alignment: 'center', fontSize: 8, color: '#64748b' },
         { text: 'Prepared By: ' + userName, alignment: 'center', fontSize: 8, color: '#64748b', margin: [0, 2, 0, 0] }
     );
+
     return {
         content: content,
         styles: {
             companyName: { fontSize: 14, bold: true, color: '#1e3a8a' },
             companyAddress: { fontSize: 9, color: '#64748b', margin: [0, 2, 0, 4] },
-            title: { fontSize: 18, bold: true, color: '#ed0909' },
+            title: { fontSize: 18, bold: true, color: '#1e3a8a' },
             quoteNum: { fontSize: 12, bold: true, color: '#d97706' },
             detailLabel: { fontSize: 11, bold: true, color: '#334155' },
-            categoryHeader: { fontSize: 11, bold: true, color: '#2a0996', margin: [0, 8, 0, 4] },
+            categoryHeader: { fontSize: 11, bold: true, color: '#1e3a8a', margin: [0, 8, 0, 4] },
             Aptos: { fontSize: 11, bold: true, color: 'white' }
         },
         defaultStyle: {
@@ -3738,6 +3983,8 @@ function buildPDFDefinition(data, mode) {
         }
     };
 }
+
+
 function generatePDF(data, mode) {
     if (typeof pdfMake === 'undefined') {
         alert('pdfmake library is not loaded. Please add the scripts to your HTML and refresh.');
@@ -3778,6 +4025,8 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
     const toUpper = (val) => val ? String(val).toUpperCase() : '-';
     let grandTotal = 0;
     const chargesWithINR = {};
+
+    // Calculate charges (same logic)
     Object.entries(data.charges || {}).forEach(([charge, c]) => {
         let unitSellAmt = c.amount;
         let unitBuyAmt = c.buyAmount || 0;
@@ -3819,7 +4068,6 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
         grandTotal += sellINR;
     });
 
-    // Compact styles: email‑friendly (600px width, small fonts, tight padding)
     const baseFont = compact ? '0.55rem' : '0.72rem';
     const headingFont = compact ? '0.65rem' : '0.78rem';
     const titleFont = compact ? '0.9rem' : '1.2rem';
@@ -3827,77 +4075,127 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
     const cellPadding = compact ? '2px 3px' : '4px 7px';
     const containerPadding = compact ? '4px' : '10px';
 
-    let html = `<div id="preview-content-container" style="background:#ffffff !important; color:#1a1a1a !important; font-family:'Segoe UI',Arial,sans-serif; max-width:${maxWidth}; margin:0 auto; padding:${containerPadding}; box-sizing:border-box;">
-        <div style="border-bottom:2px solid #1e3a8a;padding-bottom:6px;margin-bottom:8px;">
-            <div style="font-size:${compact?'0.7rem':'0.9rem'};font-weight:700;color:#1e3a8a;">${db.companyName || 'GATEWAY EXIM'}</div>
-            <div style="font-size:${compact?'0.5rem':'0.65rem'};color:#64748b;">${db.companyAddress || ''}</div>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
-            <div style="text-align:left;">
-                <div style="font-size:${titleFont};color:#1e3a8a !important;font-weight:800;letter-spacing:1px;">${modeLabel} QUOTATION</div>
-            </div>
-            <div style="text-align:right;">
-                <div style="font-family:'Courier New',monospace;color:#d97706 !important;font-weight:700;font-size:${compact?'0.6rem':'0.85rem'};background:#fffbeb;padding:${compact?'1px 5px':'4px 10px'};border-radius:4px;">Quote No: ${data.quoteNumber||'DRAFT'}</div>
-            </div>
-        </div>
-        <div class="customer-details-heading" style="background:#1e3a8a !important;color:white !important;font-weight:700;padding:${compact?'2px 5px':'5px 9px'};margin-top:8px;border-radius:4px 4px 0 0;font-size:${headingFont};">Customer & Shipment Details</div>
-        <table style="width:100%;border-collapse:collapse;margin-top:0;font-size:${baseFont};">
-            <tr><th style="border:1px solid #d1d5db;padding:${padding};text-align:left;background:#f1f5f9 !important;color:#334155 !important;font-weight:700;">Client</th><td style="border:1px solid #d1d5db;padding:${padding};text-align:left;color:#1a1a1a !important;">${toUpper(data.client)}</td><th style="border:1px solid #d1d5db;padding:${padding};text-align:left;background:#f1f5f9 !important;color:#334155 !important;font-weight:700;">Quote Date</th><td style="border:1px solid #d1d5db;padding:${padding};text-align:left;color:#1a1a1a !important;">${data.autoDate||'-'}</td></tr>
-            <tr><th style="border:1px solid #d1d5db;padding:${padding};text-align:left;background:#f1f5f9 !important;color:#334155 !important;font-weight:700;">Carrier</th><td style="border:1px solid #d1d5db;padding:${padding};text-align:left;color:#1a1a1a !important;">${toUpper(data.carrier)}</td><th style="border:1px solid #d1d5db;padding:${padding};text-align:left;background:#f1f5f9 !important;color:#334155 !important;font-weight:700;">Incoterm</th><td style="border:1px solid #d1d5db;padding:${padding};text-align:left;color:#1a1a1a !important;">${toUpper(data.incoterm)}</td></tr>
-            <tr><th style="border:1px solid #d1d5db;padding:${padding};text-align:left;background:#f1f5f9 !important;color:#334155 !important;font-weight:700;">POL</th><td style="border:1px solid #d1d5db;padding:${padding};text-align:left;color:#1a1a1a !important;">${toUpper(data.pol)}</td><th style="border:1px solid #d1d5db;padding:${padding};text-align:left;background:#f1f5f9 !important;color:#334155 !important;font-weight:700;">POD</th><td style="border:1px solid #d1d5db;padding:${padding};text-align:left;color:#1a1a1a !important;">${toUpper(data.pod)}</td></tr>
-            <tr><th style="border:1px solid #d1d5db;padding:${padding};text-align:left;background:#f1f5f9 !important;color:#334155 !important;font-weight:700;">Commodity</th><td style="border:1px solid #d1d5db;padding:${padding};text-align:left;color:#1a1a1a !important;">${toUpper(data.commodity)}</td><th style="border:1px solid #d1d5db;padding:${padding};text-align:left;background:#f1f5f9 !important;color:#334155 !important;font-weight:700;">Weight (KGS)</th><td style="border:1px solid #d1d5db;padding:${padding};text-align:left;color:#1a1a1a !important;">${data.weight||'-'}</td></tr>
-            <tr><th style="border:1px solid #d1d5db;padding:${padding};text-align:left;background:#f1f5f9 !important;color:#334155 !important;font-weight:700;">${mode==='sea'?'Container':'Volume (CBM)'}</th><td style="border:1px solid #d1d5db;padding:${padding};text-align:left;color:#1a1a1a !important;">${mode==='sea'?toUpper(data.container):(data.volume||'-')}</td><th style="border:1px solid #d1d5db;padding:${padding};text-align:left;background:#f1f5f9 !important;color:#334155 !important;font-weight:700;">Transit Time</th><td style="border:1px solid #d1d5db;padding:${padding};text-align:left;color:#1a1a1a !important;">${transitDisplay}</td></tr>
-            <tr><th style="border:1px solid #d1d5db;padding:${padding};text-align:left;background:#f1f5f9 !important;color:#334155 !important;font-weight:700;">Validity Date</th><td style="border:1px solid #d1d5db;padding:${padding};text-align:left;color:#1a1a1a !important;">${validityDisplay}</td><th style="border:1px solid #d1d5db;padding:${padding};text-align:left;background:#f1f5f9 !important;color:#334155 !important;font-weight:700;">Status</th><td style="border:1px solid #d1d5db;padding:${padding};text-align:left;color:#1a1a1a !important;">${toUpper(data.status)}</td></tr>
-        </table>`;
+    // Customer details – conditional Container / Volume
+    const detailRows = [
+        ['Client', toUpper(data.client), 'Status', toUpper(data.status)],
+        ['POL', toUpper(data.pol), 'POD', toUpper(data.pod)],
+        ['Commodity', toUpper(data.commodity), 'Carrier', toUpper(data.carrier)],
+        ['Weight (KGS)', data.weight || '-', 'Incoterm', toUpper(data.incoterm)],
+        [
+            (mode === 'sea' ? 'Container' : 'Volume (CBM)'),
+            mode === 'sea' ? toUpper(data.container) : (data.volume || '-'),
+            'Transit Time',
+            transitDisplay
+        ],
+        ['Quote Date', data.autoDate || '-', 'Validity Date', validityDisplay]
+    ];
+
+    let detailHtml = `<table style="width:100%;border-collapse:collapse;font-size:${baseFont};">
+        <thead>
+            <tr><th colspan="4" style="background:#1e3a8a;color:white;padding:${padding};font-size:${headingFont};text-align:center;">Customer & Shipment Details</th></tr>
+        </thead>
+        <tbody>`;
+    detailRows.forEach((row, idx) => {
+        const bg = idx % 2 === 0 ? '#f1f5f9' : 'white';
+        detailHtml += `<tr style="background:${bg};">
+            <td style="border:1px solid #d1d5db;padding:${padding};font-weight:700;width:20%;">${row[0]}</td>
+            <td style="border:1px solid #d1d5db;padding:${padding};width:30%;">${row[1]}</td>
+            <td style="border:1px solid #d1d5db;padding:${padding};font-weight:700;width:20%;">${row[2]}</td>
+            <td style="border:1px solid #d1d5db;padding:${padding};width:30%;">${row[3]}</td>
+        </tr>`;
+    });
+    detailHtml += `</tbody></table>`;
+
+    // Charges with running Sr. No. – updated column order: Basis before INR
+    let chargeHtml = '';
+    let srNo = 1;
 
     if (Object.keys(chargesWithINR).length > 0) {
         Object.entries(order).forEach(([category, charges]) => {
             if (charges.length === 0) return;
             const catEntries = charges.filter(ch => chargesWithINR[ch]);
             if (catEntries.length === 0) return;
-            html += `<div class="category-heading" style="background:#1e3a8a !important;color:white !important;font-weight:700;padding:${compact?'2px 5px':'5px 9px'};margin-top:8px;border-radius:4px 4px 0 0;font-size:${headingFont};">${category.toUpperCase()}</div>
-                <table style="width:100%;border-collapse:collapse;margin-top:0;font-size:${baseFont};">
-                    <tr><th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;background:#f1f5f9 !important;color:#334155 !important;font-weight:700;">#</th><th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;background:#f1f5f9 !important;color:#334155 !important;font-weight:700;">Charge Type</th><th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;background:#f1f5f9 !important;color:#334155 !important;font-weight:700;">Sell Amount</th><th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;background:#f1f5f9 !important;color:#334155 !important;font-weight:700;">Currency</th><th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;background:#f1f5f9 !important;color:#334155 !important;font-weight:700;">INR Equivalent</th><th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;background:#f1f5f9 !important;color:#334155 !important;font-weight:700;">Basis</th></tr>`;
+
+            chargeHtml += `<div style="background:#1e3a8a;color:white;font-weight:700;padding:${padding};margin-top:8px;border-radius:4px 4px 0 0;font-size:${headingFont};text-align:center;">${category.toUpperCase()}</div>`;
+            chargeHtml += `<table style="width:100%;border-collapse:collapse;font-size:${baseFont};margin-top:0;">
+                <thead>
+                    <tr>
+                        <th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;background:#f1f5f9;font-weight:700;">Sr. No</th>
+                        <th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;background:#f1f5f9;font-weight:700;">Charge Type</th>
+                        <th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;background:#f1f5f9;font-weight:700;">Currency</th>
+                        <th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;background:#f1f5f9;font-weight:700;">Sell Amount</th>
+                        <th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;background:#f1f5f9;font-weight:700;">Basis</th>
+                        <th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;background:#f1f5f9;font-weight:700;">INR Equivalent</th>
+                    </tr>
+                </thead>
+                <tbody>`;
             let catTotal = 0;
-            catEntries.forEach((ch, i) => {
+            catEntries.forEach((ch) => {
                 const c = chargesWithINR[ch];
                 catTotal += c.sellINR;
                 const isFreight = ch.toUpperCase() === 'FREIGHT' || ch.toUpperCase() === 'AIR FREIGHT';
                 const rowStyle = isFreight ? 'background:#fee2e2 !important;font-weight:700;color:#dc2626 !important;' : '';
-                html += `<tr style="${rowStyle}">
-                            <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;color:#1a1a1a !important;">${i+1}</td>
-                            <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;color:#1a1a1a !important;">${ch.toUpperCase()}</td>
-                            <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;color:#1a1a1a !important;">${Number(c.unitSellAmt).toLocaleString('en-IN')}</td>
-                            <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;color:#1a1a1a !important;">${c.currency}</td>
-                            <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;color:#1a1a1a !important;">${formatINR(c.sellINR)}</td>
-                            <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;color:#1a1a1a !important;">${c.basis}</td>
-                        </tr>`;
+                const basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
+                chargeHtml += `<tr style="${rowStyle}">
+                    <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;">${srNo++}</td>
+                    <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;">${ch.toUpperCase()}</td>
+                    <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;">${c.currency}</td>
+                    <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;">${Number(c.unitSellAmt).toLocaleString('en-IN')}</td>
+                    <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;">${basisDisplay}</td>
+                    <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;">${formatINR(c.sellINR)}</td>
+                </tr>`;
             });
-            html += `<tr style="background:#f1f5f9 !important;"><td colspan="5" style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;font-weight:700;color:#334155 !important;">Subtotal:</td><td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;font-weight:700;color:#334155 !important;">${formatINR(catTotal)}</td></tr></table>`;
+            // Subtotal: span Sr, Type, Currency, Sell (4 cols) → empty Basis → INR value
+            chargeHtml += `<tr style="background:#f1f5f9;font-weight:700;">
+                <td colspan="4" style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;">Subtotal:</td>
+                <td style="border:1px solid #d1d5db;padding:${cellPadding};"></td>
+                <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;">${formatINR(catTotal)}</td>
+            </tr></tbody></table>`;
         });
-        html += `<table style="width:100%;border-collapse:collapse;margin-top:4px;font-size:${baseFont};">
-                    <tr style="background:#10b981 !important;color:white !important;font-weight:700;">
-                        <td colspan="5" style="border:1px solid #059669;padding:${cellPadding};text-align:right;color:white !important;"><strong>GRAND TOTAL (INR)</strong></td>
-                        <td style="border:1px solid #059669;padding:${cellPadding};text-align:left;color:white !important;"><strong>${formatINR(grandTotal)}</strong></td>
-                    </tr>
-                </table>`;
+
+        // Grand total – spans 5 columns (Sr to Basis), value under INR
+        chargeHtml += `<table style="width:100%;border-collapse:collapse;font-size:${baseFont};margin-top:4px;">
+            <tr style="background:#10b981;color:white;font-weight:700;">
+                <td colspan="5" style="border:1px solid #059669;padding:${cellPadding};text-align:right;">GRAND TOTAL (INR)</td>
+                <td style="border:1px solid #059669;padding:${cellPadding};text-align:right;">${formatINR(grandTotal)}</td>
+            </tr>
+        </table>`;
     }
 
+    let remarksHtml = '';
     if (data.remarks) {
-        html += `<div style="background:#1e3a8a !important;color:white !important;font-weight:700;padding:${compact?'2px 5px':'5px 9px'};margin-top:8px;border-radius:4px 4px 0 0;font-size:${headingFont};">Remarks</div>
-                <table style="width:100%;border-collapse:collapse;margin-top:0;font-size:${baseFont};">
-                    <tr><td style="border:1px solid #d1d5db;padding:${padding};text-align:left;color:#1a1a1a !important;white-space:pre-wrap;line-height:1.5;">${data.remarks.toUpperCase()}</td></tr>
-                </table>`;
+        remarksHtml = `<div style="background:#1e3a8a;color:white;font-weight:700;padding:${padding};margin-top:8px;border-radius:4px 4px 0 0;font-size:${headingFont};">Remarks</div>
+            <table style="width:100%;border-collapse:collapse;font-size:${baseFont};">
+                <tr><td style="border:1px solid #d1d5db;padding:${padding};white-space:pre-wrap;line-height:1.5;">${data.remarks.toUpperCase()}</td></tr>
+            </table>`;
     }
 
-    html += `
-        <div style="margin-top:8px;font-size:${compact?'0.5rem':'0.68rem'};color:#64748b !important;text-align:center;border-top:1px solid #e2e8f0;padding-top:${compact?'4px':'10px'};">
-            <p style="margin:2px 0;">This quotation is system-generated. Rates are subject to change based on validity date.</p>
-            <p style="margin:2px 0;">Generated on ${new Date().toLocaleString('en-IN')}</p>
-            <div style="font-size:${compact?'0.5rem':'0.65rem'};color:#64748b;margin-top:2px;">Prepared By: ${userName}</div>			
-        </div></div>`;
-    return html;
+    return `
+        <div id="preview-content-container" style="background:#ffffff;color:#1a1a1a;font-family:'Segoe UI',Arial,sans-serif;max-width:${maxWidth};margin:0 auto;padding:${containerPadding};box-sizing:border-box;">
+            <div style="border-bottom:2px solid #1e3a8a;padding-bottom:6px;margin-bottom:8px;">
+                <div style="font-size:${compact?'0.7rem':'0.9rem'};font-weight:700;color:#1e3a8a;">${db.companyName || 'GATEWAY EXIM'}</div>
+                <div style="font-size:${compact?'0.5rem':'0.65rem'};color:#64748b;">${db.companyAddress || ''}</div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+                <div style="text-align:left;">
+                    <div style="font-size:${titleFont};color:#1e3a8a;font-weight:800;letter-spacing:1px;">${modeLabel} QUOTATION</div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-family:'Courier New',monospace;color:#d97706;font-weight:700;font-size:${compact?'0.6rem':'0.85rem'};background:#fffbeb;padding:${compact?'1px 5px':'4px 10px'};border-radius:4px;">Quote No: ${data.quoteNumber||'DRAFT'}</div>
+                </div>
+            </div>
+            ${detailHtml}
+            ${chargeHtml}
+            ${remarksHtml}
+            <div style="margin-top:8px;font-size:${compact?'0.5rem':'0.68rem'};color:#64748b;text-align:center;border-top:1px solid #e2e8f0;padding-top:${compact?'4px':'10px'};">
+                <p style="margin:2px 0;">This quotation is system-generated. Rates are subject to change based on validity date.</p>
+                <p style="margin:2px 0;">Generated on ${new Date().toLocaleString('en-IN')}</p>
+                <div style="font-size:${compact?'0.5rem':'0.65rem'};color:#64748b;margin-top:2px;">Prepared By: ${userName}</div>
+            </div>
+        </div>
+    `;
 }
+
 
 function previewQuote(mode) {
     const data = getFormData(mode);
@@ -4161,190 +4459,16 @@ function renderDsrCharges(mode, s = {}) {
     const area = document.getElementById('dsr-charges-area');
     if (!area) return;
 
-    if (mode === 'SEA') {
-        area.innerHTML = `
-        <div style="display:flex; flex-direction:row; gap:10px; margin-bottom:12px; align-items:start;">
-            <div class="form-group" style="flex:1; margin:0; min-width:0;">
-                <label class="green-label" style="display:block; text-align:center; background:#008000; color:white; padding:6px 0; font-size:0.9rem;">SELL (USD)</label>
-                <input type="number" id="sea-sell" value="0" oninput="calcSeaMargin()" step="0.01" style="width:100%; padding:6px; border:3px solid #d1d5db; border-radius:4px; background:white; color:#1a1a1a;" />
-            </div>
-            <div class="form-group" style="flex:1; margin:0; min-width:0;">
-                <label class="red-label" style="display:block; text-align:center; background:#dc2626; color:white; padding:6px 0; font-size:0.9rem;">BUY (USD)</label>
-                <input type="number" id="sea-buy" value="0" oninput="calcSeaMargin()" step="0.01" style="width:100%; padding:6px; border:3px solid #d1d5db; border-radius:4px; background:white; color:#1a1a1a;" />
-            </div>
-            <div class="form-group" style="flex:1; margin:0; min-width:0;">
-                <label class="darkblue-label" style="display:block; text-align:center; background:#0f172a; color:white; padding:6px 0; font-size:0.9rem;">MARGIN (USD)</label>
-                <input type="text" id="sea-margin" value="0.00" readonly style="width:100%; padding:6px; border:3px solid #d1d5db; border-radius:4px; background:#ffff00; font-weight:700; color:#1a1a1a;" />
-            </div>
+    // For both SEA and AIR: show a simple placeholder
+    area.innerHTML = `
+        <div style="background: #f1f5f9; padding: 12px; border-radius: 6px; margin-top: 10px; text-align: center; color: #64748b;">
+            <span style="font-weight: 600;">📦 No local charges – they are now managed in the Rate Sheet.</span>
         </div>
-
-        <!-- Carrier - Local Charges (4 columns) -->
-        <div class="dsr-section-title green-title">Carrier - Local Charges</div>
-        <div class="dsr-charges-grid" style="margin-bottom:12px;">
-            <div class="form-group"><label class="teal">THC</label><input type="number" id="sea-thc" value="0" step="0.01" /></div>
-            <div class="form-group"><label class="teal">SEAL</label><input type="number" id="sea-seal" value="0" step="0.01" /></div>
-            <div class="form-group"><label class="teal">MUC</label><input type="number" id="sea-muc" value="0" step="0.01" /></div>
-            <div class="form-group"><label class="teal">DOCS</label><input type="number" id="sea-docs" value="0" step="0.01" /></div>
-            <div class="form-group"><label class="teal">SWITCH BL</label><input type="number" id="sea-switchbl" value="0" step="0.01" /></div>
-            <div class="form-group"><label class="teal">ETS</label><input type="number" id="sea-ets" value="0" step="0.01" /></div>
-            <div class="form-group"><label class="teal">HAZ DOCS</label><input type="number" id="sea-hazdocs" value="0" step="0.01" /></div>
-            <div class="form-group"><label class="teal">AMS</label><input type="number" id="sea-ams" value="0" step="0.01" /></div>
-            <div class="form-group"><label class="teal">GR. WEIGHT</label><input type="number" id="sea-grweight" value="0" step="0.01" /></div>
-        </div>
-
-        <!-- Other - Local Charges (4 columns) -->
-        <div class="dsr-section-title darkblue-label">Other - Local Charges</div>
-        <div class="dsr-charges-grid">
-            <div class="form-group"><label class="teal">CFS</label><input type="number" id="sea-cfs" value="0" step="0.01" /></div>
-            <div class="form-group"><label class="teal">CLEARANCE</label><input type="number" id="sea-clearance" value="0" step="0.01" /></div>
-            <div class="form-group"><label class="teal">VGM</label><input type="number" id="sea-vgm" value="0" step="0.01" /></div>
-            <div class="form-group"><label class="teal">TOLL</label><input type="number" id="sea-toll" value="0" step="0.01" /></div>
-            <div class="form-group"><label class="teal">LASHING & CHOKING</label><input type="number" id="sea-lascho" value="0" step="0.01" /></div>
-            <div class="form-group"><label class="teal">HAZ STICKER</label><input type="number" id="sea-hazsticker" value="0" step="0.01" /></div>
-            <div class="form-group"><label class="teal">ON WHEEL</label><input type="number" id="sea-onwheel" value="0" step="0.01" /></div>
-            <div class="form-group"><label class="teal">TRANSPORTATION</label><input type="number" id="sea-transport" value="0" step="0.01" /></div>
-            <div class="form-group"><label class="teal">LOLO</label><input type="number" id="sea-lolo" value="0" step="0.01" /></div>
-            <div class="form-group"><label class="teal">OTHER LOCAL</label><input type="number" id="sea-otherlocal" value="0" step="0.01" /></div>
-            <div class="form-group"><label class="teal">OTHER LOCAL 3</label><input type="number" id="sea-otherlocal3" value="0" step="0.01" /></div>
-        </div>
-        `;
-
-        // --- Load existing data ---
-        setTimeout(function() {
-            // Sell & Buy
-            if (document.getElementById('sea-sell')) document.getElementById('sea-sell').value = s.sell || 0;
-            if (document.getElementById('sea-buy')) document.getElementById('sea-buy').value = s.buy || 0;
-            
-            // Carrier charges
-            if (document.getElementById('sea-thc')) document.getElementById('sea-thc').value = s.carrierCharges?.THC || 0;
-            if (document.getElementById('sea-switchbl')) document.getElementById('sea-switchbl').value = s.carrierCharges?.SEAWAY || 0;
-            if (document.getElementById('sea-seal')) document.getElementById('sea-seal').value = s.carrierCharges?.SEAL || 0;
-            if (document.getElementById('sea-ets')) document.getElementById('sea-ets').value = s.carrierCharges?.ETS || 0;
-            if (document.getElementById('sea-muc')) document.getElementById('sea-muc').value = s.carrierCharges?.MUC || 0;
-            if (document.getElementById('sea-hazdocs')) document.getElementById('sea-hazdocs').value = s.carrierCharges?.HAZDOCS || 0;
-            if (document.getElementById('sea-docs')) document.getElementById('sea-docs').value = s.carrierCharges?.DOCS || 0;
-            if (document.getElementById('sea-ams')) document.getElementById('sea-ams').value = s.carrierCharges?.AMS || 0;
-            if (document.getElementById('sea-grweight')) {
-                document.getElementById('sea-grweight').value = s.carrierCharges?.GRWEIGHT || s.otherCharges?.GRWEIGHT || 0;
-            }
-            
-            // Other charges
-            if (document.getElementById('sea-cfs')) document.getElementById('sea-cfs').value = s.otherCharges?.CFS || 0;
-            if (document.getElementById('sea-clearance')) document.getElementById('sea-clearance').value = s.otherCharges?.CLEARANCE || 0;
-            if (document.getElementById('sea-transport')) document.getElementById('sea-transport').value = s.otherCharges?.TRANSPORTATION || 0;
-            if (document.getElementById('sea-vgm')) document.getElementById('sea-vgm').value = s.otherCharges?.VGM || 0;
-            if (document.getElementById('sea-lolo')) document.getElementById('sea-lolo').value = s.otherCharges?.LOLO || 0;
-            if (document.getElementById('sea-toll')) document.getElementById('sea-toll').value = s.otherCharges?.TOLL || 0;
-            if (document.getElementById('sea-otherlocal')) document.getElementById('sea-otherlocal').value = s.otherCharges?.OTHERLOCAL || 0;
-            if (document.getElementById('sea-lascho')) document.getElementById('sea-lascho').value = s.otherCharges?.LASCHO || 0;
-            if (document.getElementById('sea-hazsticker')) document.getElementById('sea-hazsticker').value = s.otherCharges?.HAZSTICKER || 0;
-            if (document.getElementById('sea-otherlocal3')) document.getElementById('sea-otherlocal3').value = s.otherCharges?.OTHERLOCAL3 || 0;
-            
-            // ✅ ON WHEEL - using bracket notation for the space
-            if (document.getElementById('sea-onwheel')) {
-                document.getElementById('sea-onwheel').value = s.otherCharges?.['ON WHEEL'] || 0;
-            }
-            
-            calcSeaMargin();
-        }, 50);
-
-    } else if (mode === 'AIR') {
-        // Charge lists exactly as per the image/chargeCategories
-        const originCharges = ["CARTAGE", "MCC", "XRAY", "GATE PASS", "ASI GMAX", "AMS", "PALLETISATION", "LOADING & UNLOADING", "DG FEES", "DG AGENT FEE", "PLY", "REPACKING", "AWB FEES", "TEDI", "ADD.SURCHARGE", "TRANSPORATION"];
-        const localCharges = ["CUSTOM CLEARANCE", "TERMINAL TRANSFER"];
-
-        let html = `
-            <!-- Sell / Buy / Margin -->
-            <div style="display:flex; gap:10px; margin-bottom:12px; align-items:center; flex-wrap:wrap;">
-                <div class="form-group" style="flex:1; min-width:120px;">
-                    <label style="display:block; text-align:center; background:#008000; color:white; padding:4px 0; font-size:0.85rem;">SELL PK (INR)</label>
-                    <input type="number" id="air-sellpk" value="0" oninput="calcAirMargin()" step="0.01" style="width:100%; padding:6px; border:3px solid #d1d5db; border-radius:4px; background:white; font-weight:700;" />
-                </div>
-                <div class="form-group" style="flex:1; min-width:120px;">
-                    <label style="display:block; text-align:center; background:#dc2626; color:white; padding:4px 0; font-size:0.85rem;">BUY PK (INR)</label>
-                    <input type="number" id="air-buy-pk" value="0" oninput="calcAirMargin()" step="0.01" style="width:100%; padding:6px; border:3px solid #d1d5db; border-radius:4px; background:white; font-weight:700;" />
-                </div>
-                <div class="form-group" style="flex:1; min-width:120px;">
-                    <label style="display:block; text-align:center; background:#0f172a; color:white; padding:4px 0; font-size:0.85rem;">MARGIN (INR)</label>
-                    <input type="text" id="air-margin" value="0.00" readonly style="width:100%; padding:6px; border:3px solid #d1d5db; border-radius:4px; background:#ffff00; font-weight:700; color:#1a1a1a;" />
-                </div>
-            </div>
-
-            <!-- 🟢 ADDED: Weight, Volume, Pallets Inputs -->
-            <div style="display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap;">
-                <div class="form-group" style="flex:1; min-width:100px;">
-                    <label style="font-weight:700; font-size:0.75rem; color:#1e3a8a;">Weight (KGS)</label>
-                    <input type="number" id="air-gross-weight" value="0" step="0.01" style="width:100%; padding:6px; border:1px solid #d1d5db; border-radius:4px;" />
-                </div>
-                <div class="form-group" style="flex:1; min-width:100px;">
-                    <label style="font-weight:700; font-size:0.75rem; color:#1e3a8a;">Volume (CBM)</label>
-                    <input type="number" id="air-volume" value="0" step="0.01" style="width:100%; padding:6px; border:1px solid #d1d5db; border-radius:4px;" />
-                </div>
-                <div class="form-group" style="flex:1; min-width:100px;">
-                    <label style="font-weight:700; font-size:0.75rem; color:#1e3a8a;">Pallets</label>
-                    <input type="number" id="air-pallets" value="0" step="0.01" style="width:100%; padding:6px; border:1px solid #d1d5db; border-radius:4px;" />
-                </div>
-            </div>
-        `;
-
-        // --- Build Origin Charges ---
-        if (originCharges.length > 0) {
-            html += `<div class="dsr-section-title green-title">ORIGIN CHARGES</div>
-            <div class="dsr-air-charges-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;">`;
-            originCharges.forEach((charge, i) => {
-                const id = `air-${charge.replace(/[^A-Z0-9]/gi, '_').toLowerCase()}`;
-                html += `<div class="form-group"><label style="font-size:0.7rem;font-weight:600;color:var(--primary);">${i+1}. ${charge}</label><input type="number" id="${id}" value="0" step="0.01" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"/></div>`;
-            });
-            html += `</div>`;
-        }
-
-        // --- Build Local Charges ---
-        if (localCharges.length > 0) {
-            html += `<div class="dsr-section-title darkblue-label">LOCAL CHARGES</div>
-            <div class="dsr-air-charges-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;">`;
-            localCharges.forEach((charge, i) => {
-                const id = `air-${charge.replace(/[^A-Z0-9]/gi, '_').toLowerCase()}`;
-                html += `<div class="form-group"><label style="font-size:0.7rem;font-weight:600;color:var(--primary);">${i+1}. ${charge}</label><input type="number" id="${id}" value="0" step="0.01" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"/></div>`;
-            });
-            html += `</div>`;
-        }
-
-        area.innerHTML = html;
-
-        // --- Reverse mapping for loading saved values ---
-        const quoteKeyToInputId = {
-            'CARTAGE': 'air-cartage', 'MCC': 'air-mcc', 'XRAY': 'air-xray',
-            'GATEPASS': 'air-gate_pass', 'ASI': 'air-asi_gmax', 'AMS': 'air-ams',
-            'PALLET': 'air-palletisation', 'LOADING_UNLOADING': 'air-loading___unloading',
-            'DGFEE': 'air-dg_fees', 'DGAGENT': 'air-dg_agent_fee',
-            'PLY': 'air-ply', 'REPACKING': 'air-repacking', 'AWB': 'air-awb_fees',
-            'TEDI': 'air-tedi', 'ADD_SURCHARGE': 'air-add_surcharge', 'TRANSPORT': 'air-transporation',
-            'CLEARANCE': 'air-custom_clearance', 'TERMINAL_TRANSFER': 'air-terminal_transfer'
-        };
-
-        setTimeout(() => {
-            if (document.getElementById('air-sellpk')) document.getElementById('air-sellpk').value = s.sellPK || 0;
-            if (document.getElementById('air-buy-pk')) document.getElementById('air-buy-pk').value = s.buyPK || 0;
-            if (document.getElementById('air-gross-weight')) document.getElementById('air-gross-weight').value = s.grossWeight || s.weight || 0;
-            if (document.getElementById('air-volume')) document.getElementById('air-volume').value = s.volume || 0;
-            if (document.getElementById('air-pallets')) document.getElementById('air-pallets').value = s.pallets || 0;
-            if (s.quoteCharges) {
-                Object.entries(quoteKeyToInputId).forEach(([key, id]) => {
-                    const el = document.getElementById(id);
-                    if (el) el.value = s.quoteCharges[key] || 0;
-                });
-            }
-            calcAirMargin();
-        }, 50);
-    }
+    `;
 }
 
 // ===== DSR HELPER FUNCTIONS =====
-function calcSeaMargin() {
-    const sell = parseFloat(document.getElementById('sea-sell').value) || 0;
-    const buy = parseFloat(document.getElementById('sea-buy').value) || 0;
-    document.getElementById('sea-margin').value = (sell - buy).toFixed(2);
-}
+
 function calcAirMargin() {
     const sell = parseFloat(document.getElementById('air-sellpk').value) || 0;
     const buy = parseFloat(document.getElementById('air-buy-pk').value) || 0; // ✅ Fixed typo
@@ -4451,157 +4575,100 @@ function dsrPDF() {
 
 // ===== UNIFIED DSR SAVER =====
 function saveDsrShipment(isUpdate) {
-    const mode = document.getElementById('dsr-mode').value;
-    const jobNo = document.getElementById('dsr-job-no').value.trim();
-    const shipper = document.getElementById('dsr-shipper').value.trim();
-    const pol = document.getElementById('dsr-pol').value;
-    const pod = document.getElementById('dsr-pod').value;
-    const liner = document.getElementById('dsr-liner').value;
+    try {
+        const mode = document.getElementById('dsr-mode').value;
+        const jobNo = document.getElementById('dsr-job-no').value.trim();
+        const shipper = document.getElementById('dsr-shipper').value.trim();
+        const pol = document.getElementById('dsr-pol').value;
+        const pod = document.getElementById('dsr-pod').value;
+        const liner = document.getElementById('dsr-liner').value;
 
-    // Validate mandatory fields
-    if (!jobNo || !shipper || !pol || !pod || !liner) {
-        alert('Mandatory fields: JOB NO, Shipper, POL, POD, Shipping Line');
-        return;
-    }
-
-    // Get or generate code
-    let code = document.getElementById('dsr-code').value.trim();
-    if (!code) {
-        code = (mode === 'SEA' ? 'SR-' : 'AR-') + Date.now().toString(36).toUpperCase();
-    }
-
-    // Build base data object
-    const data = {
-        mode: mode,                     // primary mode
-        type: mode,                     // backward compatibility
-        exportImport: document.getElementById('dsr-direction').value,
-        service1: document.getElementById('dsr-service-a').value,
-        service2: document.getElementById('dsr-service-b').value,
-        jobNo: jobNo,
-        code: code,                     // same as jobNo, but kept for compatibility
-        date: document.getElementById('dsr-date').value,
-        shipper: shipper,
-        packages: document.getElementById('dsr-packages').value.trim(),
-        pol: pol,
-        pod: pod,
-        liner: liner,
-        etd: document.getElementById('dsr-etd').value,
-        shippingBillNo: document.getElementById('dsr-shipping-bill-no').value.trim(),
-        shippingBillDate: document.getElementById('dsr-shipping-bill-date').value,
-        mblNo: document.getElementById('dsr-mbl-no').value.trim(),
-        hblNo: document.getElementById('dsr-hbl-no').value.trim(),
-        pickupDate: document.getElementById('dsr-pickup-date').value,
-        clearanceDate: document.getElementById('dsr-clearance-date').value,
-        docsHandDate: document.getElementById('dsr-docs-hand-date').value,
-        gateinDate: document.getElementById('dsr-gatein-date').value,
-        dgdIndexingDate: document.getElementById('dsr-dgd-indexing-date').value,
-        blReleaseDate: document.getElementById('dsr-bl-release-date').value,
-        vesselAtd: document.getElementById('dsr-vessel-atd').value.trim(),
-        eta: document.getElementById('dsr-eta').value,
-        remarks: document.getElementById('dsr-remarks').value.trim(),
-        cargoStatus: document.getElementById('dsr-cargo-status').value,
-        docsStatus: document.getElementById('dsr-docs-status').value,
-        sales: getLoggedInUserName() || db.defaultUser || '',
-        lastModified: new Date().toISOString()
-    };
-
-    // --- Mode-specific charges ---
-    if (mode === 'SEA') {
-        // Sell, Buy, Margin (all in USD)
-        data.sell = parseFloat(document.getElementById('sea-sell').value) || 0;
-        data.buy = parseFloat(document.getElementById('sea-buy').value) || 0;
-        data.margin = data.sell - data.buy;
-
-        // Carrier charges (including GR.WEIGHT and SEAWAY/SWITCH BL)
-        data.carrierCharges = {
-            THC: parseFloat(document.getElementById('sea-thc').value) || 0,
-            SEAWAY: parseFloat(document.getElementById('sea-switchbl').value) || 0,   // SWITCH BL → SEAWAY
-            SEAL: parseFloat(document.getElementById('sea-seal').value) || 0,
-            ETS: parseFloat(document.getElementById('sea-ets').value) || 0,
-            MUC: parseFloat(document.getElementById('sea-muc').value) || 0,
-            HAZDOCS: parseFloat(document.getElementById('sea-hazdocs').value) || 0,
-            DOCS: parseFloat(document.getElementById('sea-docs').value) || 0,
-            AMS: parseFloat(document.getElementById('sea-ams').value) || 0,
-            GRWEIGHT: parseFloat(document.getElementById('sea-grweight').value) || 0
-        };
-
-        // Other charges (including ON WHEEL with bracket notation)
-        data.otherCharges = {
-            CFS: parseFloat(document.getElementById('sea-cfs').value) || 0,
-            CLEARANCE: parseFloat(document.getElementById('sea-clearance').value) || 0,
-            VGM: parseFloat(document.getElementById('sea-vgm').value) || 0,
-            TOLL: parseFloat(document.getElementById('sea-toll').value) || 0,
-            LASCHO: parseFloat(document.getElementById('sea-lascho').value) || 0,
-            HAZSTICKER: parseFloat(document.getElementById('sea-hazsticker').value) || 0,
-            TRANSPORTATION: parseFloat(document.getElementById('sea-transport').value) || 0,
-            LOLO: parseFloat(document.getElementById('sea-lolo').value) || 0,
-            OTHERLOCAL: parseFloat(document.getElementById('sea-otherlocal').value) || 0,
-            OTHERLOCAL3: parseFloat(document.getElementById('sea-otherlocal3').value) || 0,
-            // ✅ ON WHEEL – using bracket notation because of space
-            'ON WHEEL': parseFloat(document.getElementById('sea-onwheel').value) || 0
-        };
-
-        // Container number (optional)
-        data.containerNo = document.getElementById('dsr-container-no')?.value || '';
-
-    } else if (mode === 'AIR') {
-        // Air charges
-        data.sellPK = parseFloat(document.getElementById('air-sellpk').value) || 0;
-        data.buyPK = parseFloat(document.getElementById('air-buy-pk').value) || 0;
-        data.margin = data.sellPK - data.buyPK;
-
-        // ✅ FIXED: Exact IDs jo serial-wise UI mein banaye gaye the, unhe dhundh raha hai
-        data.quoteCharges = {
-            CARTAGE: parseFloat(document.getElementById('air-cartage').value) || 0,
-            MCC: parseFloat(document.getElementById('air-mcc').value) || 0,
-            XRAY: parseFloat(document.getElementById('air-xray').value) || 0,
-            GATEPASS: parseFloat(document.getElementById('air-gate_pass').value) || 0,
-            ASI: parseFloat(document.getElementById('air-asi_gmax').value) || 0,
-            AMS: parseFloat(document.getElementById('air-ams').value) || 0,
-            PALLET: parseFloat(document.getElementById('air-palletisation').value) || 0,
-            LOADING_UNLOADING: parseFloat(document.getElementById('air-loading___unloading').value) || 0,
-            DGFEE: parseFloat(document.getElementById('air-dg_fees').value) || 0,
-            DGAGENT: parseFloat(document.getElementById('air-dg_agent_fee').value) || 0,
-            PLY: parseFloat(document.getElementById('air-ply').value) || 0,
-            REPACKING: parseFloat(document.getElementById('air-repacking').value) || 0,
-            AWB: parseFloat(document.getElementById('air-awb_fees').value) || 0,
-            TEDI: parseFloat(document.getElementById('air-tedi').value) || 0,
-            ADD_SURCHARGE: parseFloat(document.getElementById('air-add_surcharge').value) || 0,
-            TRANSPORT: parseFloat(document.getElementById('air-transporation').value) || 0,
-            CLEARANCE: parseFloat(document.getElementById('air-custom_clearance').value) || 0,
-            TERMINAL_TRANSFER: parseFloat(document.getElementById('air-terminal_transfer').value) || 0
-        };
-
-        data.grossWeight = parseFloat(document.getElementById('air-gross-weight')?.value) || 0;
-        data.validEtd = document.getElementById('air-valid-etd')?.value || '';
-    }
-
-    // --- Save to database (update or insert) ---
-    const existing = db.shipments.findIndex(s => s.code === code && s.mode === mode);
-    if (existing !== -1 && !isUpdate) {
-        if (!confirm(`Shipment code "${code}" already exists. Do you want to overwrite?`)) {
+        if (!jobNo || !shipper || !pol || !pod || !liner) {
+            alert('Mandatory fields: JOB NO, Shipper, POL, POD, Shipping Line');
             return;
         }
-        db.shipments[existing] = { ...db.shipments[existing], ...data };
-    } else if (isUpdate && dsrEditIdx !== null) {
-        const idx = dsrEditIdx;
-        if (idx !== undefined && db.shipments[idx]) {
-            db.shipments[idx] = { ...db.shipments[idx], ...data };
+
+        let code = document.getElementById('dsr-code').value.trim();
+        if (!code) {
+            code = (mode === 'SEA' ? 'SR-' : 'AR-') + Date.now().toString(36).toUpperCase();
+        }
+
+        // Common data – no charges
+        const data = {
+            mode: mode,
+            type: mode,
+            exportImport: document.getElementById('dsr-direction').value,
+            service1: document.getElementById('dsr-service-a').value,
+            service2: document.getElementById('dsr-service-b').value,
+            jobNo: jobNo,
+            code: code,
+            date: document.getElementById('dsr-date').value,
+            shipper: shipper,
+            packages: document.getElementById('dsr-packages').value.trim(),
+            pol: pol,
+            pod: pod,
+            liner: liner,
+            etd: document.getElementById('dsr-etd').value,
+            shippingBillNo: document.getElementById('dsr-shipping-bill-no').value.trim(),
+            shippingBillDate: document.getElementById('dsr-shipping-bill-date').value,
+            mblNo: document.getElementById('dsr-mbl-no').value.trim(),
+            hblNo: document.getElementById('dsr-hbl-no').value.trim(),
+            pickupDate: document.getElementById('dsr-pickup-date').value,
+            clearanceDate: document.getElementById('dsr-clearance-date').value,
+            docsHandDate: document.getElementById('dsr-docs-hand-date').value,
+            gateinDate: document.getElementById('dsr-gatein-date').value,
+            dgdIndexingDate: document.getElementById('dsr-dgd-indexing-date').value,
+            blReleaseDate: document.getElementById('dsr-bl-release-date').value,
+            vesselAtd: document.getElementById('dsr-vessel-atd').value.trim(),
+            eta: document.getElementById('dsr-eta').value,
+            remarks: document.getElementById('dsr-remarks').value.trim(),
+            cargoStatus: document.getElementById('dsr-cargo-status').value,
+            docsStatus: document.getElementById('dsr-docs-status').value,
+            sales: getLoggedInUserName() || db.defaultUser || '',
+            lastModified: new Date().toISOString(),
+            // No charges for either mode
+            carrierCharges: {},
+            otherCharges: {},
+            quoteCharges: {},
+            sell: 0,
+            buy: 0,
+            sellPK: 0,
+            buyPK: 0,
+            margin: 0,
+            containerNo: document.getElementById('dsr-container-no')?.value || '',
+            grossWeight: 0,
+            validEtd: ''
+        };
+
+        // Save to database
+        const existing = db.shipments.findIndex(s => s.code === code && s.mode === mode);
+        if (existing !== -1 && !isUpdate) {
+            if (!confirm(`Shipment code "${code}" already exists. Do you want to overwrite?`)) {
+                return;
+            }
+            db.shipments[existing] = { ...db.shipments[existing], ...data };
+        } else if (isUpdate && dsrEditIdx !== null) {
+            const idx = dsrEditIdx;
+            if (idx !== undefined && db.shipments[idx]) {
+                db.shipments[idx] = { ...db.shipments[idx], ...data };
+            } else {
+                alert('Edit index not found.');
+                return;
+            }
         } else {
-            alert('Edit index not found.');
-            return;
+            data.createdAt = new Date().toISOString();
+            db.shipments.push(data);
         }
-    } else {
-        data.createdAt = new Date().toISOString();
-        db.shipments.push(data);
-    }
 
-    // Save and refresh
-    saveDB();
-    closeModal('dsrModal');
-    renderShipments();
-    alert(`${mode} Shipment saved successfully!`);
-    autoBackup();
+        saveDB();
+        closeModal('dsrModal');
+        renderShipments();
+        alert(`${mode} Shipment saved successfully!`);
+        autoBackup();
+    } catch (e) {
+        console.error('Error in saveDsrShipment:', e);
+        alert('An error occurred while saving. Please check the console for details.');
+    }
 }
 
 // ===== EDIT DSR SHIPMENT (CLICK FROM LIST) =====
@@ -5064,12 +5131,14 @@ function openBLModal(editIdx = null, shipmentIdx = null, mode = 'SEA') {
         if (!db.hiddenItems.carriers) db.hiddenItems.carriers = [];
 
         const today = new Date().toISOString().split('T')[0];
-        let b = { 
-            status: 'Draft', 
-            issueDate: today,
-            blDate: today,
-            mode: mode
-        };
+		let b = { 
+			status: 'Draft', 
+			issueDate: today,
+			blDate: today,
+			mode: mode,
+			forwardingAgent: db.companyName || 'GATEWAY EXIM'   // <-- ADD THIS LINE
+		};
+
         let isEdit = false;
 
         if (editIdx !== null && db.bldrafts[editIdx]) {
@@ -5149,7 +5218,7 @@ function openBLModal(editIdx = null, shipmentIdx = null, mode = 'SEA') {
 			<!-- Export References & Forwarding Agent & Show Agent Toggle -->
 			<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:16px;">
 				<div class="form-group"><label>Export References</label><input type="text" id="bl-export-ref" value="${b.exportRef||''}" /></div>
-				<div class="form-group"><label>Forwarding Agent / FMC No.</label><input type="text" id="bl-forwarding-agent" value="${b.forwardingAgent||'DSV AIR & SEA INC.'}" style="width:100%;" /></div>
+				<div class="form-group"><label>Forwarding Agent / FMC No.</label><input type="text" id="bl-forwarding-agent" value="${b.forwardingAgent || db.companyName || 'GATEWAY EXIM'}" style="width:100%;" /></div>
 				<div class="form-group" style="display:flex; align-items:center; gap:8px; margin-top:6px;">
 					<input type="checkbox" id="bl-show-agent" ${b.showAgent !== false ? 'checked' : ''} style="width:18px; height:18px;" />
 					<label for="bl-show-agent" style="font-weight:600; font-size:0.8rem; cursor:pointer;">Show Agent Details</label>
@@ -5662,16 +5731,12 @@ function renderDefaultChargesMaster(mode) {
     else if (mode === 'air') records = db.defaultAirCharges;
     else if (mode === 'lcl') records = db.defaultLclCharges;
 
-    const filterCarrier = mode === 'sea' ? (document.getElementById(`dc-sea-filter-carrier`)?.value || '') : '';
     const filterPol = document.getElementById(`dc-${mode}-filter-pol`)?.value || '';
 
     const filtered = records.map((rec, originalIdx) => ({ rec, originalIdx }))
         .filter(({ rec }) => {
-            let text = '';
-            if (mode === 'sea') text = `${rec.carrier} ${rec.pol} ${rec.container}`.toLowerCase();
-            else text = `${rec.pol}`.toLowerCase();
+            let text = `${rec.pol} ${rec.commodity||''}`.toLowerCase();
             if (search && !text.includes(search)) return false;
-            if (mode === 'sea' && filterCarrier && rec.carrier !== filterCarrier) return false;
             if (filterPol && rec.pol !== filterPol) return false;
             return true;
         });
@@ -5681,25 +5746,34 @@ function renderDefaultChargesMaster(mode) {
 
     let html = `<table class="master-table"><thead><tr>
         <th style="width:30px;"><input type="checkbox" class="select-all-dc" data-mode="${mode}" /></th>`;
-    if (mode === 'sea') html += `<th>Carrier</th>`;
     html += `<th>POL</th>`;
-    if (mode === 'sea') html += `<th>Container</th>`;
     html += `<th>Commodity / Cargo</th>`;
-    html += `<th>Charges</th><th>Action</th></tr></thead><tbody>`;
+    html += `<th>Charges</th>`;
+    // For SEA, add CFS 20 and CFS 40 columns
+    if (mode === 'sea') {
+        html += `<th>CFS 20' (INR)</th><th>CFS 40' (INR)</th>`;
+    }
+    html += `<th>Updated</th><th>Action</th></tr></thead><tbody>`;
 
     if (filtered.length === 0) {
-        const cols = (mode === 'sea' ? 5 : 4) + 1; // +1 for checkbox
+        const cols = (mode === 'sea') ? 8 : 6;
         html += `<tr><td colspan="${cols}" style="text-align:center;padding:16px;color:var(--text-light);">No records.</td></tr>`;
     } else {
         filtered.forEach(({ rec, originalIdx }) => {
-            const chargeCount = Object.keys(rec.charges || {}).length;
+            const chargesCount = Object.keys(rec.charges || {}).filter(k => k !== 'CFS_20' && k !== 'CFS_40').length;
+            const updated = rec.updatedAt ? new Date(rec.updatedAt).toLocaleDateString('en-IN') : '—';
+            const cfs20 = rec.charges?.CFS_20?.amount || 0;
+            const cfs40 = rec.charges?.CFS_40?.amount || 0;
+
             html += `<tr>`;
             html += `<td><input type="checkbox" class="dc-checkbox" data-mode="${mode}" data-idx="${originalIdx}" data-type="default" /></td>`;
-            if (mode === 'sea') html += `<td><strong>${rec.carrier}</strong></td>`;
             html += `<td>${rec.pol}</td>`;
-            if (mode === 'sea') html += `<td>${rec.container}</td>`;
             html += `<td>${rec.commodity || '—'}</td>`;
-            html += `<td style="text-align:center;"><strong>${chargeCount}</strong></td>`;
+            html += `<td style="text-align:center;"><strong>${chargesCount}</strong></td>`;
+            if (mode === 'sea') {
+                html += `<td>${cfs20}</td><td>${cfs40}</td>`;
+            }
+            html += `<td>${updated}</td>`;
             html += `<td>
                 <button class="btn btn-sm btn-preview" onclick="previewDefaultCharge('${mode}',${originalIdx})">👁</button>
                 <button class="btn btn-sm btn-preview" onclick="openEditDefaultChargeModal('${mode}',${originalIdx})">✏️</button>
@@ -5711,7 +5785,6 @@ function renderDefaultChargesMaster(mode) {
     html += '</tbody></table>';
     disp.innerHTML = html;
 
-    // Add event listeners for select-all
     document.querySelectorAll('.select-all-dc').forEach(cb => {
         cb.addEventListener('change', function() {
             const mode = this.dataset.mode;
@@ -5743,7 +5816,8 @@ function renderCarrierChargesMaster(type) {
 
     const filtered = records.map((rec, originalIdx) => ({ rec, originalIdx }))
         .filter(({ rec }) => {
-            const text = `${rec.mode||''} ${rec.carrier} ${rec.pol} ${rec.container||''}`.toLowerCase();
+            // Container no longer used for display, but we keep it in data for backward compatibility
+            const text = `${rec.carrier} ${rec.pol}`.toLowerCase();
             if (search && !text.includes(search)) return false;
             if (filterMode && rec.mode !== filterMode) return false;
             return true;
@@ -5754,26 +5828,32 @@ function renderCarrierChargesMaster(type) {
 
     let html = `<table class="master-table"><thead><tr>
         <th style="width:30px;"><input type="checkbox" class="select-all-cc" data-type="${type}" /></th>`;
-    if (type === 'sealcl' || type === 'lcl') html += `<th>Mode</th>`;
-    html += `<th>Carrier</th><th>POL</th>`;
-    if (type === 'sealcl' || type === 'lcl') html += `<th>Container</th>`;
-    html += `<th>Commodity</th>`;
-    html += `<th>Charges</th><th>Updated</th><th>Action</th></tr></thead><tbody>`;
+    // Remove Container column – only Carrier, POL, Commodity, Charges, THC_20, THC_40, Updated, Action
+    html += `<th>Carrier</th><th>POL</th><th>Commodity</th>`;
+    html += `<th>Charges</th>`;
+    if (type === 'sealcl') {
+        html += `<th>THC 20' (INR)</th><th>THC 40' (INR)</th>`;
+    }
+    html += `<th>Updated</th><th>Action</th></tr></thead><tbody>`;
 
     if (filtered.length === 0) {
-        const cols = (type === 'sealcl' || type === 'lcl') ? 8 : 6;
+        const cols = (type === 'sealcl') ? 9 : (type === 'air' ? 7 : 8);
         html += `<tr><td colspan="${cols}" style="text-align:center;padding:16px;color:var(--text-light);">No records.</td></tr>`;
     } else {
         filtered.forEach(({ rec, originalIdx }) => {
-            const chargeCount = Object.keys(rec.charges || {}).length;
+            const chargeCount = Object.keys(rec.charges || {}).filter(k => k !== 'THC_20' && k !== 'THC_40').length;
             const updated = rec.updated ? new Date(rec.updated).toLocaleDateString('en-IN') : '—';
+            const thc20 = rec.charges?.THC_20?.amount || 0;
+            const thc40 = rec.charges?.THC_40?.amount || 0;
             html += `<tr>`;
             html += `<td><input type="checkbox" class="cc-checkbox" data-type="${type}" data-idx="${originalIdx}" /></td>`;
-            if (type === 'sealcl' || type === 'lcl') html += `<td><strong style="color:var(--primary);">${(rec.mode||'').toUpperCase()}</strong></td>`;
             html += `<td>${rec.carrier}</td><td>${rec.pol}</td>`;
-            if (type === 'sealcl' || type === 'lcl') html += `<td>${rec.container || '—'}</td>`;
             html += `<td>${rec.commodity || '—'}</td>`;
-            html += `<td style="text-align:center;"><strong>${chargeCount}</strong></td><td>${updated}</td>
+            html += `<td style="text-align:center;"><strong>${chargeCount}</strong></td>`;
+            if (type === 'sealcl') {
+                html += `<td>${thc20}</td><td>${thc40}</td>`;
+            }
+            html += `<td>${updated}</td>
             <td>
                 <button class="btn btn-sm btn-preview" onclick="previewCarrierCharge('${type}',${originalIdx})">👁</button>
                 <button class="btn btn-sm btn-preview" onclick="openEditCarrierChargeModal('${type}',${originalIdx})">✏️</button>
@@ -5785,7 +5865,6 @@ function renderCarrierChargesMaster(type) {
     html += '</tbody></table>';
     disp.innerHTML = html;
 
-    // Add event listeners
     document.querySelectorAll('.select-all-cc').forEach(cb => {
         cb.addEventListener('change', function() {
             const type = this.dataset.type;
@@ -5810,79 +5889,96 @@ function openEditDefaultChargeModal(mode, idx) {
     const modeCharges = getDefaultChargeTypes(mode);
 
     let html = `<h3 style="color:var(--primary);margin-bottom:12px;">Edit Default ${mode.toUpperCase()} Charge</h3>`;
-    if (mode === 'sea') {
-        html += `<div class="form-grid-2col">
-            <div class="form-group"><label>Carrier</label>
-                <select id="modal-dc-carrier-edit">
-                    <option value="ALL" ${rec.carrier==='ALL'?'selected':''}>ALL</option>
-                    ${db.carriers.map(c => `<option value="${c}" ${rec.carrier===c?'selected':''}>${c}</option>`).join('')}
-                </select>
-            </div>
-            <div class="form-group"><label>POL</label>
-                <select id="modal-dc-pol-edit">
-                    <option value="">Select</option>
-                    ${db.pol.map(p => `<option value="${p}" ${rec.pol===p?'selected':''}>${p}</option>`).join('')}
-                </select>
-            </div>
-            <div class="form-group"><label>Container</label>
-                <select id="modal-dc-container-edit">
-                    <option value="">Select</option>
-                    ${db.containers.map(c => `<option value="${c}" ${rec.container===c?'selected':''}>${c}</option>`).join('')}
-                </select>
-            </div>
-            <div class="form-group"><label>Commodity</label>
-                <select id="modal-dc-commodity-edit">
-                    <option value="">Select</option>
-                    <option value="NON HAZ" ${rec.commodity==='NON HAZ'?'selected':''}>Non Haz</option>
-                    <option value="HAZ" ${rec.commodity==='HAZ'?'selected':''}>Haz</option>
-                </select>
-            </div>
-        </div>`;
-    } else {
-        html += `<div class="form-grid-2col">
-            <div class="form-group"><label>POL</label>
-                <select id="modal-dc-pol-edit">
-                    <option value="">Select</option>
-                    ${db.pol.map(p => `<option value="${p}" ${rec.pol===p?'selected':''}>${p}</option>`).join('')}
-                </select>
-            </div>
-            <div class="form-group"><label>Commodity</label>
-                <select id="modal-dc-commodity-edit">
-                    <option value="">Select</option>
-                    <option value="NON HAZ" ${rec.commodity==='NON HAZ'?'selected':''}>Non Haz</option>
-                    <option value="HAZ" ${rec.commodity==='HAZ'?'selected':''}>Haz</option>
-                </select>
-            </div>
-        </div>`;
-    }
+    html += `<div class="form-grid-2col">
+        <div class="form-group"><label>POL</label>
+            <select id="modal-dc-pol-edit">
+                <option value="">Select</option>
+                ${db.pol.map(p => `<option value="${p}" ${rec.pol===p?'selected':''}>${p}</option>`).join('')}
+            </select>
+        </div>
+        <div class="form-group"><label>Commodity</label>
+            <select id="modal-dc-commodity-edit">
+                <option value="">Select</option>
+                <option value="NON HAZ" ${rec.commodity==='NON HAZ'?'selected':''}>Non Haz</option>
+                <option value="HAZ" ${rec.commodity==='HAZ'?'selected':''}>Haz</option>
+            </select>
+        </div>
+    </div>`;
 
-    html += `<h4 style="color:var(--primary);margin:12px 0 8px;">Charges</h4>
+    html += `<h4 style="color:var(--primary);margin:12px 0 8px;">Charges (20' and 40' values)</h4>
         <div id="modal-dc-charges-list">`;
 
     const charges = rec.charges || {};
+    // Group charges by base name (without _20/_40)
+    const groups = {};
     Object.entries(charges).forEach(([key, val]) => {
-        html += `<div style="margin-bottom:6px;background:var(--bg);padding:6px;border-radius:5px;border:1px solid var(--border);" data-charge-key="${key}">
-            <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${key}
+        let base = key;
+        let suffix = '';
+        if (key.endsWith('_20')) { base = key.slice(0, -3); suffix = '20'; }
+        else if (key.endsWith('_40')) { base = key.slice(0, -3); suffix = '40'; }
+        if (!groups[base]) groups[base] = { name: base, values: {} };
+        groups[base].values[suffix] = val;
+    });
+
+    Object.values(groups).forEach(g => {
+        const v20 = g.values['20'] || { amount: 0, buyAmount: 0, currency: 'INR' };
+        const v40 = g.values['40'] || { amount: 0, buyAmount: 0, currency: 'INR' };
+        const cur = v20.currency || v40.currency || 'INR';
+        html += `<div style="margin-bottom:6px;background:var(--bg);padding:6px;border-radius:5px;border:1px solid var(--border);" data-charge-key="${g.name}">
+            <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${g.name}
                 <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button>
             </div>
-            <div style="display:flex;gap:6px;">
-                <input type="number" step="0.01" class="modal-chg-amt" value="${val.amount||''}" placeholder="Amount" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                <select class="modal-chg-cur" style="width:80px;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                    ${getCurrencyOptions(val.currency||'INR')}
-                </select>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                <div style="display:flex;gap:4px;">
+                    <label style="font-size:0.6rem;font-weight:600;">20' Sell</label>
+                    <input type="number" step="0.01" class="modal-chg-amt20" value="${v20.amount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                </div>
+                <div style="display:flex;gap:4px;">
+                    <label style="font-size:0.6rem;font-weight:600;">20' Buy</label>
+                    <input type="number" step="0.01" class="modal-chg-buy20" value="${v20.buyAmount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                </div>
+                <div style="display:flex;gap:4px;">
+                    <label style="font-size:0.6rem;font-weight:600;">40' Sell</label>
+                    <input type="number" step="0.01" class="modal-chg-amt40" value="${v40.amount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                </div>
+                <div style="display:flex;gap:4px;">
+                    <label style="font-size:0.6rem;font-weight:600;">40' Buy</label>
+                    <input type="number" step="0.01" class="modal-chg-buy40" value="${v40.buyAmount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                </div>
+                <div style="grid-column:1/-1;display:flex;gap:4px;align-items:center;">
+                    <label style="font-size:0.6rem;font-weight:600;">Currency</label>
+                    <select class="modal-chg-cur" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                        ${getCurrencyOptions(cur)}
+                    </select>
+                </div>
             </div>
         </div>`;
     });
 
     html += `</div>
-        <div style="margin-top:8px;display:flex;gap:8px;align-items:end;">
-            <div class="form-group" style="flex:1;"><label>Add Charge</label>
-                <select id="modal-dc-add-charge">
-                    ${modeCharges.map(c => `<option value="${c}">${c}</option>`).join('')}
-                </select>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
+            <div class="form-group" style="flex:1;min-width:120px;">
+                <label>Charge Name</label>
+                <select id="modal-dc-add-charge">${modeCharges.map(c => `<option value="${c}">${c}</option>`).join('')}</select>
             </div>
-            <div class="form-group" style="width:100px;"><label>Amount</label><input type="number" id="modal-dc-add-amt" step="0.01"></div>
-            <div class="form-group" style="width:90px;"><label>Currency</label>
+            <div class="form-group" style="width:90px;">
+                <label>20' Sell</label>
+                <input type="number" id="modal-dc-add-amt20" step="0.01">
+            </div>
+            <div class="form-group" style="width:90px;">
+                <label>20' Buy</label>
+                <input type="number" id="modal-dc-add-buy20" step="0.01">
+            </div>
+            <div class="form-group" style="width:90px;">
+                <label>40' Sell</label>
+                <input type="number" id="modal-dc-add-amt40" step="0.01">
+            </div>
+            <div class="form-group" style="width:90px;">
+                <label>40' Buy</label>
+                <input type="number" id="modal-dc-add-buy40" step="0.01">
+            </div>
+            <div class="form-group" style="width:90px;">
+                <label>Currency</label>
                 <select id="modal-dc-add-cur">${getCurrencyOptions('INR')}</select>
             </div>
             <button class="btn btn-sm btn-success" style="height:33px;" onclick="addChargeToDCModal()">+</button>
@@ -5909,70 +6005,44 @@ function saveEditDefaultCharge(mode, idx) {
     }
     const rec = arr[idx];
 
-    // Collect data
-    let carrier, pol, container, commodity;
-    if (mode === 'sea') {
-        carrier = document.getElementById('modal-dc-carrier-edit').value.trim() || 'ALL';
-        pol = document.getElementById('modal-dc-pol-edit').value.trim();
-        container = document.getElementById('modal-dc-container-edit').value.trim();
-        commodity = document.getElementById('modal-dc-commodity-edit').value.trim();
-        if (!pol || !container) return alert('POL and Container are required.');
-    } else {
-        pol = document.getElementById('modal-dc-pol-edit').value.trim();
-        commodity = document.getElementById('modal-dc-commodity-edit').value.trim();
-        if (!pol) return alert('POL is required.');
-        carrier = 'ALL';
-        container = '';
-    }
+    const pol = document.getElementById('modal-dc-pol-edit').value.trim();
+    const commodity = document.getElementById('modal-dc-commodity-edit').value.trim();
+    if (!pol) return alert('POL is required.');
 
-    // Check duplicate (skip current index)
-    const dupCheck = (mode === 'sea')
-        ? arr.some((r, i) => i !== idx && r.carrier === carrier && r.pol === pol && r.container === container && r.commodity === commodity)
-        : arr.some((r, i) => i !== idx && r.pol === pol && r.commodity === commodity);
+    // Check duplicate
+    const dupCheck = arr.some((r, i) => i !== idx && r.pol === pol && r.commodity === commodity);
     if (dupCheck) return alert('Duplicate entry!');
 
-    // Build charges
+    // Build charges from list (excluding CFS_20/CFS_40)
     const charges = {};
     document.querySelectorAll('#modal-dc-charges-list [data-charge-key]').forEach(row => {
         const key = row.getAttribute('data-charge-key');
-        const amt = parseFloat(row.querySelector('.modal-chg-amt').value) || 0;
+        const sellAmt = parseFloat(row.querySelector('.modal-chg-amt').value) || 0;
+        const buyAmt = parseFloat(row.querySelector('.modal-chg-buy').value) || 0;
         const cur = row.querySelector('.modal-chg-cur').value;
-        if (amt > 0) charges[key] = { amount: amt, currency: cur };
+        if (sellAmt > 0 || buyAmt > 0) {
+            charges[key] = { amount: sellAmt, buyAmount: buyAmt, currency: cur };
+        }
     });
 
-    // ---- Auto‑segregate if carrier is not "ALL" (only for SEA) ----
-    if (mode === 'sea' && carrier !== 'ALL') {
-        // Remove from default
-        arr.splice(idx, 1);
-        // Add to carrier-specific
-        db.carrierChargesSeaLcl.push({
-            mode: 'sea',
-            carrier: carrier,
-            pol: pol,
-            container: container,
-            commodity: commodity,
-            charges: charges,
-            updated: new Date().toISOString()
-        });
-        saveDB();
-        closeModal('previewModal');
-        renderDefaultChargesMaster('sea');
-        renderCarrierChargesMaster('sealcl');
-        alert('✅ Moved to Carrier-Specific Charges.');
-        autoBackup();
-        return;
+    // Add CFS_20 and CFS_40 for SEA
+    if (mode === 'sea') {
+        const cfs20 = parseFloat(document.getElementById('modal-dc-cfs20').value) || 0;
+        const cfs20Buy = parseFloat(document.getElementById('modal-dc-cfs20-buy').value) || 0;
+        const cfs40 = parseFloat(document.getElementById('modal-dc-cfs40').value) || 0;
+        const cfs40Buy = parseFloat(document.getElementById('modal-dc-cfs40-buy').value) || 0;
+        if (cfs20 > 0 || cfs20Buy > 0) {
+            charges.CFS_20 = { amount: cfs20, buyAmount: cfs20Buy, currency: 'INR' };
+        }
+        if (cfs40 > 0 || cfs40Buy > 0) {
+            charges.CFS_40 = { amount: cfs40, buyAmount: cfs40Buy, currency: 'INR' };
+        }
     }
 
-    // Otherwise update in place
-    if (mode === 'sea') {
-        rec.carrier = carrier;
-        rec.container = container;
-        rec.commodity = commodity;
-    } else {
-        rec.commodity = commodity;
-    }
     rec.pol = pol;
+    rec.commodity = commodity;
     rec.charges = charges;
+    rec.updatedAt = new Date().toISOString();
     saveDB();
     closeModal('previewModal');
     renderDefaultChargesMaster(mode);
@@ -5981,26 +6051,40 @@ function saveEditDefaultCharge(mode, idx) {
 }
 
 function openAddDefaultChargeModal(mode) {
+    const isSea = (mode === 'sea');
     let html = `<h3 style="color:var(--primary);margin-bottom:12px;">Add Default ${mode.toUpperCase()} Charge</h3>`;
-    if (mode === 'sea') {
-        html += `<div class="form-grid-2col">
-            <div class="form-group"><label>Carrier</label><select id="modal-dc-carrier"><option value="ALL">ALL</option>${db.carriers.map(c => `<option value="${c}">${c}</option>`).join('')}</select></div>
-            <div class="form-group"><label>POL</label><select id="modal-dc-pol">${db.pol.map(p => `<option value="${p}">${p}</option>`).join('')}</select></div>
-            <div class="form-group"><label>Container</label><select id="modal-dc-container">${db.containers.map(c => `<option value="${c}">${c}</option>`).join('')}</select></div>
-            <div class="form-group"><label>Commodity</label><select id="modal-dc-commodity"><option value="">Select</option><option value="NON HAZ">Non Haz</option><option value="HAZ">Haz</option></select></div>
-        </div>`;
-    } else {
-        html += `<div class="form-grid-2col">
-            <div class="form-group"><label>POL</label><select id="modal-dc-pol">${db.pol.map(p => `<option value="${p}">${p}</option>`).join('')}</select></div>
-            <div class="form-group"><label>Commodity</label><select id="modal-dc-commodity"><option value="">Select</option><option value="NON HAZ">Non Haz</option><option value="HAZ">Haz</option></select></div>
-        </div>`;
-    }
-    html += `<h4 style="color:var(--primary);margin:12px 0 8px;">Add Charges</h4>
+    html += `<div class="form-grid-2col">
+        <div class="form-group"><label>POL</label><select id="modal-dc-pol">${db.pol.map(p => `<option value="${p}">${p}</option>`).join('')}</select></div>
+        <div class="form-group"><label>Commodity</label><select id="modal-dc-commodity"><option value="">Select</option><option value="NON HAZ">Non Haz</option><option value="HAZ">Haz</option></select></div>
+    </div>`;
+
+    html += `<h4 style="color:var(--primary);margin:12px 0 8px;">Charges (20' and 40' values)</h4>
     <div id="modal-dc-charges-list"></div>
-    <div style="margin-top:8px;display:flex;gap:8px;align-items:end;">
-        <div class="form-group" style="flex:1;"><label>Charge Type</label><select id="modal-dc-add-charge">${getDefaultChargeTypes(mode).map(c => `<option value="${c}">${c}</option>`).join('')}</select></div>
-        <div class="form-group" style="width:100px;"><label>Amount</label><input type="number" id="modal-dc-add-amt" step="0.01" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-        <div class="form-group" style="width:90px;"><label>Currency</label><select id="modal-dc-add-cur">${getCurrencyOptions('INR')}</select></div>
+    <div style="margin-top:8px;display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
+        <div class="form-group" style="flex:1;min-width:120px;">
+            <label>Charge Name</label>
+            <select id="modal-dc-add-charge">${getDefaultChargeTypes(mode).map(c => `<option value="${c}">${c}</option>`).join('')}</select>
+        </div>
+        <div class="form-group" style="width:90px;">
+            <label>20' Sell</label>
+            <input type="number" id="modal-dc-add-amt20" step="0.01">
+        </div>
+        <div class="form-group" style="width:90px;">
+            <label>20' Buy</label>
+            <input type="number" id="modal-dc-add-buy20" step="0.01">
+        </div>
+        <div class="form-group" style="width:90px;">
+            <label>40' Sell</label>
+            <input type="number" id="modal-dc-add-amt40" step="0.01">
+        </div>
+        <div class="form-group" style="width:90px;">
+            <label>40' Buy</label>
+            <input type="number" id="modal-dc-add-buy40" step="0.01">
+        </div>
+        <div class="form-group" style="width:90px;">
+            <label>Currency</label>
+            <select id="modal-dc-add-cur">${getCurrencyOptions('INR')}</select>
+        </div>
         <button class="btn btn-sm btn-success" style="height:33px;" onclick="addChargeToDCModal()">+</button>
     </div>
     <div style="margin-top:16px;text-align:right;">
@@ -6011,9 +6095,14 @@ function openAddDefaultChargeModal(mode) {
     document.getElementById('previewBody').innerHTML = html;
     openModal('previewModal');
 }
+
+
 function addChargeToDCModal() {
     const key = document.getElementById('modal-dc-add-charge').value;
-    const amt = parseFloat(document.getElementById('modal-dc-add-amt').value) || 0;
+    const amt20 = parseFloat(document.getElementById('modal-dc-add-amt20').value) || 0;
+    const buy20 = parseFloat(document.getElementById('modal-dc-add-buy20').value) || 0;
+    const amt40 = parseFloat(document.getElementById('modal-dc-add-amt40').value) || 0;
+    const buy40 = parseFloat(document.getElementById('modal-dc-add-buy40').value) || 0;
     const cur = document.getElementById('modal-dc-add-cur').value;
     const list = document.getElementById('modal-dc-charges-list');
 
@@ -6027,15 +6116,36 @@ function addChargeToDCModal() {
             <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${key}
                 <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button>
             </div>
-            <div style="display:flex;gap:6px;">
-                <input type="number" step="0.01" class="modal-chg-amt" value="${amt}" placeholder="Amount" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                <select class="modal-chg-cur" style="width:80px;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                    ${getCurrencyOptions(cur)}
-                </select>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                <div style="display:flex;gap:4px;">
+                    <label style="font-size:0.6rem;font-weight:600;">20' Sell</label>
+                    <input type="number" step="0.01" class="modal-chg-amt20" value="${amt20}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                </div>
+                <div style="display:flex;gap:4px;">
+                    <label style="font-size:0.6rem;font-weight:600;">20' Buy</label>
+                    <input type="number" step="0.01" class="modal-chg-buy20" value="${buy20}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                </div>
+                <div style="display:flex;gap:4px;">
+                    <label style="font-size:0.6rem;font-weight:600;">40' Sell</label>
+                    <input type="number" step="0.01" class="modal-chg-amt40" value="${amt40}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                </div>
+                <div style="display:flex;gap:4px;">
+                    <label style="font-size:0.6rem;font-weight:600;">40' Buy</label>
+                    <input type="number" step="0.01" class="modal-chg-buy40" value="${buy40}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                </div>
+                <div style="grid-column:1/-1;display:flex;gap:4px;align-items:center;">
+                    <label style="font-size:0.6rem;font-weight:600;">Currency</label>
+                    <select class="modal-chg-cur" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                        ${getCurrencyOptions(cur)}
+                    </select>
+                </div>
             </div>
         </div>
     `);
-    document.getElementById('modal-dc-add-amt').value = '';
+    document.getElementById('modal-dc-add-amt20').value = '';
+    document.getElementById('modal-dc-add-buy20').value = '';
+    document.getElementById('modal-dc-add-amt40').value = '';
+    document.getElementById('modal-dc-add-buy40').value = '';
 }
 
 function addCCChargeToModal() {
@@ -6075,34 +6185,80 @@ function saveNewDefaultCharge(mode) {
     const pol = document.getElementById('modal-dc-pol').value.trim();
     if (!pol) return alert('POL is required');
     const commodity = document.getElementById('modal-dc-commodity').value;
+
     const charges = {};
     document.querySelectorAll('#modal-dc-charges-list [data-charge-key]').forEach(row => {
-        const key = row.getAttribute('data-charge-key');
-        const amt = parseFloat(row.querySelector('.modal-chg-amt').value) || 0;
+        const baseKey = row.getAttribute('data-charge-key');
+        const amt20 = parseFloat(row.querySelector('.modal-chg-amt20').value) || 0;
+        const buy20 = parseFloat(row.querySelector('.modal-chg-buy20').value) || 0;
+        const amt40 = parseFloat(row.querySelector('.modal-chg-amt40').value) || 0;
+        const buy40 = parseFloat(row.querySelector('.modal-chg-buy40').value) || 0;
         const cur = row.querySelector('.modal-chg-cur').value;
-        if (amt > 0) charges[key] = { amount: amt, currency: cur };
+        if (amt20 > 0 || buy20 > 0) {
+            charges[baseKey + '_20'] = { amount: amt20, buyAmount: buy20, currency: cur };
+        }
+        if (amt40 > 0 || buy40 > 0) {
+            charges[baseKey + '_40'] = { amount: amt40, buyAmount: buy40, currency: cur };
+        }
     });
-    let record;
-    if (mode === 'sea') {
-        const carrier = document.getElementById('modal-dc-carrier').value.trim() || 'ALL';
-        const container = document.getElementById('modal-dc-container').value.trim();
-        if (!container) return alert('Container is required');
-        record = { carrier, pol, container, commodity, charges };
-        if (findDefaultChargeDuplicate(mode, record)) return alert('Duplicate entry!');
-        db.defaultSeaCharges.push(record);
-    } else if (mode === 'air') {
-        record = { pol, commodity, charges };
-        if (findDefaultChargeDuplicate(mode, record)) return alert('Duplicate entry!');
-        db.defaultAirCharges.push(record);
-    } else if (mode === 'lcl') {
-        record = { pol, commodity, charges };
-        if (findDefaultChargeDuplicate(mode, record)) return alert('Duplicate entry!');
-        db.defaultLclCharges.push(record);
-    }
+
+    const record = { pol, commodity, charges, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    if (findDefaultChargeDuplicate(mode, record)) return alert('Duplicate entry!');
+
+    if (mode === 'sea') db.defaultSeaCharges.push(record);
+    else if (mode === 'air') db.defaultAirCharges.push(record);
+    else if (mode === 'lcl') db.defaultLclCharges.push(record);
+
     saveDB();
     closeModal('previewModal');
     renderDefaultChargesMaster(mode);
     alert('Added!');
+    autoBackup();
+}
+
+function saveEditDefaultCharge(mode, idx) {
+    let arr;
+    if (mode === 'sea') arr = db.defaultSeaCharges;
+    else if (mode === 'air') arr = db.defaultAirCharges;
+    else arr = db.defaultLclCharges;
+
+    if (!arr || idx < 0 || idx >= arr.length) {
+        alert('Record not found.');
+        return;
+    }
+    const rec = arr[idx];
+
+    const pol = document.getElementById('modal-dc-pol-edit').value.trim();
+    const commodity = document.getElementById('modal-dc-commodity-edit').value.trim();
+    if (!pol) return alert('POL is required.');
+
+    const dupCheck = arr.some((r, i) => i !== idx && r.pol === pol && r.commodity === commodity);
+    if (dupCheck) return alert('Duplicate entry!');
+
+    const charges = {};
+    document.querySelectorAll('#modal-dc-charges-list [data-charge-key]').forEach(row => {
+        const baseKey = row.getAttribute('data-charge-key');
+        const amt20 = parseFloat(row.querySelector('.modal-chg-amt20').value) || 0;
+        const buy20 = parseFloat(row.querySelector('.modal-chg-buy20').value) || 0;
+        const amt40 = parseFloat(row.querySelector('.modal-chg-amt40').value) || 0;
+        const buy40 = parseFloat(row.querySelector('.modal-chg-buy40').value) || 0;
+        const cur = row.querySelector('.modal-chg-cur').value;
+        if (amt20 > 0 || buy20 > 0) {
+            charges[baseKey + '_20'] = { amount: amt20, buyAmount: buy20, currency: cur };
+        }
+        if (amt40 > 0 || buy40 > 0) {
+            charges[baseKey + '_40'] = { amount: amt40, buyAmount: buy40, currency: cur };
+        }
+    });
+
+    rec.pol = pol;
+    rec.commodity = commodity;
+    rec.charges = charges;
+    rec.updatedAt = new Date().toISOString();
+    saveDB();
+    closeModal('previewModal');
+    renderDefaultChargesMaster(mode);
+    alert('✅ Default charge updated.');
     autoBackup();
 }
 
@@ -6114,20 +6270,20 @@ function openEditCarrierChargeModal(type, idx) {
     else rec = db.carrierChargesSeaLcl[idx];
     if (!rec) return alert('Record not found');
 
-    const mode = type === 'sealcl' ? (rec.mode || 'sea') : 'air';
+    const mode = (type === 'sealcl') ? 'sea' : (type === 'air' ? 'air' : 'lcl');
     const modeCharges = getDefaultChargeTypes(mode);
 
     let html = `<h3 style="color:var(--primary);margin-bottom:12px;">Edit Carrier-Wise Charge</h3>
         <div class="form-grid-2col">`;
 
     if (type === 'sealcl') {
-        html += `<div class="form-group"><label>Mode</label>
-            <select id="modal-cc-mode-edit">
-                <option value="sea" ${rec.mode==='sea'?'selected':''}>SEA</option>
-                <option value="lcl" ${rec.mode==='lcl'?'selected':''}>LCL</option>
-            </select>
-        </div>`;
+        html += `<input type="hidden" id="modal-cc-mode-edit" value="sea" />`;
+    } else if (type === 'air') {
+        html += `<input type="hidden" id="modal-cc-mode-edit" value="air" />`;
+    } else {
+        html += `<input type="hidden" id="modal-cc-mode-edit" value="lcl" />`;
     }
+
     html += `<div class="form-group"><label>Carrier</label>
         <select id="modal-cc-carrier-edit">
             <option value="">Select</option>
@@ -6141,14 +6297,14 @@ function openEditCarrierChargeModal(type, idx) {
         </select>
     </div>`;
 
+    // Container dropdown removed
     if (type === 'sealcl') {
-        html += `<div class="form-group"><label>Container</label>
-            <select id="modal-cc-container-edit">
-                <option value="">Select</option>
-                ${db.containers.map(c => `<option value="${c}" ${rec.container===c?'selected':''}>${c}</option>`).join('')}
-            </select>
-        </div>`;
+        const thc20 = rec.charges?.THC_20?.amount || 0;
+        const thc40 = rec.charges?.THC_40?.amount || 0;
+        html += `<div class="form-group"><label>THC 20' (INR)</label><input type="number" id="modal-cc-thc20" step="0.01" value="${thc20}" /></div>`;
+        html += `<div class="form-group"><label>THC 40' (INR)</label><input type="number" id="modal-cc-thc40" step="0.01" value="${thc40}" /></div>`;
     }
+
     html += `<div class="form-group"><label>Commodity</label>
         <select id="modal-cc-commodity-edit">
             <option value="">Select</option>
@@ -6158,11 +6314,12 @@ function openEditCarrierChargeModal(type, idx) {
     </div>
 </div>`;
 
-    html += `<h4 style="color:var(--primary);margin:12px 0 8px;">Charges (Sell & Buy)</h4>
+    html += `<h4 style="color:var(--primary);margin:12px 0 8px;">Other Charges (Sell & Buy)</h4>
         <div id="modal-cc-charges-list">`;
 
     const charges = rec.charges || {};
     Object.entries(charges).forEach(([key, val]) => {
+        if (key === 'THC_20' || key === 'THC_40') return;
         html += `<div style="margin-bottom:6px;background:var(--bg);padding:6px;border-radius:5px;border:1px solid var(--border);" data-charge-key="${key}">
             <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${key}
                 <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button>
@@ -6243,25 +6400,34 @@ function saveEditCarrierCharge(type, idx) {
     }
     const rec = arr[idx];
 
-    // Collect data
-    let carrier, pol, container, commodity, mode;
+    // Collect data (container removed)
+    let carrier, pol, commodity, mode;
     if (type === 'sealcl') {
-        mode = document.getElementById('modal-cc-mode-edit').value || 'sea';
+        mode = 'sea';
         carrier = document.getElementById('modal-cc-carrier-edit').value.trim();
         pol = document.getElementById('modal-cc-pol-edit').value.trim();
-        container = document.getElementById('modal-cc-container-edit').value.trim() || '';
         commodity = document.getElementById('modal-cc-commodity-edit').value.trim();
         if (!carrier || !pol) return alert('Carrier and POL are required.');
+        // Handle THC
+        const thc20 = parseFloat(document.getElementById('modal-cc-thc20').value) || 0;
+        const thc40 = parseFloat(document.getElementById('modal-cc-thc40').value) || 0;
+        // We'll set later
     } else if (type === 'air') {
         carrier = document.getElementById('modal-cc-carrier-edit').value.trim();
         pol = document.getElementById('modal-cc-pol-edit').value.trim();
         commodity = document.getElementById('modal-cc-commodity-edit').value.trim();
         if (!carrier || !pol) return alert('Carrier and POL are required.');
-        container = '';
         mode = 'air';
+    } else {
+        // LCL
+        mode = 'lcl';
+        carrier = document.getElementById('modal-cc-carrier-edit').value.trim();
+        pol = document.getElementById('modal-cc-pol-edit').value.trim();
+        commodity = document.getElementById('modal-cc-commodity-edit').value.trim();
+        if (!carrier || !pol) return alert('Carrier and POL are required.');
     }
 
-    // Build charges
+    // Build charges from the list (other charges)
     const charges = {};
     document.querySelectorAll('#modal-cc-charges-list [data-charge-key]').forEach(row => {
         const key = row.getAttribute('data-charge-key');
@@ -6270,76 +6436,26 @@ function saveEditCarrierCharge(type, idx) {
         const buyAmt = parseFloat(row.querySelector('.modal-cc-buy-amt').value) || 0;
         const buyCur = row.querySelector('.modal-cc-buy-cur').value;
         if (sellAmt > 0 || buyAmt > 0) {
-            charges[key] = {
-                amount: sellAmt,
-                currency: sellCur,
-                buyAmount: buyAmt,
-                buyCurrency: buyCur,
-                basis: 'Normal'
-            };
+            charges[key] = { amount: sellAmt, currency: sellCur, buyAmount: buyAmt, buyCurrency: buyCur };
         }
     });
 
-    // ---- Auto‑segregate if carrier becomes "ALL" ----
-    if (carrier === 'ALL') {
-        // Remove from carrier array
-        arr.splice(idx, 1);
-
-        // Determine default array
-        let defaultArr;
-        let defaultEntry;
-        if (type === 'air') {
-            defaultArr = db.defaultAirCharges;
-            defaultEntry = { pol, commodity, charges };
-        } else {
-            // sea or lcl
-            const isSea = (mode === 'sea');
-            defaultArr = isSea ? db.defaultSeaCharges : db.defaultLclCharges;
-            defaultEntry = {
-                carrier: 'ALL',
-                pol,
-                container: container || '',
-                commodity,
-                charges
-            };
-        }
-        // Check duplicate in default
-        const dup = defaultArr.some(d => {
-            if (type === 'air') return d.pol === pol && d.commodity === commodity;
-            else return d.pol === pol && d.container === container && d.commodity === commodity;
-        });
-        if (!dup) {
-            defaultArr.push(defaultEntry);
-            saveDB();
-            closeModal('previewModal');
-            renderDefaultChargesMaster(type === 'air' ? 'air' : (mode === 'sea' ? 'sea' : 'lcl'));
-            renderCarrierChargesMaster(type === 'air' ? 'air' : 'sealcl');
-            alert('✅ Moved to Default Charges.');
-            autoBackup();
-            return;
-        } else {
-            alert('A default entry with same POL/Container/Commodity already exists. Not moved.');
-            // Restore record (re‑add to arr)
-            arr.push(rec);
-            saveDB();
-            closeModal('previewModal');
-            renderCarrierChargesMaster(type);
-            return;
-        }
-    }
-
-    // Otherwise update in place
+    // Add THC for SEA
     if (type === 'sealcl') {
-        rec.mode = mode;
-        rec.container = container;
-        rec.commodity = commodity;
-    } else {
-        rec.commodity = commodity;
+        const thc20 = parseFloat(document.getElementById('modal-cc-thc20').value) || 0;
+        const thc40 = parseFloat(document.getElementById('modal-cc-thc40').value) || 0;
+        if (thc20 > 0) charges.THC_20 = { amount: thc20, currency: 'INR' };
+        if (thc40 > 0) charges.THC_40 = { amount: thc40, currency: 'INR' };
     }
+
+    // Update rec – container removed
+    rec.mode = mode;
     rec.carrier = carrier;
     rec.pol = pol;
+    rec.commodity = commodity;
     rec.charges = charges;
     rec.updated = new Date().toISOString();
+
     saveDB();
     closeModal('previewModal');
     renderCarrierChargesMaster(type);
@@ -6348,15 +6464,23 @@ function saveEditCarrierCharge(type, idx) {
 }
 
 function openAddCarrierChargeModal(type) {
-    const mode = type === 'sealcl' ? 'sea' : 'air';
+    const mode = (type === 'sealcl') ? 'sea' : (type === 'air' ? 'air' : 'lcl');
     const modeCharges = getDefaultChargeTypes(mode);
     let html = `<h3 style="color:var(--primary);margin-bottom:12px;">Add Carrier-Wise Charge</h3><div class="form-grid-2col">`;
-    if (type === 'sealcl') html += `<div class="form-group"><label>Mode</label><select id="modal-cc-mode"><option value="sea">SEA</option><option value="lcl">LCL</option></select></div>`;
+    if (type === 'sealcl') {
+        html += `<input type="hidden" id="modal-cc-mode" value="sea" />`;
+    }
     html += `<div class="form-group"><label>Carrier</label><select id="modal-cc-carrier"><option value="">Select</option>${db.carriers.map(c => `<option value="${c}">${c}</option>`).join('')}</select></div>`;
     html += `<div class="form-group"><label>POL</label><select id="modal-cc-pol"><option value="">Select</option>${db.pol.map(p => `<option value="${p}">${p}</option>`).join('')}</select></div>`;
-    if (type === 'sealcl') html += `<div class="form-group"><label>Container</label><select id="modal-cc-container"><option value="">Select</option>${db.containers.map(c => `<option value="${c}">${c}</option>`).join('')}</select></div>`;
+    if (type === 'sealcl') {
+        // Container dropdown removed – only THC fields
+        html += `<div class="form-group"><label>THC 20' (INR)</label><input type="number" id="modal-cc-thc20" step="0.01" placeholder="e.g., 11560" /></div>`;
+        html += `<div class="form-group"><label>THC 40' (INR)</label><input type="number" id="modal-cc-thc40" step="0.01" placeholder="e.g., 17805" /></div>`;
+    }
     html += `<div class="form-group"><label>Commodity</label><select id="modal-cc-commodity"><option value="">Select</option><option value="NON HAZ">Non Haz</option><option value="HAZ">Haz</option></select></div>`;
-    html += `</div><h4 style="color:var(--primary);margin:12px 0 8px;">Add Charges (Sell & Buy)</h4><div id="modal-cc-charges-list"></div>
+    html += `</div>`;
+
+    html += `<h4 style="color:var(--primary);margin:12px 0 8px;">Other Charges (Sell & Buy)</h4><div id="modal-cc-charges-list"></div>
     <div style="margin-top:8px;display:flex;gap:8px;align-items:end;">
         <div class="form-group" style="flex:1;"><label>Add Charge</label><select id="modal-cc-add-charge">${modeCharges.map(c => `<option value="${c}">${c}</option>`).join('')}</select></div>
         <button class="btn btn-sm btn-success" style="height:33px;" onclick="addCCChargeToModal()">+</button>
@@ -6369,19 +6493,24 @@ function openAddCarrierChargeModal(type) {
     document.getElementById('previewBody').innerHTML = html;
     openModal('previewModal');
 }
+
 function saveNewCarrierCharge(type) {
     let record;
     if (type === 'sealcl') {
-        const mode = document.getElementById('modal-cc-mode').value;
+        const mode = 'sea';
         const carrier = document.getElementById('modal-cc-carrier').value;
         const pol = document.getElementById('modal-cc-pol').value;
-        const container = document.getElementById('modal-cc-container').value || '';
         const commodity = document.getElementById('modal-cc-commodity').value;
+        const thc20 = parseFloat(document.getElementById('modal-cc-thc20').value) || 0;
+        const thc40 = parseFloat(document.getElementById('modal-cc-thc40').value) || 0;
         if (!carrier || !pol) return alert('Carrier and POL are required');
-        record = { mode, carrier, pol, container, commodity, charges: {}, updated: new Date().toISOString() };
+        record = { mode, carrier, pol, commodity, charges: {}, updated: new Date().toISOString() };
+        // Container removed
+        if (thc20 > 0) record.charges.THC_20 = { amount: thc20, currency: 'INR' };
+        if (thc40 > 0) record.charges.THC_40 = { amount: thc40, currency: 'INR' };
         if (findCarrierChargeDuplicate(type, record)) return alert('Duplicate entry!');
         db.carrierChargesSeaLcl.push(record);
-    } else {
+    } else if (type === 'air') {
         const carrier = document.getElementById('modal-cc-carrier').value;
         const pol = document.getElementById('modal-cc-pol').value;
         const commodity = document.getElementById('modal-cc-commodity').value;
@@ -6389,7 +6518,19 @@ function saveNewCarrierCharge(type) {
         record = { carrier, pol, commodity, charges: {}, updated: new Date().toISOString() };
         if (findCarrierChargeDuplicate(type, record)) return alert('Duplicate entry!');
         db.carrierChargesAir.push(record);
+    } else {
+        // LCL
+        const mode = 'lcl';
+        const carrier = document.getElementById('modal-cc-carrier').value;
+        const pol = document.getElementById('modal-cc-pol').value;
+        const commodity = document.getElementById('modal-cc-commodity').value;
+        if (!carrier || !pol) return alert('Carrier and POL are required');
+        record = { mode, carrier, pol, commodity, charges: {}, updated: new Date().toISOString() };
+        if (findCarrierChargeDuplicate(type, record)) return alert('Duplicate entry!');
+        db.carrierChargesSeaLcl.push(record);
     }
+
+    // Collect other charges (excluding THC_20/THC_40)
     document.querySelectorAll('#modal-cc-charges-list [data-charge-key]').forEach(row => {
         const key = row.getAttribute('data-charge-key');
         const sellAmt = parseFloat(row.querySelector('.modal-cc-sell-amt').value) || 0;
@@ -6400,6 +6541,7 @@ function saveNewCarrierCharge(type) {
             record.charges[key] = { amount: sellAmt, currency: sellCur, buyAmount: buyAmt, buyCurrency: buyCur };
         }
     });
+
     saveDB();
     closeModal('previewModal');
     renderCarrierChargesMaster(type);
@@ -6440,61 +6582,138 @@ function previewDefaultCharge(mode, idx) {
     else if (mode === 'air') rec = db.defaultAirCharges[idx];
     else rec = db.defaultLclCharges[idx];
     if (!rec) return alert('Record not found');
-    const totalSell = Object.values(rec.charges).reduce((sum, c) => sum + (c.amount || 0), 0);
-    const totalBuy = Object.values(rec.charges).reduce((sum, c) => sum + (c.buyAmount || c.amount || 0), 0);
-    let html = `
-        <div class="preview-card">
-            <h3>📋 Default Charge Preview</h3>
-            <div class="preview-grid">
-                <div class="item"><span class="label">Quote Type</span><span class="value">${mode.toUpperCase()}</span></div>
-                <div class="item"><span class="label">Carrier</span><span class="value">${mode === 'sea' ? rec.carrier : 'ALL'}</span></div>
-                <div class="item"><span class="label">POL</span><span class="value">${rec.pol}</span></div>
-                ${mode === 'sea' ? `<div class="item"><span class="label">Container</span><span class="value">${rec.container}</span></div>` : ''}
-                <div class="item"><span class="label">Commodity</span><span class="value">${rec.commodity || '-'}</span></div>
-                <div class="item"><span class="label">Currency</span><span class="value">${rec.currency || 'INR'}</span></div>
-                <div class="item"><span class="label">Created By</span><span class="value">${rec.createdBy || db.defaultUser || 'N/A'}</span></div>
-                <div class="item"><span class="label">Created Date</span><span class="value">${rec.createdAt ? new Date(rec.createdAt).toLocaleDateString('en-IN') : '-'}</span></div>
-                <div class="item"><span class="label">Last Updated</span><span class="value">${rec.updatedAt ? new Date(rec.updatedAt).toLocaleString('en-IN') : '-'}</span></div>
-                <div class="item"><span class="label">Status</span><span class="value"><span class="preview-status active">Active</span></span></div>
+
+    let totalSell20 = 0, totalBuy20 = 0, totalSell40 = 0, totalBuy40 = 0;
+    const chargeKeys = Object.keys(rec.charges || {}).sort();
+    let chargeRows = '';
+
+    // Separate 20 and 40 charges
+    const charges20 = {};
+    const charges40 = {};
+    chargeKeys.forEach(key => {
+        if (key.endsWith('_20')) {
+            const base = key.slice(0, -3);
+            charges20[base] = rec.charges[key];
+        } else if (key.endsWith('_40')) {
+            const base = key.slice(0, -3);
+            charges40[base] = rec.charges[key];
+        }
+    });
+
+    // Combine all base names
+    const allBaseNames = new Set([...Object.keys(charges20), ...Object.keys(charges40)]);
+
+    let rowIndex = 0;
+    allBaseNames.forEach(base => {
+        const c20 = charges20[base];
+        const c40 = charges40[base];
+        const displayName = base;
+
+        if (c20) {
+            const sell20 = c20.amount || 0;
+            const buy20 = c20.buyAmount || 0;
+            const cur20 = c20.currency || 'INR';
+            const sellINR20 = toINR(sell20, cur20);
+            const buyINR20 = toINR(buy20, cur20);
+            totalSell20 += sellINR20;
+            totalBuy20 += buyINR20;
+            rowIndex++;
+            chargeRows += `
+                <tr>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${rowIndex}</td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${displayName} (20')</td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right;">${Number(sell20).toLocaleString('en-IN')}</td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right;">${Number(buy20).toLocaleString('en-IN')}</td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${cur20}</td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 600;">${formatINR(sellINR20)}</td>
+                </tr>
+            `;
+        }
+        if (c40) {
+            const sell40 = c40.amount || 0;
+            const buy40 = c40.buyAmount || 0;
+            const cur40 = c40.currency || 'INR';
+            const sellINR40 = toINR(sell40, cur40);
+            const buyINR40 = toINR(buy40, cur40);
+            totalSell40 += sellINR40;
+            totalBuy40 += buyINR40;
+            rowIndex++;
+            chargeRows += `
+                <tr>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${rowIndex}</td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${displayName} (40')</td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right;">${Number(sell40).toLocaleString('en-IN')}</td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right;">${Number(buy40).toLocaleString('en-IN')}</td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${cur40}</td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 600;">${formatINR(sellINR40)}</td>
+                </tr>
+            `;
+        }
+    });
+
+    const totalSell = totalSell20 + totalSell40;
+    const totalBuy = totalBuy20 + totalBuy40;
+
+    const modeLabel = { sea: 'SEA', air: 'AIR', lcl: 'LCL' }[mode];
+
+    const html = `
+    <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 10px;">
+        <div style="background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; padding: 16px 20px; border-radius: 12px 12px 0 0; margin-bottom: 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="font-size: 1.2rem; font-weight: 700;">📋 Default Charges Preview</div>
+                <div style="background: rgba(255,255,255,0.2); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">${modeLabel}</div>
             </div>
         </div>
-        <div class="preview-card">
-            <h3>💲 Charges Breakdown</h3>
-            <table class="preview-charges-table">
-                <thead>
-                    <tr><th>#</th><th>Charge Name</th><th>Buy Amount</th><th>Sell Amount</th><th>Currency</th><th>Unit</th><th>Vendor</th><th>Remarks</th></tr>
-                </thead>
-                <tbody>`;
-    let count = 0;
-    for (const [chargeName, chargeData] of Object.entries(rec.charges)) {
-        count++;
-        const buyAmt = chargeData.buyAmount || chargeData.amount || 0;
-        const sellAmt = chargeData.amount || 0;
-        html += `<tr>
-                    <td>${count}</td>
-                    <td>${chargeName}</td>
-                    <td>${Number(buyAmt).toFixed(2)}</td>
-                    <td>${Number(sellAmt).toFixed(2)}</td>
-                    <td>${chargeData.currency || rec.currency || 'INR'}</td>
-                    <td>${chargeData.unit || '-'}</td>
-                    <td>${chargeData.vendor || '-'}</td>
-                    <td>${chargeData.remarks || '-'}</td>
-                </tr>`;
-    }
-    html += `
-                </tbody>
-                <tfoot>
-                    <tr class="total-row"><td colspan="2"><strong>Total Buy</strong></td><td><strong>${Number(totalBuy).toFixed(2)}</strong></td><td></td><td></td><td></td><td></td><td></td></tr>
-                    <tr class="total-row"><td colspan="2"><strong>Total Sell</strong></td><td></td><td><strong>${Number(totalSell).toFixed(2)}</strong></td><td></td><td></td><td></td><td></td></tr>
-                    <tr class="total-row"><td colspan="2"><strong>Total Charges</strong></td><td colspan="2"><strong>${Number(totalSell).toFixed(2)}</strong></td><td></td><td></td><td></td><td></td></tr>
-                </tfoot>
-            </table>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; background: white; padding: 16px 20px; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0;">
+            <div><span style="font-weight: 600; color: #64748b; font-size: 0.7rem; text-transform: uppercase; display: block;">POL</span><span style="font-weight: 700;">${rec.pol}</span></div>
+            <div><span style="font-weight: 600; color: #64748b; font-size: 0.7rem; text-transform: uppercase; display: block;">Commodity</span><span style="font-weight: 700;">${rec.commodity || '—'}</span></div>
+            <div><span style="font-weight: 600; color: #64748b; font-size: 0.7rem; text-transform: uppercase; display: block;">Status</span><span style="background: #10b981; color: white; padding: 2px 14px; border-radius: 20px; font-size: 0.7rem; font-weight: 700;">Active</span></div>
         </div>
+
+        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 0 0 12px 12px; overflow: hidden; margin-top: 0;">
+            <div style="padding: 10px 16px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #1e3a8a;">💲 Charges Breakdown</div>
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                    <thead>
+                        <tr style="background: #f1f5f9;">
+                            <th style="padding: 8px 12px; text-align: center; border-bottom: 1px solid #e2e8f0;">#</th>
+                            <th style="padding: 8px 12px; text-align: left; border-bottom: 1px solid #e2e8f0;">Charge Name</th>
+                            <th style="padding: 8px 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">Sell Amt</th>
+                            <th style="padding: 8px 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">Buy Amt</th>
+                            <th style="padding: 8px 12px; text-align: center; border-bottom: 1px solid #e2e8f0;">Currency</th>
+                            <th style="padding: 8px 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">INR Equivalent</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${chargeRows || `<tr><td colspan="6" style="padding: 20px; text-align: center; color: #94a3b8;">No charges found</td></tr>`}
+                    </tbody>
+                    <tfoot>
+                        <tr style="background: #f1f5f9; font-weight: 700;">
+                            <td colspan="5" style="padding: 8px 12px; text-align: right;">Total Sell (INR) – 20'</td>
+                            <td style="padding: 8px 12px; text-align: right;">${formatINR(totalSell20)}</td>
+                        </tr>
+                        <tr style="background: #f1f5f9; font-weight: 700;">
+                            <td colspan="5" style="padding: 8px 12px; text-align: right;">Total Sell (INR) – 40'</td>
+                            <td style="padding: 8px 12px; text-align: right;">${formatINR(totalSell40)}</td>
+                        </tr>
+                        <tr style="background: linear-gradient(135deg, #10b981, #059669); color: white; font-weight: 700; font-size: 1rem;">
+                            <td colspan="5" style="padding: 8px 12px; text-align: right;">💰 Grand Total (INR)</td>
+                            <td style="padding: 8px 12px; text-align: right;">${formatINR(totalSell)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
     `;
-    document.getElementById('modal-title').textContent = 'Preview Default Charge';
+
+    document.getElementById('modal-title').textContent = `Preview Default ${mode.toUpperCase()} Charge`;
     document.getElementById('previewBody').innerHTML = html;
     openModal('previewModal');
 }
+
+
 function duplicateDefaultCharge(mode, idx) {
     let rec;
     if (mode === 'sea') rec = db.defaultSeaCharges[idx];
@@ -6546,6 +6765,10 @@ function deleteCarrierChargeEntry(type, idx) {
 function previewCarrierCharge(type, idx) {
     let rec = type === 'sealcl' ? db.carrierChargesSeaLcl[idx] : db.carrierChargesAir[idx];
     if (!rec) return alert('Record not found');
+    
+    const thc20 = rec.charges?.THC_20?.amount || 0;
+    const thc40 = rec.charges?.THC_40?.amount || 0;
+    
     let html = `
         <div class="preview-card">
             <h3>Carrier Charge Details</h3>
@@ -6553,23 +6776,37 @@ function previewCarrierCharge(type, idx) {
                 <div class="item"><span class="label">Mode</span><span class="value">${type.toUpperCase()}</span></div>
                 <div class="item"><span class="label">Carrier</span><span class="value">${rec.carrier}</span></div>
                 <div class="item"><span class="label">POL</span><span class="value">${rec.pol}</span></div>
-                ${type === 'sealcl' ? `<div class="item"><span class="label">Container</span><span class="value">${rec.container || '—'}</span></div>` : ''}
+                <div class="item"><span class="label">Commodity</span><span class="value">${rec.commodity || '—'}</span></div>
+                ${type === 'sealcl' ? `
+                    <div class="item"><span class="label">THC 20' (INR)</span><span class="value">${thc20}</span></div>
+                    <div class="item"><span class="label">THC 40' (INR)</span><span class="value">${thc40}</span></div>
+                ` : ''}
                 <div class="item"><span class="label">Updated</span><span class="value">${rec.updated ? new Date(rec.updated).toLocaleString() : '—'}</span></div>
             </div>
         </div>
         <div class="preview-card">
-            <h3>Charges</h3>
+            <h3>Other Charges</h3>
             <table class="preview-charges-table">
                 <thead><tr><th>Charge Name</th><th>Sell Amount</th><th>Buy Amount</th><th>Currency</th></tr></thead>
                 <tbody>`;
+    
+    let hasCharges = false;
     for (const [k, v] of Object.entries(rec.charges)) {
+        if (k === 'THC_20' || k === 'THC_40') continue;
+        hasCharges = true;
         html += `<tr><td>${k}</td><td>${v.amount || '—'}</td><td>${v.buyAmount || '—'}</td><td>${v.currency || 'INR'}</td></tr>`;
     }
+    if (!hasCharges) {
+        html += `<tr><td colspan="4" style="text-align:center;color:var(--text-light);">No additional charges</td></tr>`;
+    }
     html += `</tbody></table></div>`;
+    
     document.getElementById('modal-title').textContent = 'Preview Carrier Charge';
     document.getElementById('previewBody').innerHTML = html;
     openModal('previewModal');
 }
+
+
 function duplicateCarrierCharge(type, idx) {
     let rec = type === 'sealcl' ? db.carrierChargesSeaLcl[idx] : db.carrierChargesAir[idx];
     if (!rec) return alert('Record not found');
@@ -6594,12 +6831,7 @@ function findDefaultChargeDuplicate(mode, record, excludeIndex) {
     else arr = db.defaultLclCharges;
     return arr.some((r, i) => {
         if (i === excludeIndex) return false;
-        if (mode === 'sea') {
-            return r.carrier === record.carrier && r.pol === record.pol &&
-                   r.container === record.container && (r.commodity || '') === (record.commodity || '');
-        } else {
-            return r.pol === record.pol && (r.commodity || '') === (record.commodity || '');
-        }
+        return r.pol === record.pol && r.commodity === record.commodity;
     });
 }
 
@@ -6611,12 +6843,14 @@ function findCarrierChargeDuplicate(type, record, excludeIndex) {
     return arr.some((r, i) => {
         if (i === excludeIndex) return false;
         if (type === 'sealcl') {
-            return r.mode === record.mode && r.carrier === record.carrier &&
-                   r.pol === record.pol && (r.container || '') === (record.container || '') &&
-                   (r.commodity || '') === (record.commodity || '');
+            return r.mode === record.mode &&
+                   r.carrier === record.carrier &&
+                   r.pol === record.pol &&
+                   r.commodity === record.commodity; // container removed
         } else {
-            return r.carrier === record.carrier && r.pol === record.pol &&
-                   (r.commodity || '') === (record.commodity || '');
+            return r.carrier === record.carrier &&
+                   r.pol === record.pol &&
+                   r.commodity === record.commodity;
         }
     });
 }
@@ -7230,6 +7464,7 @@ function init() {
     switchToTab(lastTab);
     populateDropdowns();
     renderDatabase();
+	loadBackupPath();
     if (lastTab === 'drafts') renderRecords('drafts');
     if (lastTab === 'rates') renderRecords('rates');
     if (lastTab === 'ratesheet') { renderRateSheet();
@@ -7238,6 +7473,8 @@ function init() {
     if (lastTab === 'bldraft') renderBLDrafts();
     if (lastTab === 'followup') renderFollowups();
     if (lastTab === 'dashboard') renderDashboard();
+	if (!db.cbmRecords) db.cbmRecords = [];
+	if (!db.airWeightRecords) db.airWeightRecords = [];
     if (lastTab === 'measurement') {
         refreshMeasurementDefaults();
     }
@@ -7246,6 +7483,15 @@ function init() {
         renderDefaultChargesMaster(mode);
         renderCarrierChargesMaster(mode === 'sea' ? 'sealcl' : mode);
     }
+	
+	if (!localStorage.getItem('sea_split_migrated')) {
+    migrateDefaultSeaChargesToSplit();
+	}
+	
+	if (!localStorage.getItem('sea_default_migrated')) {
+    migrateDefaultSeaCharges();
+	}
+	
     ['sea', 'air', 'lcl'].forEach(mode => { buildChargesGrid(mode);
         setValidityDefault(mode); });
     if (backupFolderHandle) {
@@ -7364,7 +7610,6 @@ function calcDuty() {
 
     const duty = cargoInr * (dutyPct / 100);
     const sws = cargoInr * (swsPct / 100);
-    const gstOnDuty = duty * (gstPct / 100);
     const totalGst = gstPct / 100 * (cargoInr + freightInsInr + duty + sws);
     const totalPayable = duty + sws + totalGst;
 
@@ -7372,12 +7617,10 @@ function calcDuty() {
     const freightInsUsdDisplay = freightInsUsd;
     const dutyUsd = duty / ex;
     const swsUsd = sws / ex;
-    const gstOnDutyUsd = gstOnDuty / ex;
     const totalGstUsd = totalGst / ex;
     const totalPayableUsd = totalPayable / ex;
 
-    const formatUSD = (n) => '$ ' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2,
-        maximumFractionDigits: 2 });
+    const formatUSD = (n) => '$ ' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     document.getElementById('duty-inr').textContent = formatINR(cargoInr);
     document.getElementById('duty-usd').textContent = formatUSD(valUsd);
@@ -7387,12 +7630,18 @@ function calcDuty() {
     document.getElementById('duty-amt-usd').textContent = formatUSD(dutyUsd);
     document.getElementById('duty-service-amt').textContent = formatINR(sws);
     document.getElementById('duty-service-usd').textContent = formatUSD(swsUsd);
-    document.getElementById('duty-gst-amt').textContent = formatINR(gstOnDuty);
-    document.getElementById('duty-gst-usd').textContent = formatUSD(gstOnDutyUsd);
-    document.getElementById('duty-total-gst').textContent = formatINR(totalGst);
-    document.getElementById('duty-total-gst-usd').textContent = formatUSD(totalGstUsd);
+    document.getElementById('duty-gst-amt').textContent = formatINR(totalGst);
+    document.getElementById('duty-gst-usd').textContent = formatUSD(totalGstUsd);
     document.getElementById('duty-total').textContent = formatINR(totalPayable);
     document.getElementById('duty-total-usd').textContent = formatUSD(totalPayableUsd);
+
+    // Update labels with percentages
+    document.querySelector('#duty-amt').closest('tr').querySelector('td:first-child').innerHTML =
+        `<span style="background:#dbeafe;color:#1e3a8a;padding:2px 8px;border-radius:4px;font-size:0.7rem;">DUT</span> Duty Amount (${dutyPct}%)`;
+    document.querySelector('#duty-service-amt').closest('tr').querySelector('td:first-child').innerHTML =
+        `<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:0.7rem;">SWS</span> SWS Amount (${swsPct}%)`;
+    document.querySelector('#duty-gst-amt').closest('tr').querySelector('td:first-child').innerHTML =
+        `<span style="background:#dbeafe;color:#1e3a8a;padding:2px 8px;border-radius:4px;font-size:0.7rem;">GST</span> GST on Duty (${gstPct}%)`;
 }
 
 function calcProduct() {
@@ -7456,6 +7705,15 @@ function calcProduct() {
     document.getElementById('prod-benefit-profit-usd').textContent = formatUSD(profitUsd);
     document.getElementById('prod-total-margin-inr').textContent = formatINR(totalMarginInr);
     document.getElementById('prod-total-margin-usd').textContent = formatUSD(totalMarginUsd);
+
+	document.querySelector('#prod-drawback-inr').closest('tr').querySelector('td:first-child').innerHTML =
+		`<span style="background:#dbeafe;color:#1e3a8a;padding:2px 8px;border-radius:4px;font-size:0.7rem;">DBK</span> Drawback (${drawbackPct}%)`;
+	document.querySelector('#prod-rodtep-inr').closest('tr').querySelector('td:first-child').innerHTML =
+		`<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:4px;font-size:0.7rem;">ROD</span> RODTEP (${rodtepPct}%)`;
+	document.querySelector('#prod-benefit-profit-inr').closest('tr').querySelector('td:first-child').innerHTML =
+		`<span style="background:#dbeafe;color:#1e3a8a;padding:2px 8px;border-radius:4px;font-size:0.7rem;">PRF</span> Expected Profit (${profitPct}%)`;
+
+
 }
 
 function createStuffingRow(index) {
@@ -7591,6 +7849,9 @@ function calcInsurance() {
     document.getElementById('ins-total').textContent = formatINR(totalInr);
     document.getElementById('ins-total-usd').textContent = formatUSD(totalUsd);
     totalRow.style.display = 'table-footer-group';
+	
+	document.querySelector('#ins-gst-amt').closest('tr').querySelector('td:first-child').innerHTML =
+    `<span style="background:#dbeafe;color:#1e3a8a;padding:2px 8px;border-radius:4px;font-size:0.7rem;">GST</span> GST on Insurance (${gstPct}%)`;
 }
 
 function calcUSDuty() {
@@ -8228,6 +8489,7 @@ function calcOOG() {
     const cargoLm = cargoL * factor;
     const cargoWm = cargoW * factor;
     const cargoHm = cargoH * factor;
+
     let containerData = null;
     if (db.containerDimensions && db.containerDimensions.length) {
         containerData = db.containerDimensions.find(c => c.type === containerType);
@@ -8250,12 +8512,14 @@ function calcOOG() {
             '<div class="modern-section" style="padding:20px;text-align:center;color:var(--text-light);">⚠️ Please select a container type.</div>';
         return;
     }
-    const intL = parseDim(containerData.length);
-    const intW = parseDim(containerData.width);
-    const intH = parseDim(containerData.height);
-    const maxWt = parseWeight(containerData.maxWeight);
+    const intL = parseFloat(containerData.length) || 0;
+    const intW = parseFloat(containerData.width) || 0;
+    const intH = parseFloat(containerData.height) || 0;
+    const maxWt = parseFloat(containerData.maxWeight) || 0;
     const door = doorDimMap[containerType] || { w: 0, h: 0 };
     const hasDoorData = door.w > 0 && door.h > 0;
+
+    // Checks
     const intL_ok = cargoLm <= intL;
     const intW_ok = cargoWm <= intW;
     const intH_ok = cargoHm <= intH;
@@ -8264,56 +8528,68 @@ function calcOOG() {
     const isOOG = !intL_ok || !intW_ok || !intH_ok || !doorW_ok || !doorH_ok;
     const isOT = cargoWeight > maxWt;
 
-    function formatDimUnit(meters) {
-        let val = meters;
-        let unitLabel = 'm';
-        if (unit === 'cm') { val = meters * 100;
-            unitLabel = 'cm'; } else if (unit === 'inch') { val = meters / 0.0254;
-            unitLabel = 'in'; }
-        return val.toFixed(2) + ' ' + unitLabel;
+    // Exceed details
+    let exceedDetails = [];
+    if (!intL_ok) exceedDetails.push(`Length (${(cargoLm - intL).toFixed(3)}m over)`);
+    if (!intW_ok) exceedDetails.push(`Width (${(cargoWm - intW).toFixed(3)}m over)`);
+    if (!intH_ok) exceedDetails.push(`Height (${(cargoHm - intH).toFixed(3)}m over)`);
+    if (hasDoorData && !doorW_ok) exceedDetails.push(`Door Width (${(cargoWm - door.w).toFixed(3)}m over)`);
+    if (hasDoorData && !doorH_ok) exceedDetails.push(`Door Height (${(cargoHm - door.h).toFixed(3)}m over)`);
+    if (isOT) exceedDetails.push(`Weight (${(cargoWeight - maxWt).toFixed(0)} KGS over)`);
+
+    const exceedHtml = exceedDetails.length > 0
+        ? `<tr><td style="font-weight:700;color:#dc2626;">🚨 Exceed Details</td><td colspan="3" style="font-weight:700;color:#dc2626;">${exceedDetails.join('; ')}</td></tr>`
+        : '';
+
+    let statusText = '', gradientStyle = '', gradientColors = '';
+    if (isOOG && isOT) {
+        statusText = '❌ OVER DIMENSION & OVERWEIGHT';
+        gradientColors = 'linear-gradient(135deg, #ef4444, #b91c1c)';
+    } else if (isOOG) {
+        statusText = '⚠️ OVER DIMENSION (OOG)';
+        gradientColors = 'linear-gradient(135deg, #f97316, #ea580c)';
+    } else if (isOT) {
+        statusText = '⚠️ OVERWEIGHT (OT)';
+        gradientColors = 'linear-gradient(135deg, #f97316, #ea580c)';
+    } else {
+        statusText = '✅ STANDARD FIT – NO OOG / OT';
+        gradientColors = 'linear-gradient(135deg, #10b981, #059669)';
     }
-    const limitL = formatDimUnit(intL);
-    const limitW_int = formatDimUnit(intW);
-    const limitH_int = formatDimUnit(intH);
-    const cL = formatDimUnit(cargoLm);
-    const cW = formatDimUnit(cargoWm);
-    const cH = formatDimUnit(cargoHm);
-    let statusText = '',
-        colorClass = '';
-    if (isOOG && isOT) { statusText = '❌ OVER DIMENSION & OVERWEIGHT';
-        colorClass = 'modern-footer-red'; } else if (isOOG) { statusText = '⚠️ OVER DIMENSION (OOG)';
-        colorClass = 'modern-footer-orange'; } else if (isOT) { statusText = '⚠️ OVERWEIGHT (OT)';
-        colorClass = 'modern-footer-orange'; } else { statusText = '✅ STANDARD FIT – NO OOG / OT';
-        colorClass = 'modern-footer-green'; }
-    let html = `
+
+    const html = `
     <div class="modern-section">
         <div class="modern-section-title"><span>📦 Container & Cargo Breakdown</span></div>
-        <table class="modern-table">
+        <table class="modern-table" style="background: white; border-collapse: collapse; width: 100%;">
             <thead><tr><th>Component</th><th>Details / Limit</th><th>Your Cargo</th></tr></thead>
             <tbody>
-                <tr><td><span class="badge badge-blue">CTR</span> Container</td><td>${containerType}</td><td class="text-muted">Internal: ${limitL} x ${limitW_int} x ${limitH_int}</td></tr>
-                <tr><td><span class="badge badge-yellow">DOOR</span> Door</td><td>${hasDoorData ? formatDimUnit(door.w) + ' x ' + formatDimUnit(door.h) : 'N/A'}</td><td class="text-muted">Max Payload: ${maxWt.toLocaleString()} KGS</td></tr>
-                <tr><td><span class="badge badge-purple">LEN</span> Length</td><td>${limitL}</td><td>${cL}</td></tr>
-                <tr><td><span class="badge badge-purple">WID</span> Width</td><td>${limitW_int}</td><td>${cW}</td></tr>
-                <tr><td><span class="badge badge-purple">HGT</span> Height</td><td>${limitH_int}</td><td>${cH}</td></tr>
+                <tr><td><span class="badge badge-blue">CTR</span> Container</td><td>${containerType}</td><td class="text-muted">Internal: ${intL}m x ${intW}m x ${intH}m</td></tr>
+                <tr><td><span class="badge badge-yellow">DOOR</span> Door</td><td>${hasDoorData ? door.w+'m x '+door.h+'m' : 'N/A'}</td><td class="text-muted">Max Payload: ${maxWt.toLocaleString()} KGS</td></tr>
+                <tr><td><span class="badge badge-purple">LEN</span> Length</td><td>${intL}m</td><td>${cargoLm.toFixed(3)}m</td></tr>
+                <tr><td><span class="badge badge-purple">WID</span> Width</td><td>${intW}m</td><td>${cargoWm.toFixed(3)}m</td></tr>
+                <tr><td><span class="badge badge-purple">HGT</span> Height</td><td>${intH}m</td><td>${cargoHm.toFixed(3)}m</td></tr>
                 <tr><td><span class="badge badge-red">WGT</span> Weight</td><td>${maxWt.toLocaleString()} KGS</td><td>${cargoWeight.toLocaleString()} KGS</td></tr>
+                ${exceedHtml}
             </tbody>
         </table>
     </div>
     <div class="modern-section">
         <div class="modern-section-title"><span>📊 OOG / OT Analysis</span></div>
-        <table class="modern-table">
+        <table class="modern-table" style="background: white; border-collapse: collapse; width: 100%;">
             <thead><tr><th>Check</th><th>Container Limit</th><th>Your Cargo</th><th>Status</th></tr></thead>
             <tbody>
-                <tr><td>Length</td><td>${limitL}</td><td>${cL}</td><td><span class="badge ${intL_ok ? 'badge-green' : 'badge-red'}">${intL_ok ? '✅ Fit' : '❌ Exceed'}</span></td></tr>
-                <tr><td>Width (Int)</td><td>${limitW_int}</td><td>${cW}</td><td><span class="badge ${intW_ok ? 'badge-green' : 'badge-red'}">${intW_ok ? '✅ Fit' : '❌ Exceed'}</span></td></tr>
-                <tr><td>Height (Int)</td><td>${limitH_int}</td><td>${cH}</td><td><span class="badge ${intH_ok ? 'badge-green' : 'badge-red'}">${intH_ok ? '✅ Fit' : '❌ Exceed'}</span></td></tr>
+                <tr><td>Length</td><td>${intL}m</td><td>${cargoLm.toFixed(3)}m</td><td><span class="badge ${intL_ok ? 'badge-green' : 'badge-red'}">${intL_ok ? '✅ Fit' : '❌ Exceed'}</span></td></tr>
+                <tr><td>Width (Int)</td><td>${intW}m</td><td>${cargoWm.toFixed(3)}m</td><td><span class="badge ${intW_ok ? 'badge-green' : 'badge-red'}">${intW_ok ? '✅ Fit' : '❌ Exceed'}</span></td></tr>
+                <tr><td>Height (Int)</td><td>${intH}m</td><td>${cargoHm.toFixed(3)}m</td><td><span class="badge ${intH_ok ? 'badge-green' : 'badge-red'}">${intH_ok ? '✅ Fit' : '❌ Exceed'}</span></td></tr>
                 <tr><td>Weight</td><td>${maxWt.toLocaleString()} KGS</td><td>${cargoWeight.toLocaleString()} KGS</td><td><span class="badge ${!isOT ? 'badge-green' : 'badge-red'}">${!isOT ? '✅ Fit' : '❌ Overweight'}</span></td></tr>
             </tbody>
-            <tfoot><tr class="${colorClass}"><td colspan="4" class="text-center">${statusText}</td></tr></tfoot>
+            <!-- 🟢/🟠/🔴 GRADIENT FOOTER with inline styles -->
+            <tfoot style="background: transparent !important;">
+                <tr style="background: ${gradientColors} !important; color: white !important; font-weight: bold; font-size: 1.1rem;">
+                    <td colspan="4" style="padding: 8px 12px; text-align: center; background: transparent !important; color: white !important; border-radius: 0 0 8px 8px;">${statusText}</td>
+                </tr>
+            </tfoot>
         </table>
-    </div>
-    `;
+    </div>`;
     resultArea.innerHTML = html;
 }
 
@@ -8512,11 +8788,10 @@ function calcDetention() {
         if (from > 0 && to >= from) slabs.push({ from, to, rate });
     });
     if (slabs.length === 0) slabs = JSON.parse(JSON.stringify(defaultDetentionSlabs));
-    let totalDays = 0,
-        chargeableDays = 0,
-        totalUSD = 0,
-        totalINR = 0,
-        slabBreakdown = '';
+
+    let totalDays = 0, chargeableDays = 0, totalUSD = 0, totalINR = 0;
+    let slabBreakdown = '';
+
     if (pickup && ret) {
         const p = new Date(pickup);
         const r = new Date(ret);
@@ -8530,29 +8805,38 @@ function calcDetention() {
             sortedSlabs.forEach(s => {
                 const daysInSlab = Math.max(0, Math.min(chargeableDays, s.to) - s.from + 1);
                 if (daysInSlab > 0) {
-                    slabBreakdown +=
-                        `<tr><td><span class="badge badge-yellow">SLB</span> Days ${s.from}-${s.to}</td><td class="text-right">${formatUSD(daysInSlab * s.rate)}</td><td class="text-right">${formatINR(daysInSlab * s.rate * rate)}</td></tr>`;
+                    slabBreakdown += `<tr>
+                        <td><span class="badge badge-yellow">SLB</span> Days ${s.from}-${s.to}</td>
+                        <td class="text-right">${formatUSD(daysInSlab * s.rate)}</td>
+                        <td class="text-right">${formatINR(daysInSlab * s.rate * rate)}</td>
+                    </tr>`;
                 }
             });
         }
     }
+
     const resultArea = document.getElementById('det-result-area');
     let html = `
     <div class="modern-section">
         <div class="modern-section-title"><span>⏳ Detention Breakdown</span></div>
-        <table class="modern-table">
+        <table class="modern-table" style="background: white; border-collapse: collapse; width: 100%;">
             <thead><tr><th>Component</th><th>Amount (USD)</th><th>Amount (INR)</th></tr></thead>
             <tbody>
                 <tr><td><span class="badge badge-blue">DAY</span> Total Days Used</td><td class="text-right">${totalDays}</td><td class="text-right">${totalDays}</td></tr>
                 <tr><td><span class="badge badge-green">FREE</span> Free Days</td><td class="text-right">${freeDays}</td><td class="text-right">${freeDays}</td></tr>
                 <tr><td><span class="badge badge-red">CHG</span> Chargeable Days</td><td class="text-right">${chargeableDays}</td><td class="text-right">${chargeableDays}</td></tr>
                 ${slabBreakdown || '<tr><td colspan="3" class="text-muted text-center">No chargeable days to display slabs</td></tr>'}
-                <tr><td><span class="badge badge-purple">TOT</span> Total Charges</td><td class="text-right"><strong>${formatUSD(totalUSD)}</strong></td><td class="text-right"><strong>${formatINR(totalINR)}</strong></td></tr>
             </tbody>
-            <tfoot><tr class="modern-footer-green"><td colspan="3" class="text-center">GRAND TOTAL: ${formatUSD(totalUSD)} / ${formatINR(totalINR)}</td></tr></tfoot>
+            <!-- 🟢 GRADIENT TOTAL ROW with explicit inline styles -->
+            <tfoot style="background: transparent !important;">
+                <tr style="background: linear-gradient(135deg, #10b981, #059669) !important; color: white !important; font-weight: bold; font-size: 1.1rem;">
+                    <td style="padding: 8px 12px; text-align: right; background: transparent !important; color: white !important; border-radius: 0 0 0 8px;">💰 TOTAL CHARGES</td>
+                    <td style="padding: 8px 12px; text-align: right; background: transparent !important; color: white !important;">${formatUSD(totalUSD)}</td>
+                    <td style="padding: 8px 12px; text-align: right; background: transparent !important; color: white !important; border-radius: 0 0 8px 0;">${formatINR(totalINR)}</td>
+                </tr>
+            </tfoot>
         </table>
-    </div>
-    `;
+    </div>`;
     resultArea.innerHTML = html;
 }
 
@@ -9014,20 +9298,28 @@ function applyFreightMargin() {
     const margin40 = total40 * (marginPct / 100);
     const sell20 = total20 + margin20;
     const sell40 = total40 + margin40;
+
     const html = `
     <div class="modern-section">
         <div class="modern-section-title"><span>💰 Freight Cost Breakdown</span></div>
-        <table class="modern-table">
-            <thead><tr><th>Component</th><th>20 GP (USD)</th><th>40 HC (USD)</th></tr></thead>
+        <table class="modern-table" style="background: white; border-collapse: collapse; width: 100%;">
+            <thead>
+                <tr><th style="padding: 6px 12px; text-align: left;">Component</th><th style="padding: 6px 12px; text-align: right;">20 GP (USD)</th><th style="padding: 6px 12px; text-align: right;">40 HC (USD)</th></tr>
+            </thead>
             <tbody>
                 <tr><td><span class="badge badge-blue">FRT</span> Total Freight Cost</td><td class="text-right">${formatUSD(total20)}</td><td class="text-right">${formatUSD(total40)}</td></tr>
                 <tr><td><span class="badge badge-yellow">MRG</span> Margin % (${marginPct}%)</td><td class="text-right">${formatUSD(margin20)}</td><td class="text-right">${formatUSD(margin40)}</td></tr>
-                <tr><td><span class="badge badge-purple">SLP</span> Sell Price</td><td class="text-right"><strong>${formatUSD(sell20)}</strong></td><td class="text-right"><strong>${formatUSD(sell40)}</strong></td></tr>
             </tbody>
-            <tfoot><tr class="modern-footer-orange"><td colspan="3" class="text-center">FINAL SELLING PRICE: ${formatUSD(sell20)} / ${formatUSD(sell40)}</td></tr></tfoot>
+            <!-- 🟠 GRADIENT FOOTER – now a single row with label + amounts -->
+            <tfoot style="background: transparent !important;">
+                <tr style="background: linear-gradient(135deg, #f59e0b, #d97706) !important; color: white !important; font-weight: 800; font-size: 1.05rem;">
+                    <td style="padding: 8px 12px; text-align: right; background: transparent !important; color: white !important; border-radius: 0 0 0 8px;">🏷️ FINAL SELLING PRICE</td>
+                    <td style="padding: 8px 12px; text-align: right; background: transparent !important; color: white !important;">${formatUSD(sell20)}</td>
+                    <td style="padding: 8px 12px; text-align: right; background: transparent !important; color: white !important; border-radius: 0 0 8px 0;">${formatUSD(sell40)}</td>
+                </tr>
+            </tfoot>
         </table>
-    </div>
-    `;
+    </div>`;
     document.getElementById('fr-summary-area').innerHTML = html;
 }
 
@@ -9319,7 +9611,7 @@ function buildCompactEmailHTML(data, mode) {
     let grandTotal = 0;
     const chargesWithINR = {};
 
-    // Calculate charges (unchanged)
+    // Same calculation as before...
     Object.entries(data.charges || {}).forEach(([charge, c]) => {
         let unitSellAmt = c.amount;
         let unitBuyAmt = c.buyAmount || 0;
@@ -9361,121 +9653,103 @@ function buildCompactEmailHTML(data, mode) {
         grandTotal += sellINR;
     });
 
-    // Font settings
     const fontStack = "'Aptos', 'Segoe UI', Arial, sans-serif";
     const dataSize = '10px';
     const headingSize = '12px';
     const titleSize = '13px';
-
-    // Consistent padding for all tables
     const thPadding = '4px 8px';
     const tdPadding = '4px 8px';
-
-    // Column widths for charge tables
-    const colWidths = {
-        num: '5%',
-        charge: '30%',
-        sell: '18%',
-        curr: '10%',
-        inr: '22%',
-        basis: '15%'
-    };
-
-    // Customer details column widths
-    const custColWidths = {
-        label1: '15%',
-        value1: '35%',
-        label2: '15%',
-        value2: '35%'
-    };
-
-    // Table width
+    const colWidths = { num: '5%', charge: '30%', curr: '10%', sell: '18%', basis: '15%', inr: '22%' };
+    const custColWidths = { label1: '15%', value1: '35%', label2: '15%', value2: '35%' };
     const tableWidth = '13cm';
     const maxTableWidth = '16cm';
 
-    // Build the HTML
-    let html = `<div style="max-width:${maxTableWidth}; min-width:${tableWidth}; width:auto; margin:0 auto; font-family:${fontStack}; background:#ffffff; padding:4px; box-sizing:border-box; color:#1a1a1a; font-size:${dataSize};">
-
-        <!-- Greeting lines -->
-        <p style="margin:0 0 4px 0; font-size:${titleSize}; line-height:1.4;">Dear Sir/Madam,</p>
-		<br>
-        <p style="margin:0 0 10px 0; font-size:${titleSize}; line-height:1.4;">Good Day !</p>
-		       
-		<!-- Title & Quote on ONE line -->
-        <div style="font-size:${titleSize}; font-weight:800; color:#1e3a8a;">${modeLabel} QUOTATION / Quote: ${data.quoteNumber || 'DRAFT'}</div>
-        
-        <!-- TWO line breaks after title -->
+    let html = `<div style="max-width:${maxTableWidth};min-width:${tableWidth};width:auto;margin:0 auto;font-family:${fontStack};background:#ffffff;padding:4px;box-sizing:border-box;color:#1a1a1a;font-size:${dataSize};">
+        <p style="margin:0 0 4px 0;font-size:${titleSize};line-height:1.4;">Dear Sir/Madam,</p>
+        <br>
+        <p style="margin:0 0 10px 0;font-size:${titleSize};line-height:1.4;">Good Day !</p>
+        <div style="font-size:${titleSize};font-weight:800;color:#1e3a8a;">${modeLabel} QUOTATION / Quote: ${data.quoteNumber || 'DRAFT'}</div>
         <br>
 
-        <!-- Customer & Shipment Details -->
-        <div style="font-weight:700; font-size:${headingSize}; border-bottom:2px solid #1e3a8a; padding-bottom:2px;">Customer & Shipment Details</div>
-        <!-- ONE line break after heading -->
+        <!-- Customer & Shipment Details (new order) -->
+        <div style="font-weight:700;font-size:${headingSize};border-bottom:2px solid #1e3a8a;padding-bottom:2px;">Customer & Shipment Details</div>
         <br>
-        <table style="width:${tableWidth}; min-width:${tableWidth}; max-width:100%; border-collapse:collapse; margin-top:0; font-size:${dataSize};">
+        <table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
             <colgroup>
                 <col style="width:${custColWidths.label1};"><col style="width:${custColWidths.value1};"><col style="width:${custColWidths.label2};"><col style="width:${custColWidths.value2};">
             </colgroup>
-            <tr><th style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; background:#f1f5f9; font-weight:700; white-space:nowrap;">Client</th><td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; white-space:nowrap;">${toUpper(data.client)}</td><th style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; background:#f1f5f9; font-weight:700; white-space:nowrap;">Quote Date</th><td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; white-space:nowrap;">${data.autoDate||'-'}</td></tr>
-            <tr><th style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; background:#f1f5f9; font-weight:700; white-space:nowrap;">Carrier</th><td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; white-space:nowrap;">${toUpper(data.carrier)}</td><th style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; background:#f1f5f9; font-weight:700; white-space:nowrap;">Incoterm</th><td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; white-space:nowrap;">${toUpper(data.incoterm)}</td></tr>
-            <tr><th style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; background:#f1f5f9; font-weight:700; white-space:nowrap;">POL</th><td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; white-space:nowrap;">${toUpper(data.pol)}</td><th style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; background:#f1f5f9; font-weight:700; white-space:nowrap;">POD</th><td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; white-space:nowrap;">${toUpper(data.pod)}</td></tr>
-            <tr><th style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; background:#f1f5f9; font-weight:700; white-space:nowrap;">Commodity</th><td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; white-space:nowrap;">${toUpper(data.commodity)}</td><th style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; background:#f1f5f9; font-weight:700; white-space:nowrap;">Weight (KGS)</th><td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; white-space:nowrap;">${data.weight||'-'}</td></tr>
-            <tr><th style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; background:#f1f5f9; font-weight:700; white-space:nowrap;">${mode==='sea'?'Container':'Volume (CBM)'}</th><td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; white-space:nowrap;">${mode==='sea'?toUpper(data.container):(data.volume||'-')}</td><th style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; background:#f1f5f9; font-weight:700; white-space:nowrap;">Transit Time</th><td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; white-space:nowrap;">${transitDisplay}</td></tr>
-            <tr><th style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; background:#f1f5f9; font-weight:700; white-space:nowrap;">Validity Date</th><td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; white-space:nowrap;">${validityDisplay}</td><th style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; background:#f1f5f9; font-weight:700; white-space:nowrap;">Status</th><td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; white-space:nowrap;">${toUpper(data.status)}</td></tr>
+            <tbody>
+                <tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Client</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.client)}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Status</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.status)}</td></tr>
+                <tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">POL</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.pol)}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">POD</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.pod)}</td></tr>
+                <tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Commodity</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.commodity)}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Carrier</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.carrier)}</td></tr>
+                <tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Weight (KGS)</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${data.weight||'-'}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Incoterm</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.incoterm)}</td></tr>
+                <tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">${mode === 'sea' ? 'Container' : 'Volume (CBM)'}</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${mode === 'sea' ? toUpper(data.container) : (data.volume || '-')}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Transit Time</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${transitDisplay}</td></tr>
+                <tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Quote Date</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${data.autoDate||'-'}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Validity Date</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${validityDisplay}</td></tr>
+            </tbody>
         </table>
-        `;
+        <br>`;
 
-    // Charge categories (unchanged)
+    // Charges – with running Sr. No., Basis before INR
     if (Object.keys(chargesWithINR).length > 0) {
+        let srNo = 1;
         Object.entries(order).forEach(([category, charges]) => {
             if (charges.length === 0) return;
             const catEntries = charges.filter(ch => chargesWithINR[ch]);
             if (catEntries.length === 0) return;
 
-            html += `<br>
-                <div style="font-weight:700; font-size:${headingSize}; border-bottom:2px solid #1e3a8a; padding-bottom:2px;">${category.toUpperCase()}</div>
+            html += `<div style="font-weight:700;font-size:${headingSize};border-bottom:2px solid #1e3a8a;padding-bottom:2px;">${category.toUpperCase()}</div>
                 <br>
-                <table style="width:${tableWidth}; min-width:${tableWidth}; max-width:100%; border-collapse:collapse; margin-top:0; font-size:${dataSize};">
+                <table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
                     <colgroup>
-                        <col style="width:${colWidths.num};"><col style="width:${colWidths.charge};"><col style="width:${colWidths.sell};"><col style="width:${colWidths.curr};"><col style="width:${colWidths.inr};"><col style="width:${colWidths.basis};">
+                        <col style="width:${colWidths.num};"><col style="width:${colWidths.charge};"><col style="width:${colWidths.curr};"><col style="width:${colWidths.sell};"><col style="width:${colWidths.basis};"><col style="width:${colWidths.inr};">
                     </colgroup>
-                    <tr><th style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; background:#f1f5f9; font-weight:700; white-space:nowrap;">#</th><th style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; background:#f1f5f9; font-weight:700; white-space:nowrap;">Charge</th><th style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; background:#f1f5f9; font-weight:700; white-space:nowrap;">Sell</th><th style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; background:#f1f5f9; font-weight:700; white-space:nowrap;">Curr</th><th style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; background:#f1f5f9; font-weight:700; white-space:nowrap;">INR</th><th style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; background:#f1f5f9; font-weight:700; white-space:nowrap;">Basis</th></tr>`;
+                    <thead>
+                        <tr>
+                            <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#f1f5f9;font-weight:700;">Sr. No</th>
+                            <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Charge Type</th>
+                            <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#f1f5f9;font-weight:700;">Currency</th>
+                            <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:right;background:#f1f5f9;font-weight:700;">Sell Amount</th>
+                            <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#f1f5f9;font-weight:700;">Basis</th>
+                            <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:right;background:#f1f5f9;font-weight:700;">INR Equivalent</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
             let catTotal = 0;
-            catEntries.forEach((ch, i) => {
+            catEntries.forEach((ch) => {
                 const c = chargesWithINR[ch];
                 catTotal += c.sellINR;
                 const isFreight = ch.toUpperCase() === 'FREIGHT' || ch.toUpperCase() === 'AIR FREIGHT';
-                const rowStyle = isFreight ? 'background:#fee2e2; font-weight:700; color:#dc2626;' : '';
+                const rowStyle = isFreight ? 'background:#fee2e2;font-weight:700;color:#dc2626;' : '';
+                const basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
                 html += `<tr style="${rowStyle}">
-                            <td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; white-space:nowrap;">${i+1}</td>
-                            <td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; white-space:nowrap;">${ch.toUpperCase()}</td>
-                            <td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; white-space:nowrap;">${Number(c.unitSellAmt).toLocaleString('en-IN')}</td>
-                            <td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; white-space:nowrap;">${c.currency}</td>
-                            <td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; white-space:nowrap;">${formatINR(c.sellINR)}</td>
-                            <td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; white-space:nowrap;">${c.basis}</td>
-                        </tr>`;
+                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;">${srNo++}</td>
+                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${ch.toUpperCase()}</td>
+                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;">${c.currency}</td>
+                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;">${Number(c.unitSellAmt).toLocaleString('en-IN')}</td>
+                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;">${basisDisplay}</td>
+                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;">${formatINR(c.sellINR)}</td>
+                </tr>`;
             });
-            html += `<tr style="background:#f1f5f9;"><td colspan="5" style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:right; font-weight:700; white-space:nowrap;">Subtotal:</td><td style="border:1px solid #d1d5db; padding:${tdPadding}; text-align:left; font-weight:700; white-space:nowrap;">${formatINR(catTotal)}</td></tr></table>`;
+            html += `<tr style="background:#f1f5f9;font-weight:700;">
+                <td colspan="4" style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;">Subtotal:</td>
+                <td style="border:1px solid #d1d5db;padding:${tdPadding};"></td>
+                <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;">${formatINR(catTotal)}</td>
+            </tr></tbody></table><br>`;
         });
 
-        const totalLabel = (mode === 'sea' || mode === 'lcl') ? 'GRAND TOTAL (INR) + GST' : 'GRAND TOTAL (INR)';
-        html += `<br>
-            <table style="width:${tableWidth}; min-width:${tableWidth}; max-width:100%; border-collapse:collapse; margin-top:0; font-size:${headingSize};">
-                <colgroup>
-                    <col style="width:80%;"><col style="width:20%;">
-                </colgroup>
-                <tr style="background:#10b981; color:white; font-weight:700;">
-                    <td style="border:1px solid #059669; padding:${thPadding}; text-align:right; white-space:nowrap;">${totalLabel}</td>
-                    <td style="border:1px solid #059669; padding:${thPadding}; text-align:left; white-space:nowrap;">${formatINR(grandTotal)}</td>
-                </tr>
-            </table>`;
+        html += `<table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;font-size:${headingSize};">
+            <colgroup><col style="width:80%;"><col style="width:20%;"></colgroup>
+            <tr style="background:#10b981;color:white;font-weight:700;">
+                <td colspan="5" style="border:1px solid #059669;padding:${thPadding};text-align:right;">GRAND TOTAL (INR)</td>
+                <td style="border:1px solid #059669;padding:${thPadding};text-align:right;">${formatINR(grandTotal)}</td>
+            </tr>
+        </table>`;
     }
 
-    // Remarks
     if (data.remarks) {
-        html += `<br>
-            <div style="font-weight:700; font-size:${headingSize}; border-bottom:2px solid #1e3a8a; padding-bottom:2px;">Remarks</div>
-            <table style="width:${tableWidth}; min-width:${tableWidth}; max-width:100%; border-collapse:collapse; margin-top:0; font-size:${dataSize};">
-                <tr><td style="border:1px solid #d1d5db; padding:${thPadding}; text-align:left; white-space:normal; line-height:1.4;">${data.remarks.toUpperCase()}</td></tr>
+        html += `<br><div style="font-weight:700;font-size:${headingSize};border-bottom:2px solid #1e3a8a;padding-bottom:2px;">Remarks</div>
+            <table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
+                <tr><td style="border:1px solid #d1d5db;padding:${thPadding};white-space:normal;line-height:1.4;">${data.remarks.toUpperCase()}</td></tr>
             </table>`;
     }
 
@@ -9502,27 +9776,10 @@ function previewDsrShipment(idx) {
 function buildShipmentPreviewHTML(s, mode) {
     const userName = getLoggedInUserName() || db.defaultUser || 'N/A';
     const modeLabel = mode === 'sea' ? 'SEA SHIPMENT DSR' : 'AIR SHIPMENT DSR';
-    
-    // ✅ FIX FOR "undefined": Safe Value Getter
     const getVal = (val) => (val !== undefined && val !== null && val !== '') ? val : '-';
 
-    // --- Calculate Charges ---
-    let chargeRows = '';
-    let totalSell = 0;
+    // No charge calculations – just display basic info
 
-    if (mode === 'sea') {
-        totalSell = s.sell || 0;
-        chargeRows = `<tr><td>Freight</td><td>${(s.sell || 0).toFixed(2)}</td><td>INR</td><td>${formatINR(s.sell || 0)}</td></tr>`;
-        Object.entries(s.carrierCharges || {}).forEach(([k, v]) => { if (v > 0) chargeRows += `<tr><td>${k}</td><td>${v.toFixed(2)}</td><td>INR</td><td>${formatINR(v)}</td></tr>`; });
-        Object.entries(s.otherCharges || {}).forEach(([k, v]) => { if (v > 0) chargeRows += `<tr><td>${k}</td><td>${v.toFixed(2)}</td><td>INR</td><td>${formatINR(v)}</td></tr>`; });
-    } else {
-        totalSell = s.sellPK || 0;
-        chargeRows = `<tr><td>Sell PK</td><td>${(s.sellPK || 0).toFixed(2)}</td><td>INR</td><td>${formatINR(s.sellPK || 0)}</td></tr>`;
-        chargeRows += `<tr><td>Buy PK</td><td>${(s.buyPK || 0).toFixed(2)}</td><td>INR</td><td>${formatINR(s.buyPK || 0)}</td></tr>`;
-        Object.entries(s.quoteCharges || {}).forEach(([k, v]) => { if (v > 0) chargeRows += `<tr><td>${k}</td><td>${v.toFixed(2)}</td><td>INR</td><td>${formatINR(v)}</td></tr>`; });
-    }
-
-    // --- Build Claymorphism UI with Center Align & Dark Blue Labels ---
     return `
     <div style="background: #f0f2f5; color: #1a1a1a; font-family: 'Segoe UI', Arial, sans-serif; max-width: 100%; margin: 0 auto; padding: 16px; border-radius: 20px; box-shadow: 12px 12px 24px rgba(0,0,0,0.06), -12px -12px 24px rgba(255,255,255,0.9);">
         
@@ -9538,34 +9795,16 @@ function buildShipmentPreviewHTML(s, mode) {
                 ['Code', s.code], ['Type', s.type || s.mode], ['Shipper', s.shipper], ['POL', s.pol], ['POD', s.pod],
                 ['Shipping Line', s.liner], ['Cargo Status', s.cargoStatus], ['Docs Status', s.docsStatus],
                 ['Booking No.', s.bookingNo || s.jobBkg], ['Container No.', s.containerNo], ['ETD', s.etd || s.dd],
-                ['ETA', s.eta], ['Commodity', s.commodity], ['Weight (KGS)', s.weight || s.grossWeight],
-                ['Sell', formatINR(s.sell || s.sellPK || 0)], ['Buy', formatINR(s.buy || s.buyPK || 0)],
-                ['Margin', formatINR((s.sell || s.sellPK || 0) - (s.buy || s.buyPK || 0))]
+                ['ETA', s.eta], ['Commodity', s.commodity], ['Weight (KGS)', s.weight || s.grossWeight]
             ].map(([label, value]) => `
                 <div style="background: #ffffff; padding: 10px 12px; border-radius: 14px; box-shadow: inset 2px 2px 6px rgba(255,255,255,0.8), inset -2px -2px 6px rgba(0,0,0,0.03), 4px 4px 8px rgba(0,0,0,0.02); text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                    <div style="font-size: 1.rem; font-weight: 700; color: #1e3a8a; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px;">${label}</div>
-                    <div style="font-size: 1.rem; font-weight: 600; color: #f70a31; text-transform: uppercase; word-break: break-word;">${getVal(value)}</div>
+                    <div style="font-size: 0.7rem; font-weight: 700; color: #1e3a8a; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px;">${label}</div>
+                    <div style="font-size: 0.9rem; font-weight: 600; color: #0f172a; word-break: break-word;">${getVal(value)}</div>
                 </div>
             `).join('')}
         </div>
 
-        <!-- Modern Table -->
-        <div style="background: #ffffff; border-radius: 16px; padding: 12px; box-shadow: 4px 4px 10px rgba(0,0,0,0.03); margin-top: 12px;">
-            <div style="font-size: 1.1rem; font-weight: 700; color: #1e3a8a; margin-bottom: 8px; padding-left: 4px; text-align: center;">📑 Charge Breakdown</div>
-            <table style="width:100%; border-collapse: collapse; font-size: 0.9rem; border-radius: 8px; overflow: hidden;">
-                <thead style="background: #1e3a8a; color: white;">
-                    <tr><th style="padding: 6px 8px; text-align: center;">Charge</th><th style="padding: 6px 8px; text-align: center;">Amount</th><th style="padding: 6px 8px; text-align: center;">Currency</th><th style="padding: 6px 8px; text-align: center;">INR</th></tr>
-                </thead>
-                <tbody style="background: #dcf0f2;">
-                    ${chargeRows || '<tr><td colspan="4" style="padding:10px; text-align:center; color: #94a3b8;">No charges added.</td></tr>'}
-                </tbody>
-                <tfoot style="background: #f8fafc; font-weight: bold; border-top: 1px solid #e2e8f0;">
-                    <tr><td colspan="3" style="padding: 6px 8px; text-align: right;">TOTAL (INR)</td><td style="padding: 6px 8px; text-align: center;">${formatINR(totalSell)}</td></tr>
-                </tfoot>
-            </table>
-        </div>
-
-        <!-- Remarks -->
+        <!-- Remarks (if any) -->
         ${getVal(s.remarks) !== '-' ? `
         <div style="background: #ffffff; margin-top: 14px; padding: 10px 12px; border-radius: 14px; box-shadow: 4px 4px 10px rgba(0,0,0,0.03); text-align: center;">
             <div style="font-size: 0.65rem; font-weight: 700; color: #1e3a8a; text-transform: uppercase; letter-spacing: 0.4px;">Remarks</div>
@@ -9588,79 +9827,99 @@ function buildDsrPDFDefinition(s, mode) {
     const modeLabel = mode === 'sea' ? 'SEA SHIPMENT DSR' : 'AIR SHIPMENT DSR';
     const toUpper = (val) => val ? String(val).toUpperCase() : '-';
 
-    // 🟢 SAFE FORMATTING: Direct function to avoid external dependency calls
-    const formatINRSafe = (n) => {
-        const val = parseFloat(n) || 0;
-        return '₹ ' + val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    };
+    // Helper to get value or '-'
+    const getVal = (val) => (val !== undefined && val !== null && val !== '') ? val : '-';
 
-    let totalSell = 0, totalBuy = 0, chargeRows = [];
+    // Build details rows (without charges)
+    const details = [
+        ['Code', getVal(s.code)],
+        ['Type', getVal(s.type || s.mode)],
+        ['Shipper', getVal(s.shipper)],
+        ['POL', getVal(s.pol)],
+        ['POD', getVal(s.pod)],
+        ['Shipping Line', getVal(s.liner)],
+        ['Cargo Status', getVal(s.cargoStatus)],
+        ['Docs Status', getVal(s.docsStatus)],
+        ['Booking No.', getVal(s.bookingNo || s.jobBkg)],
+        ['Container No.', getVal(s.containerNo)],
+        ['ETD', getVal(s.etd || s.dd)],
+        ['ETA', getVal(s.eta)],
+        ['Commodity', getVal(s.commodity)],
+        ['Weight (KGS)', getVal(s.weight || s.grossWeight)]
+    ];
 
-    // Calculate Totals (Mandatory fallback for null/undefined/NaN)
-    if (mode === 'sea') {
-        totalSell = parseFloat(s.sell) || 0;
-        totalBuy = parseFloat(s.buy) || 0;
-        chargeRows.push([{ text: 'Freight', alignment: 'left' }, { text: Number(totalSell).toLocaleString('en-IN'), alignment: 'right' }, { text: 'INR', alignment: 'center' }, { text: formatINRSafe(totalSell), alignment: 'right' }]);
-        Object.entries(s.carrierCharges || {}).forEach(([k, v]) => { if (v > 0) chargeRows.push([{ text: k, alignment: 'left' }, { text: Number(v).toLocaleString('en-IN'), alignment: 'right' }, { text: 'INR', alignment: 'center' }, { text: formatINRSafe(v), alignment: 'right' }]); });
-        Object.entries(s.otherCharges || {}).forEach(([k, v]) => { if (v > 0) chargeRows.push([{ text: k, alignment: 'left' }, { text: Number(v).toLocaleString('en-IN'), alignment: 'right' }, { text: 'INR', alignment: 'center' }, { text: formatINRSafe(v), alignment: 'right' }]); });
-    } else {
-        totalSell = parseFloat(s.sellPK) || 0;
-        totalBuy = parseFloat(s.buyPK) || 0;
-        chargeRows.push([{ text: 'Per KG - Sell PK', alignment: 'left' }, { text: Number(totalSell).toLocaleString('en-IN'), alignment: 'right' }, { text: 'INR', alignment: 'center' }, { text: formatINRSafe(totalSell), alignment: 'right' }]);
-        chargeRows.push([{ text: 'Per KG - Buy PK', alignment: 'left' }, { text: Number(totalBuy).toLocaleString('en-IN'), alignment: 'right' }, { text: 'INR', alignment: 'center' }, { text: formatINRSafe(totalBuy), alignment: 'right' }]);
-        Object.entries(s.quoteCharges || {}).forEach(([k, v]) => { if (v > 0) chargeRows.push([{ text: k, alignment: 'left' }, { text: Number(v).toLocaleString('en-IN'), alignment: 'right' }, { text: 'INR', alignment: 'center' }, { text: formatINRSafe(v), alignment: 'right' }]); });
+    // Build PDF content
+    const content = [];
+
+    // Company header
+    content.push(
+        { text: db.companyName || 'GATEWAY EXIM', style: 'companyName' },
+        { text: db.companyAddress || '', style: 'companyAddress' },
+        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2, lineColor: '#1e3a8a' }] },
+        { text: ' ' }
+    );
+
+    // Title
+    content.push({
+        columns: [
+            { text: modeLabel, style: 'title', alignment: 'left' },
+            { text: 'Ref: ' + getVal(s.code), style: 'quoteNum', alignment: 'right' }
+        ]
+    });
+
+    // Details table (2 columns per row)
+    const detailBody = [];
+    for (let i = 0; i < details.length; i += 2) {
+        const row = [
+            { text: details[i][0], style: 'detailLabel' },
+            { text: details[i][1] },
+            (i+1 < details.length) ? { text: details[i+1][0], style: 'detailLabel' } : { text: '' },
+            (i+1 < details.length) ? { text: details[i+1][1] } : { text: '' }
+        ];
+        detailBody.push(row);
     }
 
-    const margin = totalSell - totalBuy;
+    content.push({
+        table: {
+            widths: ['*', '*', '*', '*'],
+            body: detailBody
+        },
+        layout: {
+            hLineWidth: function() { return 1; },
+            vLineWidth: function() { return 1; },
+            hLineColor: '#d1d5db',
+            vLineColor: '#d1d5db',
+            fillColor: function(rowIndex) {
+                return (rowIndex % 2 === 0) ? '#f1f5f9' : null;
+            }
+        },
+        margin: [0, 10, 0, 10]
+    });
+
+    // Remarks (if any)
+    if (s.remarks) {
+        content.push(
+            { text: 'Remarks', style: 'categoryHeader' },
+            { text: s.remarks.toUpperCase(), margin: [5, 5] }
+        );
+    }
+
+    // Footer
+    content.push(
+        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: '#e2e8f0' }] },
+        { text: 'Generated on ' + new Date().toLocaleString('en-IN'), alignment: 'center', fontSize: 8, color: '#64748b' },
+        { text: 'Prepared By: ' + userName, alignment: 'center', fontSize: 8, color: '#64748b', margin: [0, 2, 0, 0] }
+    );
 
     return {
-        content: [
-            { text: db.companyName || 'GATEWAY EXIM', style: 'companyName' },
-            { text: db.companyAddress || '', style: 'companyAddress' },
-            { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2, lineColor: '#1e3a8a' }] },
-            { text: ' ' },
-            { columns: [{ text: modeLabel, style: 'title', alignment: 'left' }, { text: 'Ref: ' + (s.code || s.jobNo || ''), style: 'quoteNum', alignment: 'right' }] },
-            
-            // 🟢 FIXED TABLE LAYOUT: hLineWidth aur vLineWidth ko function banaya gaya hai
-            { table: { widths: ['*', '*', '*', '*'], body: [
-                [{ text: 'Shipper', style: 'detailLabel' }, { text: toUpper(s.shipper) }, { text: 'Date', style: 'detailLabel' }, { text: s.date || '-' }],
-                [{ text: 'Carrier / Liner', style: 'detailLabel' }, { text: toUpper(s.liner) }, { text: 'Status', style: 'detailLabel' }, { text: toUpper(s.cargoStatus || 'Booked') }],
-                [{ text: 'POL', style: 'detailLabel' }, { text: toUpper(s.pol) }, { text: 'POD', style: 'detailLabel' }, { text: toUpper(s.pod) }],
-                [{ text: 'Commodity', style: 'detailLabel' }, { text: toUpper(s.commodity || s.remarks || '-') }, { text: 'Weight (KGS)', style: 'detailLabel' }, { text: s.weight || '-' }]
-            ]}, 
-            layout: { 
-                hLineWidth: function(i, node) { return 1; },
-                vLineWidth: function(i, node) { return 1; },
-                hLineColor: '#d1d5db', 
-                vLineColor: '#d1d5db', 
-                fillColor: function(rowIndex) { return (rowIndex % 2 === 0) ? '#f1f5f9' : null; } 
-            }, margin: [0, 10, 0, 10] },
-
-            // Charges Breakdown
-            { text: 'Charge Breakdown', style: 'categoryHeader' },
-            { table: { widths: ['*', 'auto', 'auto', 'auto'], body: [
-                [{ text: 'Charge Type', style: 'Aptos', alignment: 'left' }, { text: 'Amount', style: 'Aptos', alignment: 'right' }, { text: 'Currency', style: 'Aptos', alignment: 'center' }, { text: 'INR Equivalent', style: 'Aptos', alignment: 'right' }],
-                ...chargeRows,
-                // 🟢 FIXED TOTAL ROWS: colSpan: 4 use kiya aur Label+Amount ko ek hi cell me merge kar diya (Ab malformed row error kabhi nahi aayega)
-                [{ text: 'TOTAL BUY: ' + formatINRSafe(totalBuy), colSpan: 4, alignment: 'right', bold: true }],
-                [{ text: 'TOTAL SELL: ' + formatINRSafe(totalSell), colSpan: 4, alignment: 'right', bold: true }],
-                [{ text: 'MARGIN: ' + formatINRSafe(margin), colSpan: 4, alignment: 'right', bold: true, color: margin < 0 ? '#dc2626' : '#10b981' }]
-            ]}, 
-            layout: { 
-                hLineWidth: function(i, node) { return 1; },
-                vLineWidth: function(i, node) { return 1; },
-                hLineColor: '#d1d5db', 
-                vLineColor: '#d1d5db' 
-            }, margin: [0, 5, 0, 10] }
-        ],
+        content: content,
         styles: {
             companyName: { fontSize: 14, bold: true, color: '#1e3a8a' },
             companyAddress: { fontSize: 9, color: '#64748b', margin: [0, 2, 0, 4] },
             title: { fontSize: 18, bold: true, color: '#1e3a8a' },
             quoteNum: { fontSize: 12, bold: true, color: '#d97706' },
             detailLabel: { fontSize: 11, bold: true, color: '#334155' },
-            categoryHeader: { fontSize: 11, bold: true, color: '#1e3a8a', margin: [0, 8, 0, 4] },
-            Aptos: { fontSize: 11, bold: true, color: 'white' }
+            categoryHeader: { fontSize: 11, bold: true, color: '#1e3a8a', margin: [0, 8, 0, 4] }
         },
         defaultStyle: { fontSize: 10 }
     };
@@ -9674,28 +9933,16 @@ function downloadDsrPDF(idx) {
         const s = db.shipments[idx];
         if (!s) return alert('Shipment not found.');
 
-        // 🟢 Debug Check 1: Is pdfMake loaded?
         if (typeof pdfMake === 'undefined') {
-            alert('❌ Error: pdfMake library is not loaded!\n\nPlease check your index.html file. You MUST include these lines before closing </body> tag:\n<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"><\/script>\n<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"><\/script>');
+            alert('pdfMake library is not loaded.');
             return;
         }
 
-        // 🟢 Debug Check 2: Is data valid?
-        if (!s.type && !s.mode) {
-            console.warn('DSR Shipment missing "type" or "mode":', s);
-        }
-
-        console.log('Generating PDF for Shipment:', s.code || s.jobNo);
         const docDefinition = buildDsrPDFDefinition(s, s.type === 'SEA' ? 'sea' : 'air');
-        
-        // 🟢 Debug Check 3: PDF download trigger
-        console.log('Calling pdfMake...');
         pdfMake.createPdf(docDefinition).download(`${s.type || 'SHIPMENT'}_${s.code || 'UNKNOWN'}.pdf`);
-        
     } catch (e) {
-        // 🟢 This will ALWAYS show the exact error if something goes wrong
-        alert('❌ PDF generation failed!\n\nError Message: ' + e.message + '\n\nLine/Stack trace details have been printed to the console (Press F12 -> Console).');
-        console.error('PDF Generation Full Error:', e);
+        alert('PDF generation failed: ' + e.message);
+        console.error(e);
     }
 }
 // ==================== BL DRAFT FUNCTIONS ====================
@@ -10694,134 +10941,52 @@ function bulkExportDefaultCharges() {
         return;
     }
 
-    const wb = XLSX.utils.book_new();
-
-    function flattenCharges(base, chargesObj) {
-        const rows = [];
-        for (const [chargeName, chargeData] of Object.entries(chargesObj || {})) {
-            rows.push({
-                ...base,
-                'Charge Name': chargeName,
-                'Sell Amount': chargeData.amount || '',
-                'Sell Currency': chargeData.currency || 'INR',
-                'Buy Amount': chargeData.buyAmount || '',
-                'Buy Currency': chargeData.buyCurrency || 'INR',
-                'Basis': chargeData.basis || 'Normal'
-            });
-        }
-        return rows;
-    }
-
-    // Sea Default
-    let seaRows = [];
-    db.defaultSeaCharges.forEach(r => {
-        const base = { Carrier: r.carrier || 'ALL', POL: r.pol, Container: r.container || '', Commodity: r.commodity || '' };
-        seaRows = seaRows.concat(flattenCharges(base, r.charges));
-    });
-    if (seaRows.length) {
-        const ws = XLSX.utils.json_to_sheet(seaRows);
-        XLSX.utils.book_append_sheet(wb, ws, 'Sea Default');
-    }
-
-    // Air Default
-    let airRows = [];
-    db.defaultAirCharges.forEach(r => {
-        const base = { POL: r.pol, Commodity: r.commodity || '' };
-        airRows = airRows.concat(flattenCharges(base, r.charges));
-    });
-    if (airRows.length) {
-        const ws = XLSX.utils.json_to_sheet(airRows);
-        XLSX.utils.book_append_sheet(wb, ws, 'Air Default');
-    }
-
-    // LCL Default
-    let lclRows = [];
-    db.defaultLclCharges.forEach(r => {
-        const base = { POL: r.pol, Commodity: r.commodity || '' };
-        lclRows = lclRows.concat(flattenCharges(base, r.charges));
-    });
-    if (lclRows.length) {
-        const ws = XLSX.utils.json_to_sheet(lclRows);
-        XLSX.utils.book_append_sheet(wb, ws, 'Lcl Default');
-    }
-
-    XLSX.writeFile(wb, `DefaultCharges_Backup_${new Date().toISOString().split('T')[0]}.xlsx`);
-    alert('✅ Default charges exported.');
-}
-
-// ---------- 2. Export Carrier-Specific Charges ----------
-function bulkExportCarrierCharges() {
-    if (typeof XLSX === 'undefined') {
-        alert('XLSX library not loaded. Please refresh and try again.');
-        return;
-    }
-
     const rows = [];
 
-    // Helper: flatten charges into rows with a Mode column
-    function flattenCharges(mode, base, chargesObj) {
-        for (const [chargeName, chargeData] of Object.entries(chargesObj || {})) {
-            rows.push({
-                Mode: mode,
-                ...base,
-                'Charge Name': chargeName,
-                'Sell Amount': chargeData.amount || '',
-                'Sell Currency': chargeData.currency || 'INR',
-                'Buy Amount': chargeData.buyAmount || '',
-                'Buy Currency': chargeData.buyCurrency || 'INR',
-                'Basis': chargeData.basis || 'Normal'
+    function addDefaultChargeRows(mode, records) {
+        records.forEach(rec => {
+            const charges = rec.charges || {};
+            Object.entries(charges).forEach(([key, val]) => {
+                let container = '';
+                let chargeName = key;
+                if (key.endsWith('_20')) {
+                    container = '20 GP';
+                    chargeName = key.slice(0, -3);
+                } else if (key.endsWith('_40')) {
+                    container = '40 HC';
+                    chargeName = key.slice(0, -3);
+                }
+                rows.push({
+                    'Mode': mode.toUpperCase(),
+                    'POL': rec.pol,
+                    'Commodity': rec.commodity || '',
+                    'Charge Name': chargeName,
+                    'Container': container,
+                    'Sell Amount': val.amount || 0,
+                    'Buy Amount': val.buyAmount || 0,
+                    'Currency': val.currency || 'INR'
+                });
             });
-        }
+        });
     }
 
-    // 1. SEA Carrier Charges
-    db.carrierChargesSeaLcl.forEach(r => {
-        if (r.mode === 'sea') {
-            const base = {
-                Carrier: r.carrier,
-                POL: r.pol,
-                Container: r.container || '',
-                Commodity: r.commodity || ''
-            };
-            flattenCharges('SEA', base, r.charges);
-        }
-    });
-
-    // 2. LCL Carrier Charges
-    db.carrierChargesSeaLcl.forEach(r => {
-        if (r.mode === 'lcl') {
-            const base = {
-                Carrier: r.carrier,
-                POL: r.pol,
-                Container: r.container || '',
-                Commodity: r.commodity || ''
-            };
-            flattenCharges('LCL', base, r.charges);
-        }
-    });
-
-    // 3. AIR Carrier Charges
-    db.carrierChargesAir.forEach(r => {
-        const base = {
-            Carrier: r.carrier,
-            POL: r.pol,
-            Container: '',
-            Commodity: r.commodity || ''
-        };
-        flattenCharges('AIR', base, r.charges);
-    });
+    addDefaultChargeRows('sea', db.defaultSeaCharges || []);
+    addDefaultChargeRows('air', db.defaultAirCharges || []);
+    addDefaultChargeRows('lcl', db.defaultLclCharges || []);
 
     if (rows.length === 0) {
-        alert('⚠️ No carrier-specific charges found to export.');
+        alert('⚠️ No default charges found to export.');
         return;
     }
 
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Carrier Charges');
-    XLSX.writeFile(wb, `CarrierCharges_Backup_${new Date().toISOString().split('T')[0]}.xlsx`);
-    alert('✅ Carrier-specific charges exported (all modes in one sheet).');
+    XLSX.utils.book_append_sheet(wb, ws, 'Default Charges');
+    XLSX.writeFile(wb, `DefaultCharges_Backup_${new Date().toISOString().split('T')[0]}.xlsx`);
+    alert('✅ Default charges exported (vertical format – one row per charge).');
 }
+
+
 
 
 // ---------- 3. Import Carrier-Specific Charges ----------
@@ -10850,134 +11015,159 @@ function bulkImportCarrierCharges(input) {
                 return;
             }
 
-            // Group rows by (Mode, Carrier, POL, Container, Commodity)
-            const groups = {};
-            rows.forEach(row => {
-                const mode = (row.Mode || 'SEA').toUpperCase();
-                if (!['SEA', 'AIR', 'LCL'].includes(mode)) return;
-                const carrier = row.Carrier || '';
-                const key = `${mode}||${carrier}||${row.POL || ''}||${row.Container || ''}||${row.Commodity || ''}`;
-                if (!groups[key]) {
-                    groups[key] = {
-                        mode: mode,
-                        carrier: carrier,
-                        pol: row.POL || '',
-                        container: row.Container || '',
-                        commodity: row.Commodity || '',
-                        charges: {}
-                    };
-                }
-                const chargeName = row['Charge Name'];
-                if (chargeName) {
-                    groups[key].charges[chargeName] = {
-                        amount: parseFloat(row['Sell Amount']) || 0,
-                        currency: row['Sell Currency'] || 'INR',
-                        buyAmount: parseFloat(row['Buy Amount']) || 0,
-                        buyCurrency: row['Buy Currency'] || 'INR',
-                        basis: row['Basis'] || 'Normal'
-                    };
-                }
-            });
-
-            const grouped = Object.values(groups);
-            if (grouped.length === 0) {
-                alert('❌ No valid groups created.');
-                return;
+            // Normalization – keep only letters, numbers, spaces, and commas
+            function normalize(str) {
+                if (!str) return '';
+                return str
+                    .toString()
+                    .trim()
+                    .replace(/[^a-zA-Z0-9\s,]/g, '')
+                    .replace(/\s*,\s*/g, ', ')
+                    .replace(/\s+/g, ' ')
+                    .replace(/^,|,$/g, '')
+                    .trim()
+                    .toUpperCase();
             }
 
-            // Separate into groups based on carrier = "ALL" vs others
-            const defaultGroups = [];
-            const carrierGroups = [];
+            function getContainerSuffix(containerStr) {
+                const c = normalize(containerStr);
+                if (c === '20 GP' || c === '20\'' || c === '20') return '_20';
+                if (c === '40 HC' || c === '40\'' || c === '40') return '_40';
+                return '';
+            }
 
-            grouped.forEach(g => {
-                if (g.carrier.toUpperCase() === 'ALL') {
-                    defaultGroups.push(g);
-                } else {
-                    carrierGroups.push(g);
+            // Group by normalized (Mode, Carrier, POL, Commodity)
+            const groups = {};
+            rows.forEach((row, index) => {
+                const mode = normalize(row.Mode || '').toLowerCase();
+                if (!['sea', 'air', 'lcl'].includes(mode)) return;
+                const carrier = normalize(row.Carrier || '');
+                const pol = normalize(row.POL || '');
+                const commodity = normalize(row.Commodity || '');
+                if (!carrier || !pol || !commodity) return;
+
+                const key = `${mode}||${carrier}||${pol}||${commodity}`;
+                if (!groups[key]) {
+                    groups[key] = { mode, carrier, pol, commodity, charges: {} };
                 }
+
+                const chargeName = normalize(row['Charge Name'] || '');
+                if (!chargeName) return;
+                const container = normalize(row.Container || '');
+                const sellAmt = parseFloat(row['Sell Amount']) || 0;
+                const buyAmt = parseFloat(row['Buy Amount']) || 0;
+                const currency = row.Currency || 'INR';
+
+                // Determine charge key
+                let chargeKey = chargeName;
+                if (mode === 'sea' && chargeName === 'THC') {
+                    const suffix = getContainerSuffix(container);
+                    if (suffix) {
+                        chargeKey = 'THC' + suffix;
+                    } else {
+                        // If container is blank, treat as base THC (but we might want to ignore if we have _20/_40)
+                        chargeKey = 'THC';
+                    }
+                }
+
+                // If the chargeKey is 'THC' and we already have THC_20 or THC_40 in the same group, we should merge the value into the appropriate one? 
+                // But we don't know container. We'll store it separately.
+                if (!groups[key].charges[chargeKey]) {
+                    groups[key].charges[chargeKey] = { amount: 0, buyAmount: 0, currency: 'INR' };
+                }
+                // Take the maximum amount if multiple rows for same charge (to avoid overwriting)
+                if (sellAmt > groups[key].charges[chargeKey].amount) {
+                    groups[key].charges[chargeKey].amount = sellAmt;
+                }
+                if (buyAmt > groups[key].charges[chargeKey].buyAmount) {
+                    groups[key].charges[chargeKey].buyAmount = buyAmt;
+                }
+                groups[key].charges[chargeKey].currency = currency;
             });
 
-            // Confirm
-            const total = defaultGroups.length + carrierGroups.length;
-            if (!confirm(`Import ${total} charge groups?\n- Default (ALL): ${defaultGroups.length}\n- Carrier-specific: ${carrierGroups.length}`)) return;
+            // Log groups for debugging
+            console.log('🔥 Groups found:', Object.keys(groups).length);
+            Object.entries(groups).forEach(([key, g]) => {
+                const chargeList = Object.keys(g.charges).join(', ');
+                console.log(`  ${g.carrier} | ${g.pol} | ${g.commodity} → [${chargeList}]`);
+            });
 
-            // --- Process Default Groups ---
-            if (defaultGroups.length) {
-                defaultGroups.forEach(g => {
-                    let defaultArr;
-                    if (g.mode === 'SEA') defaultArr = db.defaultSeaCharges;
-                    else if (g.mode === 'AIR') defaultArr = db.defaultAirCharges;
-                    else if (g.mode === 'LCL') defaultArr = db.defaultLclCharges;
-                    if (!defaultArr) return;
+            if (!confirm(`Import ${Object.keys(groups).length} carrier charge groups?`)) return;
 
-                    // Check duplicate
-                    const dup = defaultArr.some(d => {
-                        if (g.mode === 'SEA') {
-                            return d.pol === g.pol && d.container === g.container && d.commodity === g.commodity;
+            let imported = 0, updated = 0;
+            const airTarget = db.carrierChargesAir;
+            const seaTarget = db.carrierChargesSeaLcl;
+
+            Object.values(groups).forEach(g => {
+                let targetArr;
+                let baseRecord;
+
+                if (g.mode === 'air') {
+                    targetArr = airTarget;
+                    baseRecord = {
+                        carrier: g.carrier,
+                        pol: g.pol,
+                        commodity: g.commodity,
+                        charges: {},
+                        updated: new Date().toISOString()
+                    };
+                } else {
+                    targetArr = seaTarget;
+                    baseRecord = {
+                        mode: g.mode,
+                        carrier: g.carrier,
+                        pol: g.pol,
+                        commodity: g.commodity,
+                        charges: {},
+                        updated: new Date().toISOString()
+                    };
+                }
+
+                // Find existing record using normalized compare
+                const existingIdx = targetArr.findIndex(r => {
+                    const rCarrier = normalize(r.carrier);
+                    const rPol = normalize(r.pol);
+                    const rCommodity = normalize(r.commodity || '');
+                    if (g.mode === 'air') {
+                        return rCarrier === g.carrier && rPol === g.pol && rCommodity === g.commodity;
+                    } else {
+                        return r.mode === g.mode && rCarrier === g.carrier && rPol === g.pol && rCommodity === g.commodity;
+                    }
+                });
+
+                if (existingIdx !== -1) {
+                    // MERGE charges (keep existing, add new ones)
+                    const existing = targetArr[existingIdx];
+                    Object.entries(g.charges).forEach(([key, val]) => {
+                        if (!existing.charges[key]) {
+                            existing.charges[key] = val;
                         } else {
-                            return d.pol === g.pol && d.commodity === g.commodity;
+                            // If both exist, keep the larger amount (or merge)
+                            if (val.amount > existing.charges[key].amount) {
+                                existing.charges[key].amount = val.amount;
+                            }
+                            if (val.buyAmount > existing.charges[key].buyAmount) {
+                                existing.charges[key].buyAmount = val.buyAmount;
+                            }
+                            existing.charges[key].currency = val.currency || existing.charges[key].currency;
                         }
                     });
-                    if (!dup) {
-                        const entry = {
-                            pol: g.pol,
-                            commodity: g.commodity,
-                            charges: g.charges
-                        };
-                        if (g.mode === 'SEA') {
-                            entry.carrier = 'ALL';
-                            entry.container = g.container;
-                        }
-                        defaultArr.push(entry);
-                    }
-                });
-            }
-
-            // --- Process Carrier-Specific Groups ---
-            if (carrierGroups.length) {
-                carrierGroups.forEach(g => {
-                    if (g.mode === 'AIR') {
-                        // Air charges go to carrierChargesAir
-                        const existing = db.carrierChargesAir;
-                        const dup = existing.some(e => e.carrier === g.carrier && e.pol === g.pol && e.commodity === g.commodity);
-                        if (!dup) {
-                            existing.push({
-                                carrier: g.carrier,
-                                pol: g.pol,
-                                commodity: g.commodity,
-                                charges: g.charges,
-                                updated: new Date().toISOString()
-                            });
-                        }
-                    } else {
-                        // SEA or LCL -> carrierChargesSeaLcl
-                        const existing = db.carrierChargesSeaLcl;
-                        const mode = g.mode === 'SEA' ? 'sea' : 'lcl';
-                        const dup = existing.some(e => e.mode === mode && e.carrier === g.carrier && e.pol === g.pol && e.container === g.container && e.commodity === g.commodity);
-                        if (!dup) {
-                            existing.push({
-                                mode: mode,
-                                carrier: g.carrier,
-                                pol: g.pol,
-                                container: g.container,
-                                commodity: g.commodity,
-                                charges: g.charges,
-                                updated: new Date().toISOString()
-                            });
-                        }
-                    }
-                });
-            }
+                    existing.updated = new Date().toISOString();
+                    updated++;
+                } else {
+                    baseRecord.charges = g.charges;
+                    targetArr.push(baseRecord);
+                    imported++;
+                }
+            });
 
             saveDB();
-
-            // Refresh all tables
-            ['sea','air','lcl'].forEach(m => renderDefaultChargesMaster(m));
             renderCarrierChargesMaster('sealcl');
             renderCarrierChargesMaster('air');
             renderCarrierChargesMaster('lcl');
+            if (typeof updateSelectedCount === 'function') updateSelectedCount();
 
-            alert(`✅ Import completed.\nDefault groups: ${defaultGroups.length}\nCarrier-specific groups: ${carrierGroups.length}`);
+            alert(`✅ Carrier charges import completed.\nNew records: ${imported}\nUpdated records: ${updated}\nTotal processed: ${imported + updated}`);
             autoBackup();
         } catch (err) {
             alert('❌ Import failed: ' + err.message);
@@ -11056,4 +11246,361 @@ function populateSelect(id, options, selectedValue) {
     if (selectedValue && options.includes(selectedValue)) {
         sel.value = selectedValue;
     }
+}
+
+/// Save the backup folder path to the database
+function saveBackupPath() {
+    const pathInput = document.getElementById('backup-folder-path-input');
+    const path = pathInput.value.trim();
+    if (!path) {
+        alert('Please enter a folder path or select one using "Browse Folder".');
+        return;
+    }
+    db.backupFolderPath = path;
+    saveDB();
+    document.getElementById('backup-folder-path').textContent = `📁 ${path}`;
+    alert('Backup folder path saved!');
+    // If path is saved and we have a folder handle, we can also start auto backup
+    if (!backupFolderHandle) {
+        // Try to get handle from path? Not possible, but user can re-select.
+        // We'll just store the path for manual backup later.
+    }
+}
+
+// Load saved path on page load
+function loadBackupPath() {
+    const path = db.backupFolderPath || '';
+    document.getElementById('backup-folder-path-input').value = path;
+    if (path) {
+        document.getElementById('backup-folder-path').textContent = `📁 ${path}`;
+    }
+}
+
+// Enhanced selectBackupFolder – uses the File System Access API
+// This is the primary "Browse Folder" action
+async function selectBackupFolder() {
+    try {
+        if (typeof window.showDirectoryPicker === 'function') {
+            const folder = await window.showDirectoryPicker();
+            backupFolderHandle = folder;
+            // Update the input and save path automatically
+            document.getElementById('backup-folder-path-input').value = folder.name;
+            db.backupFolderPath = folder.name;
+            saveDB();
+            document.getElementById('backup-folder-path').textContent = `📁 ${folder.name}`;
+            alert('Backup folder selected successfully! Auto backup will run every 1 minute.');
+            // Start auto backup if not already running
+            if (!autoBackupInterval) {
+                startAutoBackup();
+            }
+        } else {
+            alert('Your browser does not support the File System Access API.\nPlease use the "Export" buttons to save backups manually, or type the folder path manually in the input field.\n\nNote: Manual path will only be used for display – the folder must exist for actual backup.');
+        }
+    } catch (e) {
+        if (e.name !== 'AbortError') {
+            console.error('Folder selection error:', e);
+            alert('Folder selection failed: ' + e.message);
+        }
+    }
+}
+
+function migrateDefaultSeaCharges() {
+    // Only run once – check if migration already done
+    if (localStorage.getItem('sea_default_migrated')) return;
+    
+    const oldCharges = db.defaultSeaCharges || [];
+    if (oldCharges.length === 0) return;
+
+    // Group by (pol, commodity)
+    const groups = {};
+    oldCharges.forEach(rec => {
+        const key = `${rec.pol}||${rec.commodity || ''}`;
+        if (!groups[key]) {
+            groups[key] = {
+                pol: rec.pol,
+                commodity: rec.commodity || '',
+                charges: {},
+                cfs20: 0,
+                cfs40: 0,
+                cfs20Buy: 0,
+                cfs40Buy: 0,
+                currency: 'INR'
+            };
+        }
+        // Collect other charges (excluding CFS)
+        Object.entries(rec.charges || {}).forEach(([chargeName, val]) => {
+            if (chargeName.toUpperCase() === 'CFS') {
+                // Store CFS based on container
+                if (rec.container === '20 GP') {
+                    groups[key].cfs20 = val.amount || 0;
+                    groups[key].cfs20Buy = val.buyAmount || 0;
+                    groups[key].currency = val.currency || 'INR';
+                } else if (rec.container === '40 HC' || rec.container === '40 GP') {
+                    groups[key].cfs40 = val.amount || 0;
+                    groups[key].cfs40Buy = val.buyAmount || 0;
+                    groups[key].currency = val.currency || 'INR';
+                }
+                // If no container, treat as both? We'll assign to both if only one record
+            } else {
+                // Add other charges (if not already present)
+                if (!groups[key].charges[chargeName]) {
+                    groups[key].charges[chargeName] = val;
+                }
+            }
+        });
+    });
+
+    // Build new defaultSeaCharges array
+    const newSeaCharges = [];
+    Object.values(groups).forEach(g => {
+        const charges = { ...g.charges };
+        // Add CFS_20 and CFS_40 as separate charges
+        if (g.cfs20 > 0) {
+            charges.CFS_20 = { amount: g.cfs20, buyAmount: g.cfs20Buy, currency: g.currency || 'INR' };
+        }
+        if (g.cfs40 > 0) {
+            charges.CFS_40 = { amount: g.cfs40, buyAmount: g.cfs40Buy, currency: g.currency || 'INR' };
+        }
+        newSeaCharges.push({
+            pol: g.pol,
+            commodity: g.commodity,
+            charges: charges,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        });
+    });
+
+    db.defaultSeaCharges = newSeaCharges;
+    saveDB();
+    localStorage.setItem('sea_default_migrated', 'true');
+    console.log('✅ Default Sea Charges migrated to new format (CFS_20 and CFS_40).');
+}
+
+function migrateDefaultSeaChargesToSplit() {
+    if (localStorage.getItem('sea_split_migrated')) return;
+    const records = db.defaultSeaCharges || [];
+    let changed = false;
+    records.forEach(rec => {
+        const newCharges = {};
+        Object.entries(rec.charges || {}).forEach(([key, val]) => {
+            // If it's already a split charge (ends with _20 or _40), keep as is
+            if (key.endsWith('_20') || key.endsWith('_40')) {
+                newCharges[key] = val;
+                return;
+            }
+            // For CFS, we already have CFS_20 and CFS_40 from previous migration, so skip
+            if (key === 'CFS') {
+                // Should have been already migrated, but if not, we'll handle here
+                // We'll create CFS_20 and CFS_40 with same value if missing
+                if (!rec.charges.CFS_20) {
+                    newCharges['CFS_20'] = { amount: val.amount || 0, buyAmount: val.buyAmount || 0, currency: val.currency || 'INR' };
+                }
+                if (!rec.charges.CFS_40) {
+                    newCharges['CFS_40'] = { amount: val.amount || 0, buyAmount: val.buyAmount || 0, currency: val.currency || 'INR' };
+                }
+                return;
+            }
+            // For other charges, create both _20 and _40 with the same value (user can edit later)
+            newCharges[key + '_20'] = { amount: val.amount || 0, buyAmount: val.buyAmount || 0, currency: val.currency || 'INR' };
+            newCharges[key + '_40'] = { amount: val.amount || 0, buyAmount: val.buyAmount || 0, currency: val.currency || 'INR' };
+        });
+        rec.charges = newCharges;
+        changed = true;
+    });
+    if (changed) {
+        db.defaultSeaCharges = records;
+        saveDB();
+        localStorage.setItem('sea_split_migrated', 'true');
+        console.log('✅ Default SEA charges migrated to split 20/40 format.');
+    }
+}
+
+function bulkImportDefaultCharges(input) {
+    if (!input.files || !input.files[0]) {
+        alert('Please select an Excel file.');
+        return;
+    }
+
+    const file = input.files[0];
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const sheetName = 'Default Charges';
+            const sheet = workbook.Sheets[sheetName];
+            if (!sheet) {
+                alert(`❌ Sheet "${sheetName}" not found. Available: ${workbook.SheetNames.join(', ')}`);
+                return;
+            }
+
+            const rows = XLSX.utils.sheet_to_json(sheet);
+            if (rows.length === 0) {
+                alert('❌ No data found.');
+                return;
+            }
+
+            function normalize(str) {
+                if (!str) return '';
+                return str.trim()
+                    .replace(/\s*,\s*/g, ', ')
+                    .replace(/\s+/g, ' ')
+                    .toUpperCase();
+            }
+
+            function getContainerSuffix(containerStr) {
+                const c = normalize(containerStr);
+                if (c === '20 GP' || c === '20\'' || c === '20') return '_20';
+                if (c === '40 HC' || c === '40\'' || c === '40') return '_40';
+                return '';
+            }
+
+            const groups = {};
+            rows.forEach(row => {
+                const mode = normalize(row.Mode || '').toLowerCase();
+                if (!['sea', 'air', 'lcl'].includes(mode)) return;
+                const pol = normalize(row.POL || '');
+                const commodity = normalize(row.Commodity || '');
+                if (!pol) return;
+                const key = `${mode}||${pol}||${commodity}`;
+                if (!groups[key]) {
+                    groups[key] = { mode, pol, commodity, charges: {} };
+                }
+                const chargeName = normalize(row['Charge Name'] || '');
+                if (!chargeName) return;
+                const container = normalize(row.Container || '');
+                const sellAmt = parseFloat(row['Sell Amount']) || 0;
+                const buyAmt = parseFloat(row['Buy Amount']) || 0;
+                const currency = row.Currency || 'INR';
+
+                let chargeKey = chargeName;
+                if (mode === 'sea') {
+                    const suffix = getContainerSuffix(container);
+                    if (suffix) {
+                        chargeKey = chargeName + suffix;
+                    }
+                }
+                // For Air/LCL, store as base name
+
+                if (!groups[key].charges[chargeKey]) {
+                    groups[key].charges[chargeKey] = { amount: 0, buyAmount: 0, currency: 'INR' };
+                }
+                if (sellAmt > 0) groups[key].charges[chargeKey].amount = sellAmt;
+                if (buyAmt > 0) groups[key].charges[chargeKey].buyAmount = buyAmt;
+                groups[key].charges[chargeKey].currency = currency;
+            });
+
+            let imported = 0, updated = 0;
+            const targetMap = {
+                sea: db.defaultSeaCharges,
+                air: db.defaultAirCharges,
+                lcl: db.defaultLclCharges
+            };
+
+            Object.values(groups).forEach(g => {
+                const targetArr = targetMap[g.mode];
+                if (!targetArr) return;
+
+                const existingIdx = targetArr.findIndex(r => {
+                    const rPol = normalize(r.pol);
+                    const rCommodity = normalize(r.commodity || '');
+                    return rPol === g.pol && rCommodity === g.commodity;
+                });
+
+                if (existingIdx !== -1) {
+                    const existing = targetArr[existingIdx];
+                    Object.entries(g.charges).forEach(([key, val]) => {
+                        if (!existing.charges[key]) {
+                            existing.charges[key] = val;
+                        } else {
+                            if (val.amount > 0) existing.charges[key].amount = val.amount;
+                            if (val.buyAmount > 0) existing.charges[key].buyAmount = val.buyAmount;
+                            existing.charges[key].currency = val.currency || existing.charges[key].currency;
+                        }
+                    });
+                    existing.updatedAt = new Date().toISOString();
+                    updated++;
+                } else {
+                    const record = {
+                        pol: g.pol,
+                        commodity: g.commodity,
+                        charges: g.charges,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    };
+                    targetArr.push(record);
+                    imported++;
+                }
+            });
+
+            saveDB();
+            ['sea','air','lcl'].forEach(m => renderDefaultChargesMaster(m));
+            alert(`✅ Default charges import completed.\nNew records: ${imported}\nUpdated records: ${updated}\nTotal processed: ${imported + updated}`);
+            autoBackup();
+        } catch (err) {
+            alert('❌ Import failed: ' + err.message);
+            console.error(err);
+        }
+    };
+    reader.readAsArrayBuffer(file);
+    input.value = '';
+}
+
+function bulkExportCarrierCharges() {
+    if (typeof XLSX === 'undefined') {
+        alert('XLSX library not loaded. Please refresh and try again.');
+        return;
+    }
+
+    const rows = [];
+
+    function addCarrierChargeRow(mode, rec) {
+        const charges = rec.charges || {};
+        Object.entries(charges).forEach(([key, val]) => {
+            let container = '';
+            let chargeName = key;
+            if (key === 'THC_20') {
+                container = '20 GP';
+                chargeName = 'THC';
+            } else if (key === 'THC_40') {
+                container = '40 HC';
+                chargeName = 'THC';
+            }
+            rows.push({
+                'Mode': mode.toUpperCase(),
+                'Carrier': rec.carrier,
+                'POL': rec.pol,
+                'Commodity': rec.commodity || '',
+                'Charge Name': chargeName,
+                'Container': container,
+                'Sell Amount': val.amount || 0,
+                'Buy Amount': val.buyAmount || 0,
+                'Currency': val.currency || 'INR'
+            });
+        });
+    }
+
+    // SEA Carrier Charges
+    db.carrierChargesSeaLcl.forEach(r => {
+        if (r.mode === 'sea') addCarrierChargeRow('SEA', r);
+    });
+    // LCL Carrier Charges
+    db.carrierChargesSeaLcl.forEach(r => {
+        if (r.mode === 'lcl') addCarrierChargeRow('LCL', r);
+    });
+    // AIR Carrier Charges
+    db.carrierChargesAir.forEach(r => {
+        addCarrierChargeRow('AIR', r);
+    });
+
+    if (rows.length === 0) {
+        alert('⚠️ No carrier-specific charges found to export.');
+        return;
+    }
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Carrier Charges');
+    XLSX.writeFile(wb, `CarrierCharges_Backup_${new Date().toISOString().split('T')[0]}.xlsx`);
+    alert('✅ Carrier charges exported (vertical format – one row per charge).');
 }
