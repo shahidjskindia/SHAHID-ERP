@@ -2914,3 +2914,1020 @@ header h1 {
 }
 .milestone-etd { background: #dbeafe; color: #1e40af; }
 .milestone-eta { background: #fef3c7; color: #92400e; }
+
+
+
+/* ===== DSR MODULE ENHANCEMENTS ===== */
+:root {
+    --dsr-header-green: #008000;
+    --dsr-header-blue: #0000cc;
+    --dsr-label-purple: #4a0e4e;
+    --dsr-teal: #008080;
+    --dsr-red: #ff0000;
+    --dsr-orange: #cc6600;
+    --dsr-dark-blue: #000066;
+    --dsr-light-gray: #e0e0e0;
+    --dsr-border: #999;
+}
+
+/* ---- Add Shipment Dropdown ---- */
+.add-shipment-wrapper {
+    position: relative;
+    display: inline-block;
+}
+.add-shipment-wrapper .btn {
+    min-width: 160px;
+    text-align: left;
+    padding-right: 30px;
+}
+.add-shipment-wrapper .btn::after {
+    content: '▼';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.7rem;
+}
+.add-shipment-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 200px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    z-index: 2000;
+    overflow: hidden;
+    margin-top: 4px;
+}
+.add-shipment-dropdown.show {
+    display: block;
+}
+.add-shipment-dropdown .dropdown-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+    color: var(--text);
+}
+.add-shipment-dropdown .dropdown-item:last-child {
+    border-bottom: none;
+}
+.add-shipment-dropdown .dropdown-item:hover {
+    background: var(--primary-light);
+    color: white;
+}
+.add-shipment-dropdown .dropdown-item .icon {
+    font-size: 1.2rem;
+}
+
+/* ---- DSR List Sections ---- */
+.dsr-section-header {
+    padding: 8px 14px;
+    margin: 16px 0 8px 0;
+    border-radius: 5px;
+    font-weight: 700;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: white;
+    background: var(--dsr-header-blue);
+}
+.dsr-section-header.sea-header {
+    background: var(--dsr-header-green);
+}
+.dsr-section-header .badge {
+    background: rgba(255, 255, 255, 0.25);
+    padding: 2px 12px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    margin-left: auto;
+}
+
+/* ---- DSR Popup Modal (SEA / AIR) ---- */
+.dsr-popup-modal .modal-content {
+    max-width: 1200px;
+    width: 95%;
+    max-height: 95vh;
+    background: #d4d4d4 !important;
+    border: 2px solid #666;
+    border-radius: 0;
+    padding: 0;
+    overflow: hidden;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+.dsr-popup-modal .modal-header {
+    background: var(--dsr-header-green);
+    color: white;
+    padding: 6px 16px;
+    border-radius: 0;
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 42px;
+}
+.dsr-popup-modal.air .modal-header {
+    background: var(--dsr-header-blue);
+}
+.dsr-popup-modal .modal-header .close-modal {
+    color: white;
+    font-size: 1.6rem;
+    opacity: 0.8;
+}
+.dsr-popup-modal .modal-body {
+    padding: 8px 12px 12px 12px;
+    background: #d4d4d4 !important;
+    color: #1a1a1a !important;
+    max-height: calc(95vh - 50px);
+    overflow-y: auto;
+}
+
+/* ---- DSR Popup Button Bar ---- */
+.dsr-btn-bar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    background: #d4d4d4;
+    padding: 4px 0;
+}
+.dsr-btn-bar .btn {
+    border-radius: 0;
+    padding: 4px 18px;
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-transform: none;
+    letter-spacing: 0;
+    border: 1px solid #555;
+    color: white;
+}
+.dsr-btn-bar .btn-search {
+    background: var(--dsr-orange);
+}
+.dsr-btn-bar .btn-modify {
+    background: #00aa00;
+}
+.dsr-btn-bar .btn-addnew {
+    background: var(--dsr-dark-blue);
+}
+.dsr-btn-bar .btn-clear-dsr {
+    background: var(--dsr-dark-blue);
+}
+.dsr-btn-bar .btn-exit {
+    background: var(--dsr-red);
+}
+.dsr-btn-bar .btn-save-dsr {
+    background: #00aa00;
+}
+.dsr-btn-bar .btn-update-dsr {
+    background: var(--dsr-orange);
+}
+.dsr-btn-bar .btn-cancel-dsr {
+    background: #888;
+}
+.dsr-btn-bar .btn-print-dsr {
+    background: #555;
+}
+.dsr-btn-bar .btn-pdf-dsr {
+    background: #8b5cf6;
+}
+.dsr-btn-bar .btn-dup-dsr {
+    background: #06b6d4;
+}
+.dsr-btn-bar .btn-del-dsr {
+    background: var(--dsr-red);
+}
+.dsr-btn-bar .btn-close-dsr {
+    background: #888;
+}
+.dsr-btn-bar .btn:hover {
+    transform: none;
+    box-shadow: none;
+    opacity: 0.9;
+}
+
+/* ---- DSR Popup Form Grids ---- */
+.dsr-form-grid {
+    display: grid;
+    gap: 4px;
+    background: #d4d4d4;
+    padding: 2px 0;
+}
+.dsr-form-grid.cols-3 {
+    grid-template-columns: 1fr 1fr 1fr;
+}
+.dsr-form-grid.cols-2 {
+    grid-template-columns: 1fr 1fr;
+}
+.dsr-form-grid.cols-4 {
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+}
+.dsr-form-grid .dsr-field {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 0;
+}
+.dsr-form-grid .dsr-field label {
+    background: var(--dsr-label-purple);
+    color: white;
+    padding: 3px 8px;
+    font-weight: 700;
+    font-size: 0.7rem;
+    min-width: 80px;
+    text-align: left;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    border-radius: 0;
+    flex-shrink: 0;
+}
+.dsr-form-grid .dsr-field label.teal-label {
+    background: var(--dsr-teal);
+}
+.dsr-form-grid .dsr-field label.green-label {
+    background: #008000;
+}
+.dsr-form-grid .dsr-field label.red-label {
+    background: var(--dsr-red);
+}
+.dsr-form-grid .dsr-field label.darkblue-label {
+    background: var(--dsr-dark-blue);
+}
+.dsr-form-grid .dsr-field input,
+.dsr-form-grid .dsr-field select,
+.dsr-form-grid .dsr-field textarea {
+    flex: 1;
+    padding: 3px 6px;
+    border: 1px solid #999;
+    border-radius: 0;
+    font-size: 0.75rem;
+    background: white;
+    color: #1a1a1a;
+    min-height: 24px;
+}
+.dsr-form-grid .dsr-field input:focus,
+.dsr-form-grid .dsr-field select:focus,
+.dsr-form-grid .dsr-field textarea:focus {
+    outline: 2px solid var(--primary-light);
+    border-color: var(--primary-light);
+}
+.dsr-form-grid .dsr-field .sell-bg {
+    background: #008000;
+    color: white;
+}
+.dsr-form-grid .dsr-field .buy-bg {
+    background: var(--dsr-red);
+    color: white;
+}
+.dsr-form-grid .dsr-field .margin-bg {
+    background: #ffff00;
+    color: #1a1a1a;
+    font-weight: 700;
+}
+.dsr-form-grid .dsr-field .result-display {
+    background: #e8e8e8;
+    font-weight: 700;
+    text-align: center;
+}
+
+/* ---- Section Headers inside Popup ---- */
+.dsr-section-title {
+    background: var(--dsr-dark-blue);
+    color: white;
+    padding: 4px 12px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    margin: 8px 0 4px 0;
+    letter-spacing: 0.5px;
+}
+.dsr-section-title.green-title,
+.dsr-section-title.darkblue-label {
+    background: var(--success) !important;
+    color: white !important;
+    font-weight: bold !important;
+}
+
+/* ---- Charges Grid (SEA) ---- */
+.dsr-charges-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr !important;
+    gap: 6px;
+    padding: 4px 0;
+}
+.dsr-charges-grid .charge-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 0;
+}
+.dsr-charges-grid .charge-row label {
+    background: var(--dsr-label-purple);
+    color: white;
+    padding: 3px 8px;
+    font-weight: 700;
+    font-size: 0.7rem;
+    min-width: 70px;
+    text-align: left;
+    flex-shrink: 0;
+}
+.dsr-charges-grid .charge-row label.teal {
+    background: var(--dsr-teal);
+}
+.dsr-charges-grid .charge-row input {
+    flex: 1;
+    padding: 3px 6px;
+    border: 1px solid #999;
+    border-radius: 0;
+    font-size: 0.75rem;
+    background: white;
+    color: #1a1a1a;
+    min-height: 22px;
+}
+
+/* ---- AIR Quote Charges Grid ---- */
+.dsr-air-charges-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 4px;
+    padding: 4px 0;
+}
+.dsr-air-charges-grid .charge-item {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+.dsr-air-charges-grid .charge-item label {
+    background: var(--dsr-teal);
+    color: white;
+    padding: 3px 6px;
+    font-weight: 700;
+    font-size: 0.65rem;
+    min-width: 60px;
+    text-align: left;
+    flex-shrink: 0;
+    border-radius: 0;
+}
+.dsr-air-charges-grid .charge-item input {
+    flex: 1;
+    padding: 3px 6px;
+    border: 1px solid #999;
+    border-radius: 0;
+    font-size: 0.7rem;
+    background: white;
+    color: #1a1a1a;
+    min-height: 22px;
+}
+
+/* ---- Read-only preview ---- */
+.dsr-preview-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    background: #f5f5f5;
+    padding: 12px;
+    border: 1px solid #ccc;
+}
+.dsr-preview-grid .item {
+    padding: 4px 8px;
+    border-bottom: 1px solid #ddd;
+    display: flex;
+    justify-content: space-between;
+}
+.dsr-preview-grid .item .label {
+    font-weight: 600;
+    color: #555;
+    font-size: 0.8rem;
+}
+.dsr-preview-grid .item .value {
+    font-weight: 500;
+    font-size: 0.85rem;
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 1024px) {
+    .dsr-form-grid.cols-3 {
+grid-template-columns: 1fr 1fr;
+    }
+    .dsr-air-charges-grid {
+grid-template-columns: 1fr 1fr;
+    }
+    .dsr-charges-grid {
+grid-template-columns: 1fr;
+    }
+    .dsr-popup-modal .modal-content {
+width: 98%;
+    }
+}
+@media (max-width: 768px) {
+    .dsr-form-grid.cols-3,
+    .dsr-form-grid.cols-2 {
+grid-template-columns: 1fr;
+    }
+    .dsr-air-charges-grid {
+grid-template-columns: 1fr 1fr;
+    }
+    .dsr-charges-grid {
+grid-template-columns: 1fr;
+    }
+    .dsr-btn-bar .btn {
+font-size: 0.65rem;
+padding: 3px 10px;
+    }
+    .dsr-form-grid .dsr-field label {
+min-width: 60px;
+font-size: 0.6rem;
+padding: 2px 6px;
+    }
+    .dsr-popup-modal .modal-content {
+width: 100%;
+max-height: 100vh;
+border-radius: 0;
+    }
+    .dsr-popup-modal .modal-body {
+padding: 6px 8px;
+    }
+    .dsr-section-title {
+font-size: 0.75rem;
+padding: 3px 8px;
+    }
+}
+@media (max-width: 480px) {
+    .dsr-air-charges-grid {
+grid-template-columns: 1fr;
+    }
+    .dsr-form-grid .dsr-field {
+flex-wrap: wrap;
+    }
+    .dsr-form-grid .dsr-field label {
+min-width: 100%;
+    }
+    .dsr-btn-bar {
+gap: 3px;
+    }
+    .dsr-btn-bar .btn {
+font-size: 0.55rem;
+padding: 2px 8px;
+    }
+}
+
+/* ===== LOGIN OVERLAY ===== */
+#login-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 99999;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(4px);
+}
+#login-overlay.hidden {
+    display: none !important;
+}
+.login-box {
+    background: var(--card-bg);
+    width: 360px;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    padding: 20px;
+    border: 1px solid var(--border);
+}
+.login-header {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--primary);
+    text-align: center;
+    margin-bottom: 20px;
+    letter-spacing: 0.5px;
+}
+[data-theme="dark"] .login-box {
+    background: #1e293b;
+}
+
+/* ===== USER PERMISSION CHECKBOXES ===== */
+.perm-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 6px;
+    margin: 8px 0;
+}
+.perm-grid label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+}
+.perm-grid label input {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+.perm-grid label.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.perm-grid label.disabled input {
+    cursor: not-allowed;
+}
+
+/* Heading ka Text Center (Middle) karne ka CSS */
+.dsr-section-title.green-title,
+.dsr-section-title.darkblue-label {
+    border: 1px solid #d1d5db !important;
+    border-radius: 6px !important;
+    padding: 15px 12px !important;
+    margin: 12px 0 15px 0 !important;
+    font-size: 1.2rem !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 100% !important;
+}
+.dsr-section-title.green-title {
+    background: var(--success) !important;
+    color: white !important;
+}
+.dsr-section-title.darkblue-label {
+    background: #0f172a !important;
+    color: white !important;
+}
+
+/* ===== MEASUREMENT TOOLS COMPACT LAYOUT ===== */
+.measurement-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.measurement-grid .form-section {
+    padding: 12px 14px;
+    margin-bottom: 0;
+}
+.measurement-grid .form-grid-3col {
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+}
+.measurement-grid .form-grid-3col .form-group label {
+    font-size: 0.6rem;
+    margin-bottom: 1px;
+}
+.measurement-grid .form-grid-3col input,
+.measurement-grid .form-grid-3col select {
+    padding: 4px 6px;
+    font-size: 0.75rem;
+    height: 28px;
+}
+.measurement-grid .form-grid-3col .form-group input[readonly] {
+    font-size: 0.7rem;
+    padding: 4px 6px;
+    height: 28px;
+}
+.measurement-grid h3 {
+    font-size: 0.8rem;
+    margin-bottom: 4px;
+}
+
+/* --- NEW CALCULATORS (Tabs) --- */
+.calc-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 8px;
+    flex-wrap: wrap;
+}
+.calc-tab-btn {
+    padding: 6px 16px;
+    border: 1px solid transparent;
+    border-radius: 20px;
+    background: var(--bg);
+    color: var(--text-light);
+    font-weight: 600;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.calc-tab-btn.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+.calc-panel {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+.calc-panel.active {
+    display: block;
+}
+.calc-result-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 12px;
+    background: var(--bg);
+    padding: 12px;
+    border-radius: 6px;
+}
+.calc-result-grid .result-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+}
+.calc-result-grid .result-item .label {
+    font-size: 0.7rem;
+    color: var(--text-light);
+    font-weight: 600;
+}
+.calc-result-grid .result-item .value {
+    font-weight: 700;
+    color: var(--primary);
+    font-size: 0.85rem;
+}
+.calc-result-grid .result-item.total .value {
+    color: var(--success);
+    font-size: 1rem;
+}
+@media (max-width: 768px) {
+    .measurement-grid {
+grid-template-columns: 1fr;
+    }
+    .calc-result-grid {
+grid-template-columns: 1fr;
+    }
+}
+
+/* ---- Trucking Calculator ---- */
+#calc-us-trucking .truck-additional-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    background: var(--card-bg);
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    border: 4px solid var(--border);
+    border-radius: 4px;
+    cursor: grab;
+    transition: background 0.2s;
+}
+#calc-us-trucking .truck-additional-row.dragging {
+    opacity: 0.4;
+}
+#calc-us-trucking .truck-additional-row.drag-over {
+    border: 2px solid var(--primary);
+    background: rgba(59, 130, 246, 0.1);
+}
+#calc-us-trucking .truck-additional-row input {
+    flex: 1;
+    padding: 4px 6px;
+    border: 3px solid var(--border);
+    border-radius: 2px;
+    font-size: 0.8rem;
+    background: var(--card-bg);
+    color: var(--text);
+    min-width: 60px;
+}
+#calc-us-trucking .truck-additional-row .charge-name {
+    font-weight: 600;
+    width: 150px;
+    flex-shrink: 0;
+}
+#calc-us-trucking .truck-additional-row .charge-amt {
+    width: 100px;
+    text-align: right;
+}
+#calc-us-trucking .truck-additional-row .charge-del {
+    background: var(--danger);
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    padding: 2px 8px;
+    font-weight: bold;
+}
+.truck-shipment-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.truck-shipment-card .info {
+    flex: 1;
+    min-width: 200px;
+}
+.truck-shipment-card .info h4 {
+    color: var(--primary);
+    margin-bottom: 2px;
+    font-size: 0.9rem;
+}
+.truck-shipment-card .info p {
+    font-size: 0.75rem;
+    color: var(--text-light);
+}
+.truck-shipment-card .actions {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+/* ---- OOG & OT Calculator ---- */
+#calc-oog-ot .oog-dim-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    margin-top: 6px;
+}
+#calc-oog-ot .oog-dim-table th {
+    background: var(--primary);
+    color: white;
+    padding: 4px 8px;
+    text-align: left;
+}
+#calc-oog-ot .oog-dim-table td {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--border);
+}
+#calc-oog-ot .oog-dim-table .exceed {
+    color: var(--danger);
+    font-weight: 700;
+}
+#calc-oog-ot .oog-dim-table .fit {
+    color: var(--success);
+    font-weight: 600;
+}
+#calc-oog-ot .oog-dim-table .unit-label {
+    font-size: 0.65rem;
+    color: var(--text-light);
+}
+
+/* Additional table styling inside OOG */
+#oog-container-table input {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-size: 0.8rem;
+    background: var(--card-bg);
+    color: var(--text);
+}
+#oog-container-table select {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-size: 0.8rem;
+    background: var(--card-bg);
+    color: var(--text);
+}
+#oog-container-table tbody tr:hover {
+    background: rgba(59, 130, 246, 0.05);
+}
+
+/* ---- Detention & Demurrage ---- */
+#calc-detention .det-lot-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: var(--shadow);
+}
+#calc-detention .det-lot-card .lot-info h4 {
+    color: var(--primary);
+    font-size: 0.85rem;
+    margin-bottom: 2px;
+}
+#calc-detention .det-lot-card .lot-info p {
+    font-size: 0.7rem;
+    color: var(--text-light);
+}
+#calc-detention .det-record-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+#calc-detention .det-record-card .info {
+    flex: 1;
+    min-width: 200px;
+}
+#calc-detention .det-record-card .info h4 {
+    color: var(--primary);
+    margin-bottom: 2px;
+    font-size: 0.9rem;
+}
+#calc-detention .det-record-card .info p {
+    font-size: 0.75rem;
+    color: var(--text-light);
+}
+#calc-detention .det-record-card .actions {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+/* ---- Freight Calculator ---- */
+#fr-charges-table tbody tr {
+    transition: all 0.2s;
+    cursor: grab;
+}
+#fr-charges-table tbody tr.dragging {
+    opacity: 0.4;
+}
+#fr-charges-table tbody tr.drag-over {
+    border: 2px dashed var(--primary);
+    background: rgba(59, 130, 246, 0.1);
+}
+#fr-charges-table input {
+    width: 100%;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    background: var(--card-bg);
+    color: var(--text);
+    text-align: right;
+}
+#fr-charges-table input.charge-name {
+    text-transform: uppercase;
+    text-align: center;
+    font-weight: 600;
+}
+#fr-charges-table select {
+    width: 100%;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.8rem;
+    background: var(--card-bg);
+    color: var(--text);
+}
+#fr-charges-table .row-total {
+    font-weight: 700;
+    color: var(--primary);
+    text-align: right;
+    padding-right: 10px;
+}
+
+/* ---- Freight Calculator - Centered & Focus Red ---- */
+#fr-charges-table input,
+#fr-charges-table select,
+#fr-carrier,
+#fr-pol,
+#fr-pod,
+#fr-commodity,
+#fr-valid-from,
+#fr-valid-till,
+#fr-currency {
+    text-align: left !important;
+}
+#fr-charges-table input:focus,
+#fr-charges-table select:focus,
+#fr-carrier:focus,
+#fr-pol:focus,
+#fr-pod:focus,
+#fr-commodity:focus,
+#fr-valid-from:focus,
+#fr-valid-till:focus,
+#fr-currency:focus {
+    border-color: var(--danger) !important;
+    background: var(--input-focus-bg) !important;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
+    outline: none;
+}
+
+/* ===== MODERN TABLE STYLE (Matches Attached Image) ===== */
+.modern-section {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 0;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+.modern-section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 0 16px 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text);
+}
+.modern-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.85rem;
+}
+.modern-table th {
+    background: #2563eb;
+    color: white;
+    padding: 10px 16px;
+    text-align: left;
+    font-weight: 600;
+}
+.modern-table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--card-bg);
+}
+.modern-table tr:last-child td {
+    border-bottom: none;
+}
+
+/* Colored Badges */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 10px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-right: 8px;
+    height: 20px;
+    min-width: 20px;
+    color: #1a1a1a;
+}
+.badge-blue {
+    background: #dbeafe;
+    color: #1e40af;
+}
+.badge-yellow {
+    background: #fef3c7;
+    color: #92400e;
+}
+.badge-purple {
+    background: #ede9fe;
+    color: #5b21b6;
+}
+.badge-red {
+    background: #fee2e2;
+    color: #991b1b;
+}
+.badge-green {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+/* Footer Rows for Final Totals */
+.modern-footer-orange {
+    background: #f59e0b !important;
+    color: white !important;
+    font-weight: 800;
+    font-size: 1.05rem;
+}
+.modern-footer-green {
+    background: #10b981 !important;
+    color: white !important;
+    font-weight: 800;
+    font-size: 1.05rem;
+}
+
+/* Helpers */
+.text-right {
+    text-align: right !important;
+}
+.text-center {
+    text-align: center !important;
+}
+.text-muted {
+    color: var(--text-light);
+    font-weight: 400;
+}
