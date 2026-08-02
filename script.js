@@ -1852,56 +1852,47 @@ function onCarrierPolChangeInternal(mode) {
     let finalCharges = {};
 
     // ===== 1. DEFAULT CHARGES (always applied first) =====
-    if (mode === 'sea') {
-        const defaultMatch = db.defaultSeaCharges.find(d =>
-            d.pol === pol &&
-            d.commodity === commodity
-        );
-        if (defaultMatch) {
-            console.log('✅ Default SEA charges found for', pol, commodity);
-            const charges = { ...defaultMatch.charges };
-            // Map split charges based on container
-            let suffix = '';
-            if (container === '20 GP') suffix = '_20';
-            else if (container === '40 GP' || container === '40 HC') suffix = '_40';
-            if (suffix) {
-                // Map e.g., CFS_20 → CFS
-                Object.keys(charges).forEach(key => {
-                    if (key.endsWith(suffix)) {
-                        const base = key.slice(0, -3);
-                        finalCharges[base] = charges[key];
-                    }
-                });
-                // Also add non-split charges (like SEAL, DOCS) – they have no suffix
-                Object.keys(charges).forEach(key => {
-                    if (!key.endsWith('_20') && !key.endsWith('_40')) {
-                        finalCharges[key] = charges[key];
-                    }
-                });
-            } else {
-                // No container selected – fallback: add all charges without suffix
-                Object.keys(charges).forEach(key => {
-                    if (!key.endsWith('_20') && !key.endsWith('_40')) {
-                        finalCharges[key] = charges[key];
-                    }
-                });
-            }
-        } else {
-            console.warn('⚠️ No default SEA charges for', pol, commodity);
-        }
-    } else if (mode === 'air') {
-        const defaultMatch = db.defaultAirCharges.find(d => d.pol === pol && d.commodity === commodity);
-        if (defaultMatch) {
-            console.log('✅ Default AIR charges found');
-            Object.assign(finalCharges, defaultMatch.charges);
-        }
-    } else if (mode === 'lcl') {
-        const defaultMatch = db.defaultLclCharges.find(d => d.pol === pol && d.commodity === commodity);
-        if (defaultMatch) {
-            console.log('✅ Default LCL charges found');
-            Object.assign(finalCharges, defaultMatch.charges);
-        }
-    }
+	if (mode === 'sea') {
+		const ownCfs = document.getElementById('sea-own-cfs')?.checked || false;
+		if (!ownCfs) {
+			const defaultMatch = db.defaultSeaCharges.find(d =>
+				d.pol === pol &&
+				d.commodity === commodity
+			);
+			if (defaultMatch) {
+				console.log('✅ Default SEA charges found for', pol, commodity);
+				const charges = { ...defaultMatch.charges };
+				// Map split charges based on container
+				let suffix = '';
+				if (container === '20 GP') suffix = '_20';
+				else if (container === '40 GP' || container === '40 HC') suffix = '_40';
+				if (suffix) {
+					Object.keys(charges).forEach(key => {
+						if (key.endsWith(suffix)) {
+							const base = key.slice(0, -3);
+							finalCharges[base] = charges[key];
+						}
+					});
+					Object.keys(charges).forEach(key => {
+						if (!key.endsWith('_20') && !key.endsWith('_40')) {
+							finalCharges[key] = charges[key];
+						}
+					});
+				} else {
+					Object.keys(charges).forEach(key => {
+						if (!key.endsWith('_20') && !key.endsWith('_40')) {
+							finalCharges[key] = charges[key];
+						}
+					});
+				}
+			} else {
+				console.warn('⚠️ No default SEA charges for', pol, commodity);
+			}
+		} else {
+			console.log('ℹ️ Own CFS checked – skipping default charges');
+		}
+	}
+
 
     // ===== 2. CARRIER-SPECIFIC CHARGES (override/add) =====
     if (mode === 'sea') {
@@ -1954,6 +1945,14 @@ function onCarrierPolChangeInternal(mode) {
 
     console.log('📋 Final charges to display:', Object.keys(finalCharges));
     buildChargesGrid(mode, finalCharges);
+}
+
+
+function onOwnCfsToggle(mode) {
+    if (mode === 'sea') {
+        // Re‑fetch charges based on new checkbox state
+        onCarrierPolChangeInternal('sea');
+    }
 }
 
 // ==================== SEA AUTO RATE SELECTION ====================
@@ -2321,21 +2320,26 @@ function renderRecords(target) {
 }
 // ==================== FOLLOW-UPS ====================
 function renderFollowups() {
-    const filterStatus = document.getElementById('followup-filter-status')?.value || '';
     const list = document.getElementById('followup-list');
     const counters = document.getElementById('followup-counters');
+
+    // Exit silently if the container doesn't exist (tab not active or missing)
+    if (!list && !counters) return;
+
     let allQuotes = [];
     ['sea', 'air', 'lcl'].forEach(mode => {
         db.rates[mode].forEach((rec, idx) => {
             allQuotes.push({ ...rec, _target: 'rates', _mode: mode, _idx: idx });
         });
     });
-    const pending = allQuotes.filter(r => !r.followUpStatus || r.followUpStatus === 'PENDING').length;
-    const sent = allQuotes.filter(r => r.followUpStatus === 'SENT').length;
-    const followup = allQuotes.filter(r => r.followUpStatus === 'FOLLOW-UP').length;
-    const won = allQuotes.filter(r => r.followUpStatus === 'WON').length;
-    const lost = allQuotes.filter(r => r.followUpStatus === 'LOST').length;
+
+    // Update counters if they exist
     if (counters) {
+        const pending = allQuotes.filter(r => !r.followUpStatus || r.followUpStatus === 'PENDING').length;
+        const sent = allQuotes.filter(r => r.followUpStatus === 'SENT').length;
+        const followup = allQuotes.filter(r => r.followUpStatus === 'FOLLOW-UP').length;
+        const won = allQuotes.filter(r => r.followUpStatus === 'WON').length;
+        const lost = allQuotes.filter(r => r.followUpStatus === 'LOST').length;
         counters.innerHTML = `
             <div class="counter-card" style="border-color:#f59e0b;"><div class="counter-label">⏳ Pending</div><div class="counter-value">${pending}</div></div>
             <div class="counter-card" style="border-color:#3b82f6;"><div class="counter-label">📤 Sent</div><div class="counter-value">${sent}</div></div>
@@ -2344,33 +2348,45 @@ function renderFollowups() {
             <div class="counter-card" style="border-color:#ef4444;"><div class="counter-label">❌ Lost</div><div class="counter-value">${lost}</div></div>
         `;
     }
-    let filtered = allQuotes.filter(r => { if (!filterStatus) return true; return (r.followUpStatus || 'PENDING') === filterStatus; });
-    filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    if (filtered.length === 0) { list.innerHTML = '<p style="color:var(--text-light);padding:20px;text-align:center;">No quotes found</p>'; return; }
-    list.innerHTML = filtered.map(rec => {
-        const status = rec.followUpStatus || 'PENDING';
-        const updated = rec.followUpUpdated ? new Date(rec.followUpUpdated) : new Date(rec.timestamp);
-        const daysSince = Math.floor((new Date() - updated) / (1000 * 60 * 60 * 24));
-        const overdue = daysSince >= 3 && status !== 'WON' && status !== 'LOST';
-        const validity = getValidityStatus(rec.validityDate);
-        return `<div class="follow-up-card ${overdue?'overdue':''}" style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;border-left:5px solid var(--warning);">
-                    <h4 style="color:var(--primary);margin-bottom:4px;font-size:0.9rem;">${rec.client||'Unknown'} (${rec.pol||'N/A'} → ${rec.pod||'N/A'}) ${validity.status !== 'none' ? `<span class="validity-badge ${validity.class}">${validity.text}</span>` : ''}</h4>
-                    <p style="font-size:0.8rem;color:var(--text-light);margin-bottom:2px;">Quote: <strong>${rec.quoteNumber||'N/A'}</strong> | Carrier: ${rec.carrier||'N/A'}</p>
-                    <p style="font-size:0.8rem;color:var(--text-light);margin-bottom:2px;">Status: <strong>${status}</strong> | Last Updated: ${updated.toLocaleDateString('en-IN')}</p>
-                    ${rec.lostReason ? `<p style="color:#991b1b;font-weight:600;font-size:0.8rem;">Lost Reason: ${rec.lostReason}</p>` : ''}
-                    ${overdue ? `<p style="color:var(--danger);font-weight:700;font-size:0.85rem;margin-top:4px;">⚠️ Overdue: ${daysSince} days since last update</p>` : ''}
-                    <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;align-items:center;">
-                        <button class="btn btn-sm btn-preview" onclick="previewSavedRecord('rates','${rec._mode}',${rec._idx})">👁 Preview</button>
-                        <select class="follow-up-select follow-up-${status.toLowerCase().replace('-','')}" onchange="setFollowUpStatus('rates','${rec._mode}',${rec._idx},this.value)">
-                            <option value="PENDING" ${status==='PENDING'?'selected':''}>⏳ Pending</option>
-                            <option value="SENT" ${status==='SENT'?'selected':''}>📤 Sent</option>
-                            <option value="FOLLOW-UP" ${status==='FOLLOW-UP'?'selected':''}>🔄 Follow-up</option>
-                            <option value="WON" ${status==='WON'?'selected':''}>✅ Won</option>
-                            <option value="LOST" ${status==='LOST'?'selected':''}>❌ Lost</option>
-                        </select>
-                    </div>
-                </div>`;
-    }).join('');
+
+    // Update list only if the list element exists
+    if (list) {
+        const filterStatus = document.getElementById('followup-filter-status')?.value || '';
+        let filtered = allQuotes.filter(r => {
+            if (!filterStatus) return true;
+            return (r.followUpStatus || 'PENDING') === filterStatus;
+        });
+        filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        if (filtered.length === 0) {
+            list.innerHTML = '<p style="color:var(--text-light);padding:20px;text-align:center;">No quotes found</p>';
+        } else {
+            list.innerHTML = filtered.map(rec => {
+                const status = rec.followUpStatus || 'PENDING';
+                const updated = rec.followUpUpdated ? new Date(rec.followUpUpdated) : new Date(rec.timestamp);
+                const daysSince = Math.floor((new Date() - updated) / (1000 * 60 * 60 * 24));
+                const overdue = daysSince >= 3 && status !== 'WON' && status !== 'LOST';
+                const validity = getValidityStatus(rec.validityDate);
+                return `<div class="follow-up-card ${overdue?'overdue':''}" style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px;border-left:5px solid var(--warning);">
+                            <h4 style="color:var(--primary);margin-bottom:4px;font-size:0.9rem;">${rec.client||'Unknown'} (${rec.pol||'N/A'} → ${rec.pod||'N/A'}) ${validity.status !== 'none' ? `<span class="validity-badge ${validity.class}">${validity.text}</span>` : ''}</h4>
+                            <p style="font-size:0.8rem;color:var(--text-light);margin-bottom:2px;">Quote: <strong>${rec.quoteNumber||'N/A'}</strong> | Carrier: ${rec.carrier||'N/A'}</p>
+                            <p style="font-size:0.8rem;color:var(--text-light);margin-bottom:2px;">Status: <strong>${status}</strong> | Last Updated: ${updated.toLocaleDateString('en-IN')}</p>
+                            ${rec.lostReason ? `<p style="color:#991b1b;font-weight:600;font-size:0.8rem;">Lost Reason: ${rec.lostReason}</p>` : ''}
+                            ${overdue ? `<p style="color:var(--danger);font-weight:700;font-size:0.85rem;margin-top:4px;">⚠️ Overdue: ${daysSince} days since last update</p>` : ''}
+                            <div style="margin-top:8px;display:flex;gap:5px;flex-wrap:wrap;align-items:center;">
+                                <button class="btn btn-sm btn-preview" onclick="previewSavedRecord('rates','${rec._mode}',${rec._idx})">👁 Preview</button>
+                                <select class="follow-up-select follow-up-${status.toLowerCase().replace('-','')}" onchange="setFollowUpStatus('rates','${rec._mode}',${rec._idx},this.value)">
+                                    <option value="PENDING" ${status==='PENDING'?'selected':''}>⏳ Pending</option>
+                                    <option value="SENT" ${status==='SENT'?'selected':''}>📤 Sent</option>
+                                    <option value="FOLLOW-UP" ${status==='FOLLOW-UP'?'selected':''}>🔄 Follow-up</option>
+                                    <option value="WON" ${status==='WON'?'selected':''}>✅ Won</option>
+                                    <option value="LOST" ${status==='LOST'?'selected':''}>❌ Lost</option>
+                                </select>
+                            </div>
+                        </div>`;
+            }).join('');
+        }
+    }
 }
 
 function setFollowUpStatus(target, mode, idx, status) {
@@ -2694,6 +2710,34 @@ function updateExpiryDashboard() {
 
     checkExpiryNotifications();
 }
+
+function checkExpiryNotifications() {
+    const rates = db.rateSheet || [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let expiringToday = 0;
+    let expiringWithin3Days = 0;
+
+    rates.forEach(r => {
+        if (!r.validTo) return;
+        const valid = new Date(r.validTo);
+        valid.setHours(0, 0, 0, 0);
+        const diffDays = Math.ceil((valid - today) / (1000 * 60 * 60 * 24));
+        if (diffDays === 0) {
+            expiringToday++;
+        } else if (diffDays > 0 && diffDays <= 3) {
+            expiringWithin3Days++;
+        }
+    });
+
+    if (expiringToday > 0) {
+        console.warn(`⚠️ ${expiringToday} rate(s) expiring today!`);
+    }
+    if (expiringWithin3Days > 0) {
+        console.warn(`⚠️ ${expiringWithin3Days} rate(s) expiring within 3 days.`);
+    }
+}
+
 
 function filterRateSheet(filter) {
     rateSheetFilter = filter;
@@ -3216,84 +3260,21 @@ function bulkImport() {
 }
 
 // ==================== BACKUP FUNCTIONS ====================
-async function selectBackupFolder() {
-    try {
-        if (typeof window.showDirectoryPicker === 'function') {
-            const folder = await window.showDirectoryPicker();
-            backupFolderHandle = folder;
-            document.getElementById('backup-folder-path').textContent = `📁 ${folder.name}`;
-            alert('Backup folder selected successfully! Auto backup will run every 1 minute.');
-            startAutoBackup();
-        } else {
-            alert('Your browser does not support folder selection. Please use the Export buttons to save manually.');
-        }
-    } catch (e) {
-        if (e.name !== 'AbortError') { console.error(e);
-            alert('Folder selection failed: ' + e.message); }
-    }
-}
+
 function startAutoBackup() {
-    if (autoBackupInterval) { clearInterval(autoBackupInterval); }
+    if (autoBackupInterval) clearInterval(autoBackupInterval);
     autoBackupInterval = setInterval(() => {
-        if (backupFolderHandle) { autoBackupToFolder(); } else {
-            document.getElementById('auto-backup-status').textContent = '⚠️ No folder selected';
+        if (backupFolderHandle) {
+            autoBackupToFolder();
+        } else {
+            fallbackBackupDownload();
         }
     }, 60000);
-    document.getElementById('auto-backup-status').textContent = '✅ Running (every 1 min)';
+    const statusEl = document.getElementById('auto-backup-status');
+    if (statusEl) statusEl.textContent = '✅ Running (every 1 min)';
 }
-async function autoBackupToFolder() {
-    try {
-        if (!backupFolderHandle) {
-            throw new Error('No folder selected');
-        }
-        const permission = await backupFolderHandle.requestPermission({ mode: 'readwrite' });
-        if (permission !== 'granted') {
-            throw new Error('Permission denied to write to folder');
-        }
-        const backupData = { timestamp: new Date().toISOString(), data: db };
-        const json = JSON.stringify(backupData, null, 2);
-        const blob = new Blob([json], { type: 'application/json' });
-        const fileName = `Gateway_EXIM_AutoBackup_${new Date().toISOString().split('T')[0]}.json`;
-        const fileHandle = await backupFolderHandle.getFileHandle(fileName, { create: true });
-        const writable = await fileHandle.createWritable();
-        await writable.write(blob);
-        await writable.close();
-        db.lastBackup = new Date().toISOString();
-        saveDB();
-        const statusEl = document.getElementById('backup-status');
-        statusEl.textContent = `✅ Last backup: ${new Date().toLocaleString('en-IN')} (in ${backupFolderHandle.name})`;
-        statusEl.className = 'backup-status success';
-        console.log('Auto backup saved to folder:', fileName);
-    } catch (e) {
-        console.error('Folder backup failed, falling back to download:', e);
-        await fallbackBackupDownload();
-    }
-}
-async function fallbackBackupDownload() {
-    try {
-        const backupData = { timestamp: new Date().toISOString(), data: db };
-        const json = JSON.stringify(backupData, null, 2);
-        const blob = new Blob([json], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Gateway_EXIM_AutoBackup_${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        db.lastBackup = new Date().toISOString();
-        saveDB();
-        const statusEl = document.getElementById('backup-status');
-        statusEl.textContent = `✅ Last backup: ${new Date().toLocaleString('en-IN')} (download fallback)`;
-        statusEl.className = 'backup-status success';
-    } catch (e) {
-        console.error('Fallback download also failed:', e);
-        const statusEl = document.getElementById('backup-status');
-        statusEl.textContent = `❌ Backup failed: ${e.message}`;
-        statusEl.className = 'backup-status error';
-    }
-}
+
+
 async function autoBackup() {
     try {
         if (backupFolderHandle) {
@@ -7585,6 +7566,7 @@ function init() {
         startAutoBackup();
         document.getElementById('backup-folder-path').textContent = `📁 ${backupFolderHandle.name}`;
     }
+	document.getElementById('backup-folder-path-input').removeAttribute('readonly');
     console.log('🚢 Gateway EXIM Freight Quotation System loaded successfully.');
     console.log(
         `📊 ${db.rates.sea.length + db.rates.air.length + db.rates.lcl.length} quoted records, ${db.drafts.sea.length + db.drafts.air.length + db.drafts.lcl.length} drafts, ${db.shipments.length} shipments.`
@@ -9481,34 +9463,48 @@ function saveFreightRecord() {
 }
 
 function renderFreightRecords() {
-    const search = (document.getElementById('fr-search').value || '').toLowerCase();
-    const perPage = parseInt(document.getElementById('fr-per-page').value) || 10;
+    // Safely get elements – if they don't exist, use defaults
+    const searchInput = document.getElementById('fr-search');
+    const perPageSelect = document.getElementById('fr-per-page');
+    const listEl = document.getElementById('fr-records-list');
+    const paginationEl = document.getElementById('fr-records-pagination');
+
+    // If the list container isn't present, exit silently (panel may be hidden)
+    if (!listEl) return;
+
+    const search = searchInput ? searchInput.value.toLowerCase() : '';
+    const perPage = perPageSelect ? parseInt(perPageSelect.value) || 10 : 10;
+
     let records = db.freightCalculations || [];
     records = records.filter(r => {
-        const text = `${r.carrier} ${r.origin}`.toLowerCase();
+        const text = `${r.carrier || ''} ${r.origin || ''}`.toLowerCase();
         return text.includes(search);
     });
     records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
     const total = records.length;
     const totalPages = Math.ceil(total / perPage) || 1;
     let page = parseInt(sessionStorage.getItem('frPage') || '1');
     if (page < 1) page = 1;
     if (page > totalPages) page = totalPages;
     sessionStorage.setItem('frPage', String(page));
+
     const start = (page - 1) * perPage;
     const pageData = records.slice(start, start + perPage);
 
-    const list = document.getElementById('fr-records-list');
-    if (total === 0) { list.innerHTML =
-            '<p style="color:var(--text-light);padding:20px;text-align:center;">No freight records found.</p>';
-        document.getElementById('fr-records-pagination').innerHTML = ''; return; }
-    list.innerHTML = pageData.map((r, i) => {
+    if (total === 0) {
+        listEl.innerHTML = '<p style="color:var(--text-light);padding:20px;text-align:center;">No freight records found.</p>';
+        if (paginationEl) paginationEl.innerHTML = '';
+        return;
+    }
+
+    listEl.innerHTML = pageData.map((r, i) => {
         const realIdx = db.freightCalculations.indexOf(r);
         return `<div class="det-record-card" style="border-left:4px solid var(--primary);">
             <div class="info">
-                <h4>${r.carrier} (${r.origin})</h4>
-                <p>${r.charges.length} charges | Total: ${formatUSD(r.totalUSD)} / ${formatINR(r.totalINR)}</p>
-                <p style="font-size:0.7rem;color:var(--text-light);">Saved: ${new Date(r.timestamp).toLocaleDateString('en-IN')}</p>
+                <h4>${r.carrier || 'N/A'} (${r.origin || 'N/A'})</h4>
+                <p>${(r.charges || []).length} charges | Total: ${formatUSD(r.totalUSD || 0)} / ${formatINR(r.totalINR || 0)}</p>
+                <p style="font-size:0.7rem;color:var(--text-light);">Saved: ${r.timestamp ? new Date(r.timestamp).toLocaleDateString('en-IN') : '-'}</p>
             </div>
             <div class="actions">
                 <button class="btn btn-sm btn-preview" onclick="previewFreightRecord(${realIdx})">👁</button>
@@ -9518,21 +9514,32 @@ function renderFreightRecords() {
             </div>
         </div>`;
     }).join('');
-    const pag = document.getElementById('fr-records-pagination');
-    if (totalPages <= 1) { pag.innerHTML = ''; return; }
-    pag.innerHTML =
-        `<button class="page-btn" onclick="changeFreightPage(${page - 1})" ${page === 1 ? 'disabled' : ''}>‹ Prev</button>
-    <span class="page-info">Page ${page} of ${totalPages} (${total} records)</span>
-    <button class="page-btn" onclick="changeFreightPage(${page + 1})" ${page === totalPages ? 'disabled' : ''}>Next ›</button>`;
+
+    if (paginationEl) {
+        if (totalPages <= 1) {
+            paginationEl.innerHTML = '';
+            return;
+        }
+        paginationEl.innerHTML =
+            `<button class="page-btn" onclick="changeFreightPage(${page - 1})" ${page === 1 ? 'disabled' : ''}>‹ Prev</button>
+            <span class="page-info">Page ${page} of ${totalPages} (${total} records)</span>
+            <button class="page-btn" onclick="changeFreightPage(${page + 1})" ${page === totalPages ? 'disabled' : ''}>Next ›</button>`;
+    }
 }
 
-function changeFreightPage(page) { sessionStorage.setItem('frPage', String(page));
-    renderFreightRecords(); }
+function changeFreightPage(page) {
+    sessionStorage.setItem('frPage', String(page));
+    renderFreightRecords();
+}
 
-function clearFreightFilters() { document.getElementById('fr-search').value = '';
-    document.getElementById('fr-per-page').value = '10';
+function clearFreightFilters() {
+    const searchInput = document.getElementById('fr-search');
+    const perPageSelect = document.getElementById('fr-per-page');
+    if (searchInput) searchInput.value = '';
+    if (perPageSelect) perPageSelect.value = '10';
     sessionStorage.setItem('frPage', '1');
-    renderFreightRecords(); }
+    renderFreightRecords();
+}
 
 function clearFreightForm() {
     document.getElementById('fr-carrier').value = '';
@@ -11335,61 +11342,41 @@ function populateSelect(id, options, selectedValue) {
     }
 }
 
-/// Save the backup folder path to the database
-function saveBackupPath() {
-    const pathInput = document.getElementById('backup-folder-path-input');
-    const path = pathInput.value.trim();
-    if (!path) {
-        alert('Please enter a folder path or select one using "Browse Folder".');
-        return;
-    }
-    db.backupFolderPath = path;
-    saveDB();
-    document.getElementById('backup-folder-path').textContent = `📁 ${path}`;
-    alert('Backup folder path saved!');
-    // If path is saved and we have a folder handle, we can also start auto backup
-    if (!backupFolderHandle) {
-        // Try to get handle from path? Not possible, but user can re-select.
-        // We'll just store the path for manual backup later.
-    }
-}
+
 
 // Load saved path on page load
 function loadBackupPath() {
     const path = db.backupFolderPath || '';
-    document.getElementById('backup-folder-path-input').value = path;
-    if (path) {
-        document.getElementById('backup-folder-path').textContent = `📁 ${path}`;
+    const inputEl = document.getElementById('backup-folder-path-input');
+    const displayEl = document.getElementById('backup-folder-path');
+
+    if (inputEl) inputEl.value = path;
+
+    // Load handle from IndexedDB
+    if (typeof getFolderHandle === 'function') {
+        getFolderHandle().then(handle => {
+            backupFolderHandle = handle;
+            if (displayEl) {
+                let displayText = path ? `📁 ${path}` : 'No folder selected';
+                if (handle) displayText += ' (handle available)';
+                displayEl.textContent = displayText;
+            }
+            if (handle && typeof startAutoBackup === 'function') {
+                startAutoBackup();
+            }
+        }).catch(err => {
+            console.warn('Could not retrieve folder handle:', err);
+            if (displayEl) {
+                displayEl.textContent = path ? `📁 ${path}` : 'No folder selected';
+            }
+        });
+    } else {
+        if (displayEl) {
+            displayEl.textContent = path ? `📁 ${path}` : 'No folder selected';
+        }
     }
 }
 
-// Enhanced selectBackupFolder – uses the File System Access API
-// This is the primary "Browse Folder" action
-async function selectBackupFolder() {
-    try {
-        if (typeof window.showDirectoryPicker === 'function') {
-            const folder = await window.showDirectoryPicker();
-            backupFolderHandle = folder;
-            // Update the input and save path automatically
-            document.getElementById('backup-folder-path-input').value = folder.name;
-            db.backupFolderPath = folder.name;
-            saveDB();
-            document.getElementById('backup-folder-path').textContent = `📁 ${folder.name}`;
-            alert('Backup folder selected successfully! Auto backup will run every 1 minute.');
-            // Start auto backup if not already running
-            if (!autoBackupInterval) {
-                startAutoBackup();
-            }
-        } else {
-            alert('Your browser does not support the File System Access API.\nPlease use the "Export" buttons to save backups manually, or type the folder path manually in the input field.\n\nNote: Manual path will only be used for display – the folder must exist for actual backup.');
-        }
-    } catch (e) {
-        if (e.name !== 'AbortError') {
-            console.error('Folder selection error:', e);
-            alert('Folder selection failed: ' + e.message);
-        }
-    }
-}
 
 function migrateDefaultSeaCharges() {
     // Only run once – check if migration already done
@@ -11690,4 +11677,255 @@ function bulkExportCarrierCharges() {
     XLSX.utils.book_append_sheet(wb, ws, 'Carrier Charges');
     XLSX.writeFile(wb, `CarrierCharges_Backup_${new Date().toISOString().split('T')[0]}.xlsx`);
     alert('✅ Carrier charges exported (vertical format – one row per charge).');
+}
+
+
+// ===== 1. selectBackupFolder – stores ONLY the handle, does NOT change the saved path =====
+async function selectBackupFolder() {
+    // Check if we are in a secure context and the API is available
+    const isSecure = window.isSecureContext && location.protocol === 'https:';
+    const hasAPI = typeof window.showDirectoryPicker === 'function';
+
+    if (!isSecure || !hasAPI) {
+        alert(
+            'Your browser cannot select a folder because you are using the "file://" protocol.\n' +
+            'Please type the full folder path manually (e.g., D:\\SHAHID ERP\\Backup) and click "Save Path".\n\n' +
+            'Auto‑backup will still work via download fallback.'
+        );
+        // Focus the input field so the user can type the path
+        document.getElementById('backup-folder-path-input')?.focus();
+        return;
+    }
+
+    try {
+        const folder = await window.showDirectoryPicker();
+        const permission = await folder.requestPermission({ mode: 'readwrite' });
+        if (permission !== 'granted') {
+            alert('Permission denied. Cannot use this folder.');
+            return;
+        }
+        backupFolderHandle = folder;
+        await storeFolderHandle(folder);
+
+        // Preserve the user's typed path – do NOT overwrite it
+        const displayEl = document.getElementById('backup-folder-path');
+        const savedPath = db.backupFolderPath || '';
+        if (displayEl) {
+            if (savedPath) {
+                displayEl.textContent = `📁 ${savedPath} (handle available)`;
+            } else {
+                displayEl.textContent = `📁 ${folder.name} (handle available)`;
+            }
+        }
+        alert('Folder handle stored! Auto backup will use this folder.\nYour full path (if any) remains unchanged.');
+        if (!autoBackupInterval) {
+            startAutoBackup();
+        }
+    } catch (e) {
+        if (e.name !== 'AbortError') {
+            console.error('Folder selection error:', e);
+            alert('Folder selection failed: ' + e.message);
+        }
+    }
+}
+
+
+
+// ===== 2. saveBackupPath – stores the typed path exactly as entered =====
+function saveBackupPath() {
+    const inputEl = document.getElementById('backup-folder-path-input');
+    const path = inputEl ? inputEl.value.trim() : '';
+    if (!path) {
+        alert('Please enter a folder path (e.g., D:\\SHAHID ERP\\Backup) and click Save Path.');
+        return;
+    }
+    db.backupFolderPath = path;
+    saveDB();
+
+    const displayEl = document.getElementById('backup-folder-path');
+    if (displayEl) {
+        let displayText = `📁 ${path}`;
+        if (backupFolderHandle) {
+            displayText += ' (handle available)';
+        }
+        displayEl.textContent = displayText;
+    }
+    alert('✅ Full backup path saved permanently!');
+}
+
+// ===== 3. loadBackupPath – restores the saved path and the handle =====
+function loadBackupPath() {
+    const path = db.backupFolderPath || '';
+    const inputEl = document.getElementById('backup-folder-path-input');
+    const displayEl = document.getElementById('backup-folder-path');
+
+    if (inputEl) inputEl.value = path;   // Populate input with saved full path
+
+    // Load handle from IndexedDB
+    if (typeof getFolderHandle === 'function') {
+        getFolderHandle().then(handle => {
+            backupFolderHandle = handle;
+            if (displayEl) {
+                let displayText = path ? `📁 ${path}` : 'No folder selected';
+                if (handle) displayText += ' (handle available)';
+                displayEl.textContent = displayText;
+            }
+            if (handle && typeof startAutoBackup === 'function') {
+                startAutoBackup();
+            }
+        }).catch(err => {
+            console.warn('Could not retrieve folder handle:', err);
+            if (displayEl) {
+                displayEl.textContent = path ? `📁 ${path}` : 'No folder selected';
+            }
+        });
+    } else {
+        if (displayEl) {
+            displayEl.textContent = path ? `📁 ${path}` : 'No folder selected';
+        }
+    }
+}
+
+
+
+
+
+// ==== REPLACE autoBackupToFolder ====
+async function autoBackupToFolder() {
+    try {
+        if (!backupFolderHandle) {
+            throw new Error('No folder handle available');
+        }
+        // Verify permission
+        const permission = await backupFolderHandle.requestPermission({ mode: 'readwrite' });
+        if (permission !== 'granted') {
+            throw new Error('Permission to folder was revoked');
+        }
+        // Create backup data
+        const backupData = {
+            timestamp: new Date().toISOString(),
+            data: db
+        };
+        const json = JSON.stringify(backupData, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const fileName = `Gateway_EXIM_AutoBackup_${new Date().toISOString().split('T')[0]}.json`;
+        // Save file
+        const fileHandle = await backupFolderHandle.getFileHandle(fileName, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        // Update last backup time
+        db.lastBackup = new Date().toISOString();
+        saveDB();
+        const statusEl = document.getElementById('backup-status');
+        statusEl.textContent = `✅ Last backup: ${new Date().toLocaleString('en-IN')} (in ${db.backupFolderPath || 'selected folder'})`;
+        statusEl.className = 'backup-status success';
+        console.log('Auto backup saved to folder:', fileName);
+    } catch (e) {
+        console.error('Folder backup failed, falling back to download:', e);
+        fallbackBackupDownload();
+    }
+}
+
+
+// ==== REPLACE fallbackBackupDownload ====
+async function fallbackBackupDownload() {
+    try {
+        const backupData = { timestamp: new Date().toISOString(), data: db };
+        const json = JSON.stringify(backupData, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Gateway_EXIM_AutoBackup_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        db.lastBackup = new Date().toISOString();
+        saveDB();
+        const statusEl = document.getElementById('backup-status');
+        statusEl.textContent = `✅ Last backup: ${new Date().toLocaleString('en-IN')} (download fallback)`;
+        statusEl.className = 'backup-status success';
+    } catch (e) {
+        console.error('Fallback download also failed:', e);
+        const statusEl = document.getElementById('backup-status');
+        statusEl.textContent = `❌ Backup failed: ${e.message}`;
+        statusEl.className = 'backup-status error';
+    }
+}
+
+// ==== REPLACE autoBackup (the manual trigger) ====
+async function autoBackup() {
+    if (backupFolderHandle) {
+        await autoBackupToFolder();
+    } else {
+        await fallbackBackupDownload();
+    }
+}
+
+// ============ INDEXEDDB HELPERS (Robust) ============
+function storeFolderHandle(handle) {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open('GatewayEximBackup', 2); // version 2
+        request.onupgradeneeded = function(e) {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains('handles')) {
+                db.createObjectStore('handles', { keyPath: 'id' });
+            }
+        };
+        request.onsuccess = function(e) {
+            const db = e.target.result;
+            try {
+                const tx = db.transaction('handles', 'readwrite');
+                const store = tx.objectStore('handles');
+                const putReq = store.put({ id: 'folderHandle', handle: handle });
+                putReq.onsuccess = () => resolve();
+                putReq.onerror = () => reject(putReq.error);
+                tx.oncomplete = () => db.close();
+            } catch (err) {
+                reject(err);
+            }
+        };
+        request.onerror = () => reject(request.error);
+    });
+}
+
+function getFolderHandle() {
+    return new Promise((resolve) => {
+        const request = indexedDB.open('GatewayEximBackup', 2);
+        request.onupgradeneeded = function(e) {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains('handles')) {
+                db.createObjectStore('handles', { keyPath: 'id' });
+            }
+        };
+        request.onsuccess = function(e) {
+            const db = e.target.result;
+            // Check if the store exists before trying to access it
+            if (!db.objectStoreNames.contains('handles')) {
+                db.close();
+                resolve(null);
+                return;
+            }
+            try {
+                const tx = db.transaction('handles', 'readonly');
+                const store = tx.objectStore('handles');
+                const getReq = store.get('folderHandle');
+                getReq.onsuccess = () => {
+                    db.close();
+                    resolve(getReq.result ? getReq.result.handle : null);
+                };
+                getReq.onerror = () => {
+                    db.close();
+                    resolve(null);
+                };
+                tx.oncomplete = () => db.close();
+            } catch (err) {
+                db.close();
+                resolve(null);
+            }
+        };
+        request.onerror = () => resolve(null);
+    });
 }
