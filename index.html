@@ -23,16 +23,16 @@
 <body>
     <header>
         <div class="header-left"><h1>🚢 Freight Forwarding Quotation System</h1></div>
-        <div class="header-actions">
-            <!-- GLOBAL SEARCH BAR -->
-            <div class="global-search-wrapper">
-                <input type="text" id="global-search" class="global-search-input"
-                placeholder="🔍 Search quotes, shipments, rates..."
-                oninput="debouncedGlobalSearch()" autocomplete="off" />
-                <div id="global-search-results" class="global-search-results"></div>
-            </div>
-            <button class="theme-toggle" type="button" onclick="toggleDarkMode()">🌙 Dark Mode</button>
-        </div>
+		<div class="header-actions">
+			<div class="global-search-wrapper">
+				<input type="text" id="global-search" class="global-search-input"
+					   placeholder="🔍 Search quotes, shipments, rates..."
+					   oninput="debouncedGlobalSearch()" autocomplete="off" />
+				<div id="global-search-results" class="global-search-results"></div>
+			</div>
+			<button class="theme-toggle" type="button" onclick="toggleDarkMode()">🌙 Dark Mode</button>
+			<button class="theme-toggle" type="button" onclick="location.reload()" title="Refresh the page">🔄 Refresh</button>
+		</div>
     </header>
 
     <div class="app-wrapper">
@@ -154,9 +154,15 @@
 						<div class="form-group"><label>Weight (KGS)</label><input type="number" id="sea-weight" oninput="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
 						<div class="form-group"><label>Transit Time (Days)</label><input type="number" id="sea-transit" placeholder="e.g., 5" oninput="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
 						<div class="form-group"><label>Validity Date</label><input type="date" id="sea-validityDate" onchange="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-						<div class="form-group" style="grid-column:1/-1;"><label>Remarks</label><textarea id="sea-remarks" rows="2" oninput="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></textarea></div>
+						<div class="form-group" style="grid-column:1/-1; display:flex; align-items:center; gap:10px;">
+						<label style="margin-bottom:0; display:flex; align-items:center; gap:6px; font-weight:600; font-size:0.78rem;">
+						<input type="checkbox" id="sea-own-cfs" onchange="onOwnCfsToggle('sea')">
+							🚛 Own CFS / Transporter (skip default charges)
+						</label>
+						</div>
+							<div class="form-group" style="grid-column:1/-1;"><label>Remarks</label><textarea id="sea-remarks" rows="2" oninput="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></textarea></div>
+						</div>
 					</div>
-				</div>
 
                 <div class="charges-section">
                     <h3>💰 Freight & Local Charges <span style="font-size:0.72rem;color:var(--buy-red);font-weight:400;">(Drag to reorder • Buy rates in RED)</span></h3>
@@ -1598,7 +1604,7 @@
 						<!-- Path row with integrated picker -->
 						<div style="display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap;">
 							<label style="font-weight:600; font-size:0.8rem; min-width:120px;">Backup Folder Path</label>
-							<input type="text" id="backup-folder-path-input" style="flex:1; min-width:200px; padding:6px 10px; border:1px solid var(--border); border-radius:4px; background:var(--card-bg); color:var(--text);" placeholder="Select a folder or type path" readonly />
+							<input type="text" id="backup-folder-path-input" style="flex:1; min-width:200px; padding:6px 10px; border:1px solid var(--border); border-radius:4px; background:var(--card-bg); color:var(--text);" placeholder="Select a folder or type path"/>
 							<button class="btn btn-sm btn-info" onclick="selectBackupFolder()" style="display:flex; align-items:center; gap:4px;">📁 Browse Folder</button>
 							<button class="btn btn-sm btn-success" onclick="saveBackupPath()">💾 Save Path</button>
 						</div>
