@@ -1487,7 +1487,7 @@
 								<button class="btn btn-sm btn-success" onclick="plannerAddNote()" style="background:rgba(255,255,255,0.2); color:white; border:1px solid rgba(255,255,255,0.3);">+</button>
 							</div>
 							<div style="padding:6px; background:var(--bg);">
-								<div id="planner-notes-container" style="font-size:0.85rem;"></div>
+								<div id="planner-notes-container" style="font-size:0.85rem; font-weight: bold;"></div>
 								<div id="planner-note-input-area" style="display:none; margin-top:4px;">
 									<textarea id="planner-note-text" rows="2" style="width:100%; padding:4px; border:1px solid var(--border); border-radius:4px;" placeholder="Enter note..."></textarea>
 									<div style="display:flex; gap:8px; align-items:center; margin-top:4px; flex-wrap:wrap;">
@@ -1510,46 +1510,46 @@
 						</div>
 
 						<!-- 2. Milestones (Pink) -->
-						<div style="margin-bottom:12px; border:1px solid #ec4899; border-radius:6px; overflow:hidden;">
-							<div style="background:#ec4899; color:white; padding:4px 10px; font-weight:600; font-size:0.85rem;">🚢 Shipment Milestones (ETD / ETA)</div>
+						<div style="margin-bottom:12px; border:1px solid #e8107b; border-radius:6px; overflow:hidden;">
+							<div style="background:#e8107b; color:white; padding:4px 10px; font-weight:600; font-size:0.85rem;">🚢 Shipment Milestones (ETD / ETA)</div>
 							<div style="padding:6px; background:var(--bg);">
-								<div id="planner-milestones-list" style="font-size:0.85rem;"></div>
+								<div id="planner-milestones-list" style="font-size:0.85rem;font-weight: bold;"></div>
 							</div>
 						</div>
 
 						<!-- 3. Quotes Quoted (Green) -->
-						<div style="margin-bottom:12px; border:1px solid #10b981; border-radius:6px; overflow:hidden;">
-							<div style="background:#10b981; color:white; padding:4px 10px; font-weight:600; font-size:0.85rem;">💰 Quotes Quoted</div>
+						<div style="margin-bottom:12px; border:1px solid #018056; border-radius:6px; overflow:hidden;">
+							<div style="background:#018056; color:white; padding:4px 10px; font-weight:600; font-size:0.85rem;">💰 Quotes Quoted</div>
 							<div style="padding:6px; background:var(--bg);">
-								<div id="planner-quotes-list" style="font-size:0.85rem;"></div>
+								<div id="planner-quotes-list" style="font-size:0.85rem; font-weight: bold;"></div>
 							</div>
 						</div>
 
 						<!-- 4. Expiring Quotes (Yellow) -->
-						<div style="margin-bottom:12px; border:1px solid #f59e0b; border-radius:6px; overflow:hidden;">
-							<div style="background:#f59e0b; color:white; padding:4px 10px; font-weight:600; font-size:0.85rem;">⚠️ Quotes Expiring</div>
+						<div style="margin-bottom:12px; border:1px solid #ff1808; border-radius:6px; overflow:hidden;">
+							<div style="background:#ff1808; color:white; padding:4px 10px; font-weight:600; font-size:0.85rem;">⚠️ Quotes Expiring</div>
 							<div style="padding:6px; background:var(--bg);">
-								<div id="planner-expiring-quotes-list" style="font-size:0.85rem;"></div>
+								<div id="planner-expiring-quotes-list" style="font-size:0.85rem;font-weight: bold;"></div>
 							</div>
 						</div>
 
 						<!-- 5. Expiring Rates (Today) – now in the detail panel, orange border -->
-						<div style="margin-bottom:12px; border:1px solid #f97316; border-radius:6px; overflow:hidden;">
-							<div style="background:#f97316; color:white; padding:4px 10px; font-weight:600; font-size:0.85rem;">📅 Rates Expiring on Selected Date</div>
+						<div style="margin-bottom:12px; border:1px solid #ff1808; border-radius:6px; overflow:hidden;">
+							<div style="background:#ff1808; color:white; padding:4px 10px; font-weight:600; font-size:0.85rem;">📅 Rates Expiring on Selected Date</div>
 							<div style="padding:6px; background:var(--bg);">
-								<div id="planner-expiring-today-list-detail" style="font-size:0.85rem;"></div>
+								<div id="planner-expiring-today-list-detail" style="font-size:0.85rem;font-weight: bold;"></div>
 							</div>
 						</div>
 
 
 						<!-- 6. Tasks (Purple) -->
-						<div style="margin-bottom:12px; border:1px solid #8b5cf6; border-radius:6px; overflow:hidden;">
-							<div style="background:#8b5cf6; color:white; padding:4px 10px; font-weight:600; font-size:0.85rem; display:flex; justify-content:space-between; align-items:center;">
+						<div style="margin-bottom:12px; border:1px solid #5007f5; border-radius:6px; overflow:hidden;">
+							<div style="background:#5007f5; color:white; padding:4px 10px; font-weight:600; font-size:0.85rem; display:flex; justify-content:space-between; align-items:center;">
 								<span>✅ Tasks</span>
 								<button class="btn btn-sm btn-success" onclick="plannerAddTaskQuick()" style="background:rgba(255,255,255,0.2); color:white; border:1px solid rgba(255,255,255,0.3);">+</button>
 							</div>
 							<div style="padding:6px; background:var(--bg);">
-								<div id="planner-tasks-list" style="font-size:0.85rem;"></div>
+								<div id="planner-tasks-list" style="font-size:0.85rem;font-weight: bold;"></div>
 							</div>
 						</div>
 
@@ -1557,7 +1557,7 @@
 						<div style="margin-bottom:12px; border:1px solid #ef4444; border-radius:6px; overflow:hidden;">
 							<div style="background:#ef4444; color:white; padding:4px 10px; font-weight:600; font-size:0.85rem;">🚢 Shipments Under Process</div>
 							<div style="padding:6px; background:var(--bg);">
-								<div id="planner-shipments-list" style="font-size:0.85rem;"></div>
+								<div id="planner-shipments-list" style="font-size:0.85rem;font-weight: bold;"></div>
 							</div>
 						</div>
 
