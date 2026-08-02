@@ -4068,6 +4068,7 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
         grandTotal += sellINR;
     });
 
+    // Font sizes for compact/email mode
     const baseFont = compact ? '0.55rem' : '0.72rem';
     const headingFont = compact ? '0.65rem' : '0.78rem';
     const titleFont = compact ? '0.9rem' : '1.2rem';
@@ -4075,7 +4076,8 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
     const cellPadding = compact ? '2px 3px' : '4px 7px';
     const containerPadding = compact ? '4px' : '10px';
 
-    // Customer details – conditional Container / Volume
+    // --- Build the new customer details table (2 columns) ---
+    // Sequence: Client, Status, POL, POD, Commodity, Carrier, Weight, Incoterm, Volume/Container, Transit Time, Quote Date, Validity Date
     const detailRows = [
         ['Client', toUpper(data.client), 'Status', toUpper(data.status)],
         ['POL', toUpper(data.pol), 'POD', toUpper(data.pod)],
@@ -4106,7 +4108,7 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
     });
     detailHtml += `</tbody></table>`;
 
-    // Charges with running Sr. No. – updated column order: Basis before INR
+    // --- Build charges tables with running Sr. No. ---
     let chargeHtml = '';
     let srNo = 1;
 
@@ -4116,7 +4118,10 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
             const catEntries = charges.filter(ch => chargesWithINR[ch]);
             if (catEntries.length === 0) return;
 
+            // Category header
             chargeHtml += `<div style="background:#1e3a8a;color:white;font-weight:700;padding:${padding};margin-top:8px;border-radius:4px 4px 0 0;font-size:${headingFont};text-align:center;">${category.toUpperCase()}</div>`;
+            
+            // Table
             chargeHtml += `<table style="width:100%;border-collapse:collapse;font-size:${baseFont};margin-top:0;">
                 <thead>
                     <tr>
@@ -4145,7 +4150,6 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
                     <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;">${formatINR(c.sellINR)}</td>
                 </tr>`;
             });
-            // Subtotal: span Sr, Type, Currency, Sell (4 cols) → empty Basis → INR value
             chargeHtml += `<tr style="background:#f1f5f9;font-weight:700;">
                 <td colspan="4" style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;">Subtotal:</td>
                 <td style="border:1px solid #d1d5db;padding:${cellPadding};"></td>
@@ -4153,15 +4157,16 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
             </tr></tbody></table>`;
         });
 
-        // Grand total – spans 5 columns (Sr to Basis), value under INR
-        chargeHtml += `<table style="width:100%;border-collapse:collapse;font-size:${baseFont};margin-top:4px;">
-            <tr style="background:#10b981;color:white;font-weight:700;">
-                <td colspan="5" style="border:1px solid #059669;padding:${cellPadding};text-align:right;">GRAND TOTAL (INR)</td>
-                <td style="border:1px solid #059669;padding:${cellPadding};text-align:right;">${formatINR(grandTotal)}</td>
-            </tr>
-        </table>`;
+        // Grand total row – RED background with white text
+		chargeHtml += `<table style="width:100%;border-collapse:collapse;font-size:${baseFont};margin-top:4px;">
+			<tr style="background: linear-gradient(135deg, #10b981, #059669) !important; color: white !important; font-weight: bold;">
+				<td colspan="5" style="border:1px solid #059669;padding:${cellPadding};text-align:right;">GRAND TOTAL (INR)</td>
+				<td style="border:1px solid #059669;padding:${cellPadding};text-align:right;">${formatINR(grandTotal)}</td>
+			</tr>
+		</table>`;
     }
 
+    // Remarks (if any)
     let remarksHtml = '';
     if (data.remarks) {
         remarksHtml = `<div style="background:#1e3a8a;color:white;font-weight:700;padding:${padding};margin-top:8px;border-radius:4px 4px 0 0;font-size:${headingFont};">Remarks</div>
@@ -4170,6 +4175,7 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
             </table>`;
     }
 
+    // Final assembly
     return `
         <div id="preview-content-container" style="background:#ffffff;color:#1a1a1a;font-family:'Segoe UI',Arial,sans-serif;max-width:${maxWidth};margin:0 auto;padding:${containerPadding};box-sizing:border-box;">
             <div style="border-bottom:2px solid #1e3a8a;padding-bottom:6px;margin-bottom:8px;">
@@ -4204,12 +4210,13 @@ function previewQuote(mode) {
         return;
     }
     if (!data.quoteNumber) data.quoteNumber = document.getElementById(`${mode}-qn-value`).textContent || 'DRAFT';
-    _previewData = { data, mode };  // <-- IMPORTANT
+    _previewData = { data, mode };
     const html = buildPreviewHTML(data, mode, '100%', false);
     document.getElementById('modal-title').textContent = 'Quotation Preview';
     document.getElementById('previewBody').innerHTML = `
-        <div style="margin-bottom:10px;">
+        <div style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">
             <button class="btn btn-info" onclick="copyPreviewTables()">📋 Copy Tables (Compact)</button>
+            <button class="btn btn-duplicate" onclick="copyPreviewText()">📄 COPY TEXT</button>
         </div>
         ${html}
     `;
@@ -4223,18 +4230,98 @@ function previewSavedRecord(target, mode, idx) {
         alert('Record not found.');
         return;
     }
-    _previewData = { data: rec, mode };  // <-- IMPORTANT
+    _previewData = { data: rec, mode };
     const html = buildPreviewHTML(rec, mode, '100%', false);
     document.getElementById('modal-title').textContent = 'Quotation Preview';
     document.getElementById('previewBody').innerHTML = `
-        <div style="margin-bottom:10px;">
+        <div style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">
             <button class="btn btn-info" onclick="copyPreviewTables()">📋 Copy Tables (Compact)</button>
+            <button class="btn btn-duplicate" onclick="copyPreviewText()">📄 COPY TEXT</button>
         </div>
         ${html}
     `;
     document.getElementById('previewBody').style.background = 'white';
     openModal('previewModal');
 }
+
+function copyPreviewText() {
+    if (!_previewData) {
+        alert('No preview data available. Please open a preview first.');
+        return;
+    }
+    const { data, mode } = _previewData;
+
+    // Build text summary
+    let text = '';
+    text += `POL : ${data.pol || 'N/A'}\n`;
+    text += `POD : ${data.pod || 'N/A'}\n`;
+    // For sea: show Container; for air/lcl: show Volume (CBM)
+    if (mode === 'sea') {
+        text += `CONTAINER : ${data.container || 'N/A'}\n`;
+    } else {
+        text += `VOLUME (CBM) : ${data.volume || 'N/A'}\n`;
+    }
+    text += `CARGO : ${data.commodity || 'N/A'}\n`;
+    text += `VALID : ${data.validityDate ? new Date(data.validityDate).toLocaleDateString('en-IN') : 'N/A'}\n\n`;
+
+    // Get charges with their sell amounts and currency symbols
+    const chargesWithINR = {};
+    let grandTotal = 0;
+    Object.entries(data.charges || {}).forEach(([charge, c]) => {
+        let unitSellAmt = c.amount;
+        let totalSellAmt = unitSellAmt;
+        if (mode === 'air' || mode === 'lcl') {
+            const basis = c.basis || 'Normal';
+            if (basis === 'Per KGS') totalSellAmt *= (data.weight || 0);
+            else if (basis === 'Per CBM') totalSellAmt *= (data.volume || 0);
+            else if (basis === 'Per KGS × 3') totalSellAmt *= (data.weight || 0) * 3;
+        }
+        if (mode === 'lcl' && (charge === 'FREIGHT' || charge === 'THC')) {
+            const volume = data.volume || 0;
+            if (volume > 0) {
+                const basis = c.basis || 'Normal';
+                if (basis === 'Normal') totalSellAmt *= volume;
+            }
+        }
+        const sellINR = toINR(totalSellAmt, c.currency);
+        chargesWithINR[charge] = {
+            unitSellAmt: totalSellAmt,
+            currency: c.currency,
+            sellINR: sellINR
+        };
+        grandTotal += sellINR;
+    });
+
+    // Add charges to text
+    text += '--- CHARGES ---\n';
+    Object.entries(chargesWithINR).forEach(([charge, c]) => {
+        const symbol = c.currency === 'INR' ? '₹' : '$'; // crude but works for now
+        text += `${charge} : ${symbol} ${Number(c.unitSellAmt).toLocaleString('en-IN')}\n`;
+    });
+    text += `\nGRAND TOTAL : ₹ ${Number(grandTotal).toLocaleString('en-IN')}\n`;
+
+    // Copy to clipboard
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            alert('✅ Text copied to clipboard!');
+        }).catch(() => {
+            fallbackCopyText(text);
+        });
+    } else {
+        fallbackCopyText(text);
+    }
+}
+
+function fallbackCopyText(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+    alert('✅ Text copied to clipboard!');
+}
+
 
 // NEW: copy compact tables from preview
 function copyPreviewTables() {
