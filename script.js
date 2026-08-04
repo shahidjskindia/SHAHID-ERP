@@ -1990,29 +1990,53 @@ function showAutoRateModal(matches, mode) {
 }
 function applyAutoRate(idx, mode) {
     const matches = window._autoRateMatches;
-    if (!matches || !matches[idx]) return;
+    if (!matches || !matches[idx]) {
+        alert('Rate data not found. Please try again.');
+        return;
+    }
     const rate = matches[idx];
     const freightKey = 'FREIGHT';
     const safe = freightKey.replace(/[^A-Z0-9]/gi, '_');
+
+    // Get form elements – carrier is an INPUT with datalist
     const amtEl = document.getElementById(`${mode}-amt-${safe}`);
     const curEl = document.getElementById(`${mode}-cur-${safe}`);
-    const carrierEl = document.getElementById(`${mode}-carrier`);
+    const carrierEl = document.getElementById(`${mode}-carrier`); // <input>
     const buyAmtEl = document.getElementById(`${mode}-buyAmt-${safe}`);
+
+    // Verify all critical elements exist
+    if (!amtEl || !curEl || !carrierEl) {
+        alert('Cannot apply rate – the quotation form is not fully loaded. Please open the correct quotation tab first.');
+        return;
+    }
+
+    // Populate freight amount and currency
     if (buyAmtEl) buyAmtEl.value = rate.freightAmount;
     if (curEl) curEl.value = rate.currency || 'USD';
-    if (carrierEl && rate.carrierName) {
-        let found = false;
-        for (let opt of carrierEl.options) {
-            if (opt.value === rate.carrierName) { found = true; break; }
-        }
-        if (!found) {
-            const opt = document.createElement('option');
-            opt.value = rate.carrierName;
-            opt.text = rate.carrierName;
-            carrierEl.add(opt);
-        }
+
+    // Set carrier value on the input field
+    if (rate.carrierName) {
         carrierEl.value = rate.carrierName;
+
+        // Ensure the carrier exists in the datalist (optional)
+        const datalist = document.getElementById(`${mode}-carrier-list`);
+        if (datalist) {
+            let found = false;
+            for (let i = 0; i < datalist.options.length; i++) {
+                if (datalist.options[i].value === rate.carrierName) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                const opt = document.createElement('option');
+                opt.value = rate.carrierName;
+                datalist.appendChild(opt);
+            }
+        }
     }
+
+    // Recalculate the freight charge
     recalcCharge(mode, freightKey);
     closeModal('autoRateModal');
     alert(`✅ Rate applied from ${rate.carrierName} - ${rate.currency} ${rate.freightAmount}`);
@@ -4049,16 +4073,19 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
         grandTotal += sellINR;
     });
 
+    // Define group mapping based on mode
+    const groupMap = getChargeGroups(mode);
+    // groupMap = { group1: ['Freight', 'Carrier Charges'], group2: ['CFS / Transport Charges'] } etc.
+
     // Font sizes for compact/email mode
-    const baseFont = compact ? '0.55rem' : '0.72rem';
+    const baseFont = compact ? '0.65rem' : '0.78rem';
     const headingFont = compact ? '0.65rem' : '0.78rem';
     const titleFont = compact ? '0.9rem' : '1.2rem';
     const padding = compact ? '2px 4px' : '4px 7px';
     const cellPadding = compact ? '2px 3px' : '4px 7px';
     const containerPadding = compact ? '4px' : '10px';
 
-    // --- Build the new customer details table (2 columns) ---
-    // Sequence: Client, Status, POL, POD, Commodity, Carrier, Weight, Incoterm, Volume/Container, Transit Time, Quote Date, Validity Date
+    // Customer details table (unchanged)
     const detailRows = [
         ['Client', toUpper(data.client), 'Status', toUpper(data.status)],
         ['POL', toUpper(data.pol), 'POD', toUpper(data.pod)],
@@ -4089,62 +4116,90 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
     });
     detailHtml += `</tbody></table>`;
 
-    // --- Build charges tables with running Sr. No. ---
-    let chargeHtml = '';
-    let srNo = 1;
+    // ---- Helper to build a table for a group ----
+    function buildGroupTable(groupLabel, categoryNames, srStart) {
+        // Collect charges belonging to these categories (in order)
+        const groupCharges = [];
+        categoryNames.forEach(cat => {
+            if (order[cat]) {
+                order[cat].forEach(ch => {
+                    if (chargesWithINR[ch]) {
+                        groupCharges.push({ category: cat, charge: ch });
+                    }
+                });
+            }
+        });
+        if (groupCharges.length === 0) return { html: '', subtotal: 0, nextSr: srStart };
 
-    if (Object.keys(chargesWithINR).length > 0) {
-        Object.entries(order).forEach(([category, charges]) => {
-            if (charges.length === 0) return;
-            const catEntries = charges.filter(ch => chargesWithINR[ch]);
-            if (catEntries.length === 0) return;
+        let html = `<table style="width:100%;border-collapse:collapse;font-size:${baseFont};margin-top:8px;">
+            <thead>
+                <tr>
+                    <th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;background:#f1f5f9;font-weight:700;">Sr. No</th>
+                    <th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;background:#f1f5f9;font-weight:700;">Charge Type</th>
+                    <th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;background:#f1f5f9;font-weight:700;">Currency</th>
+                    <th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;background:#f1f5f9;font-weight:700;">Sell Amount</th>
+                    <th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;background:#f1f5f9;font-weight:700;">Basis</th>
+                    <th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;background:#f1f5f9;font-weight:700;">INR Equivalent</th>
+                </tr>
+            </thead>
+            <tbody>`;
 
-            // Category header
-            chargeHtml += `<div style="background:#1e3a8a;color:white;font-weight:700;padding:${padding};margin-top:8px;border-radius:4px 4px 0 0;font-size:${headingFont};text-align:center;">${category.toUpperCase()}</div>`;
-            
-            // Table
-            chargeHtml += `<table style="width:100%;border-collapse:collapse;font-size:${baseFont};margin-top:0;">
-                <thead>
-                    <tr>
-                        <th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;background:#f1f5f9;font-weight:700;">Sr. No</th>
-                        <th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;background:#f1f5f9;font-weight:700;">Charge Type</th>
-                        <th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;background:#f1f5f9;font-weight:700;">Currency</th>
-                        <th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;background:#f1f5f9;font-weight:700;">Sell Amount</th>
-                        <th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;background:#f1f5f9;font-weight:700;">Basis</th>
-                        <th style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;background:#f1f5f9;font-weight:700;">INR Equivalent</th>
-                    </tr>
-                </thead>
-                <tbody>`;
-            let catTotal = 0;
-            catEntries.forEach((ch) => {
-                const c = chargesWithINR[ch];
-                catTotal += c.sellINR;
-                const isFreight = ch.toUpperCase() === 'FREIGHT' || ch.toUpperCase() === 'AIR FREIGHT';
-                const rowStyle = isFreight ? 'background:#fee2e2 !important;font-weight:700;color:#dc2626 !important;' : '';
-                const basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
-                chargeHtml += `<tr style="${rowStyle}">
-                    <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;">${srNo++}</td>
-                    <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;">${ch.toUpperCase()}</td>
-                    <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;">${c.currency}</td>
-                    <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;">${Number(c.unitSellAmt).toLocaleString('en-IN')}</td>
-                    <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;">${basisDisplay}</td>
-                    <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;">${formatINR(c.sellINR)}</td>
-                </tr>`;
-            });
-            chargeHtml += `<tr style="background:#f1f5f9;font-weight:700;">
-                <td colspan="4" style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;">Subtotal:</td>
-                <td style="border:1px solid #d1d5db;padding:${cellPadding};"></td>
-                <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;">${formatINR(catTotal)}</td>
-            </tr></tbody></table>`;
+        let sr = srStart;
+        let subtotal = 0;
+        groupCharges.forEach(({ category, charge }) => {
+            const c = chargesWithINR[charge];
+            subtotal += c.sellINR;
+            const isFreight = charge.toUpperCase() === 'FREIGHT' || charge.toUpperCase() === 'AIR FREIGHT';
+            const rowStyle = isFreight ? 'background:#fee2e2 !important;font-weight:700;color:#dc2626 !important;' : '';
+            const basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
+            html += `<tr style="${rowStyle}">
+                <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;">${sr++}</td>
+                <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;">${charge.toUpperCase()}</td>
+                <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;">${c.currency}</td>
+                <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;">${Number(c.unitSellAmt).toLocaleString('en-IN')}</td>
+                <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;">${basisDisplay}</td>
+                <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;">${formatINR(c.sellINR)}</td>
+            </tr>`;
         });
 
-        // Grand total row – RED background with white text
-		chargeHtml += `<table style="width:100%;border-collapse:collapse;font-size:${baseFont};margin-top:4px;">
-			<tr style="background: linear-gradient(135deg, #10b981, #059669) !important; color: white !important; font-weight: bold;">
-				<td colspan="5" style="border:1px solid #059669;padding:${cellPadding};text-align:right;">GRAND TOTAL (INR)</td>
-				<td style="border:1px solid #059669;padding:${cellPadding};text-align:right;">${formatINR(grandTotal)}</td>
-			</tr>
-		</table>`;
+        // Subtotal row
+        html += `<tr style="background:#f1f5f9;font-weight:700;">
+            <td colspan="5" style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;">${groupLabel} Subtotal</td>
+            <td style="border:1px solid #00e394 padding:${cellPadding};text-align:right;">${formatINR(subtotal)}</td>
+        </tr>`;
+        html += `</tbody></table>`;
+        return { html, subtotal, nextSr: sr };
+    }
+
+    // ---- Build group1 and group2 ----
+    const group1Label = "Freight & Carrier Charges";
+    const group2Label = "CFS / Transport Charges";
+    const group1Cats = groupMap.group1 || [];
+    const group2Cats = groupMap.group2 || [];
+
+    let srStart = 1;
+    let table1 = buildGroupTable(group1Label, group1Cats, srStart);
+    srStart = table1.nextSr;
+    let table2 = buildGroupTable(group2Label, group2Cats, srStart);
+
+    let chargeHtml = '';
+    if (table1.html) {
+        chargeHtml += `<div style="background:#1e3a8a;color:white;font-weight:700;padding:${padding};margin-top:8px;border-radius:4px 4px 0 0;font-size:${headingFont};text-align:center;">${group1Label}</div>`;
+        chargeHtml += table1.html;
+    }
+    if (table2.html) {
+        chargeHtml += `<div style="background:#1e3a8a;color:white;font-weight:700;padding:${padding};margin-top:8px;border-radius:4px 4px 0 0;font-size:${headingFont};text-align:center;">${group2Label}</div>`;
+        chargeHtml += table2.html;
+    }
+
+    // Grand total row (separate table)
+    if (chargeHtml) {
+        chargeHtml += `<table style="width:100%;border-collapse:collapse;font-size:${baseFont};margin-top:4px;">
+            <tr style="background: linear-gradient(135deg, #10b981, #059669) !important; color: white !important; font-weight: bold;">
+                <td colspan="5" style="border:1px solid #059669;padding:${cellPadding};text-align:right;">GRAND TOTAL (INR)</td>
+                <td style="border:1px solid #059669;padding:${cellPadding};text-align:right;">${formatINR(grandTotal)}</td>
+            </tr>
+        </table>`;
     }
 
     // Remarks (if any)
@@ -4183,6 +4238,27 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
     `;
 }
 
+// Helper function to define charge groups per mode
+function getChargeGroups(mode) {
+    if (mode === 'sea') {
+        return {
+            group1: ['Freight', 'Carrier Charges'],
+            group2: ['CFS / Transport Charges']
+        };
+    } else if (mode === 'air') {
+        return {
+            group1: ['Freight', 'Origin Charges'],
+            group2: ['Local Charges']
+        };
+    } else if (mode === 'lcl') {
+        return {
+            group1: ['Freight', 'Origin Charges'],
+            group2: [] // LCL may not have a second group; adjust if needed
+        };
+    }
+    return { group1: [], group2: [] };
+}
+
 
 function previewQuote(mode) {
     const data = getFormData(mode);
@@ -4197,7 +4273,7 @@ function previewQuote(mode) {
     document.getElementById('previewBody').innerHTML = `
         <div style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">
             <button class="btn btn-info" onclick="copyPreviewTables()">📋 Copy Tables (Compact)</button>
-            <button class="btn btn-duplicate" onclick="copyPreviewText()">📄 COPY TEXT</button>
+            <button class="btn" onclick="copyPreviewText()" style="background:#25D366; color:white; border:none; padding:6px 12px; border-radius:4px; font-weight:bold; cursor:pointer;">📄 WhatsApp</button>
         </div>
         ${html}
     `;
@@ -4217,7 +4293,7 @@ function previewSavedRecord(target, mode, idx) {
     document.getElementById('previewBody').innerHTML = `
         <div style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">
             <button class="btn btn-info" onclick="copyPreviewTables()">📋 Copy Tables (Compact)</button>
-            <button class="btn btn-duplicate" onclick="copyPreviewText()">📄 COPY TEXT</button>
+            <button class="btn" onclick="copyPreviewText()" style="background:#25D366; color:white; border:none; padding:6px 12px; border-radius:4px; font-weight:bold; cursor:pointer;">📄 WhatsApp</button>
         </div>
         ${html}
     `;
@@ -4312,7 +4388,8 @@ function copyPreviewTables() {
     }
     const { data, mode } = _previewData;
     const compactHtml = buildCompactEmailHTML(data, mode);
-    
+
+    // Use clipboard API to copy HTML and plain text fallback
     if (navigator.clipboard && navigator.clipboard.write) {
         const blobHTML = new Blob([compactHtml], { type: 'text/html' });
         const blobPlain = new Blob([data.client || 'Quotation'], { type: 'text/plain' });
@@ -9697,159 +9774,243 @@ function populateFreightDropdowns() {
 }
 // ==================== COMPACT EMAIL BUILDER ====================
 function buildCompactEmailHTML(data, mode) {
-    const modeLabel = { sea: 'SEA FREIGHT', air: 'AIR FREIGHT', lcl: 'LCL FREIGHT' }[mode];
-    const validityDisplay = data.validityDate ? new Date(data.validityDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
-    const transitDisplay = data.transit ? `${data.transit} Days` : '—';
-    const order = data.chargesOrder || getCurrentChargesOrder(mode);
-    const toUpper = (val) => val ? String(val).toUpperCase() : '-';
-    let grandTotal = 0;
-    const chargesWithINR = {};
+		const modeLabel = { sea: 'SEA FREIGHT', air: 'AIR FREIGHT', lcl: 'LCL FREIGHT' }[mode];
+		const validityDisplay = data.validityDate ? new Date(data.validityDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+		const transitDisplay = data.transit ? `${data.transit} Days` : '—';
+		const order = data.chargesOrder || getCurrentChargesOrder(mode);
+		const toUpper = (val) => val ? String(val).toUpperCase() : '-';
+		let grandTotal = 0;
+		const chargesWithINR = {};
 
-    // Same calculation as before...
-    Object.entries(data.charges || {}).forEach(([charge, c]) => {
-        let unitSellAmt = c.amount;
-        let unitBuyAmt = c.buyAmount || 0;
-        let totalSellAmt = unitSellAmt;
-        let totalBuyAmt = unitBuyAmt;
-        if (mode === 'air' || mode === 'lcl') {
-            const basis = c.basis || 'Normal';
-            if (basis === 'Per KGS') {
-                totalSellAmt *= (data.weight || 0);
-                totalBuyAmt *= (data.weight || 0);
-            } else if (basis === 'Per CBM') {
-                totalSellAmt *= (data.volume || 0);
-                totalBuyAmt *= (data.volume || 0);
-            } else if (basis === 'Per KGS × 3') {
-                totalSellAmt *= (data.weight || 0) * 3;
-                totalBuyAmt *= (data.weight || 0) * 3;
-            }
-        }
-        if (mode === 'lcl' && (charge === 'FREIGHT' || charge === 'THC')) {
-            const volume = data.volume || 0;
-            if (volume > 0) {
-                const basis = c.basis || 'Normal';
-                if (basis === 'Normal') {
-                    totalSellAmt *= volume;
-                    totalBuyAmt *= volume;
-                }
-            }
-        }
-        const sellINR = toINR(totalSellAmt, c.currency);
-        const buyINR = toINR(totalBuyAmt, c.buyCurrency || c.currency);
-        chargesWithINR[charge] = {
-            unitSellAmt,
-            totalSellAmt,
-            currency: c.currency,
-            sellINR,
-            buyINR,
-            basis: c.basis || 'Normal'
-        };
-        grandTotal += sellINR;
-    });
+		// Calculate charges
+		Object.entries(data.charges || {}).forEach(([charge, c]) => {
+			let unitSellAmt = c.amount;
+			let unitBuyAmt = c.buyAmount || 0;
+			let totalSellAmt = unitSellAmt;
+			let totalBuyAmt = unitBuyAmt;
+			if (mode === 'air' || mode === 'lcl') {
+				const basis = c.basis || 'Normal';
+				if (basis === 'Per KGS') {
+					totalSellAmt *= (data.weight || 0);
+					totalBuyAmt *= (data.weight || 0);
+				} else if (basis === 'Per CBM') {
+					totalSellAmt *= (data.volume || 0);
+					totalBuyAmt *= (data.volume || 0);
+				} else if (basis === 'Per KGS × 3') {
+					totalSellAmt *= (data.weight || 0) * 3;
+					totalBuyAmt *= (data.weight || 0) * 3;
+				}
+			}
+			if (mode === 'lcl' && (charge === 'FREIGHT' || charge === 'THC')) {
+				const volume = data.volume || 0;
+				if (volume > 0) {
+					const basis = c.basis || 'Normal';
+					if (basis === 'Normal') {
+						totalSellAmt *= volume;
+						totalBuyAmt *= volume;
+					}
+				}
+			}
+			const sellINR = toINR(totalSellAmt, c.currency);
+			const buyINR = toINR(totalBuyAmt, c.buyCurrency || c.currency);
+			chargesWithINR[charge] = {
+				unitSellAmt,
+				totalSellAmt,
+				currency: c.currency,
+				sellINR,
+				buyINR,
+				basis: c.basis || 'Normal'
+			};
+			grandTotal += sellINR;
+		});
 
-    const fontStack = "'Aptos', 'Segoe UI', Arial, sans-serif";
-    const dataSize = '10px';
-    const headingSize = '12px';
-    const titleSize = '13px';
-    const thPadding = '4px 8px';
-    const tdPadding = '4px 8px';
-    const colWidths = { num: '5%', charge: '30%', curr: '10%', sell: '18%', basis: '15%', inr: '22%' };
-    const custColWidths = { label1: '15%', value1: '35%', label2: '15%', value2: '35%' };
-    const tableWidth = '13cm';
-    const maxTableWidth = '16cm';
+		const fontStack = "'Aptos', 'Segoe UI', Arial, sans-serif";
+		const dataSize = '10px';
+		const headingSize = '12px';
+		const titleSize = '13px';
+		const thPadding = '4px 8px';
+		const tdPadding = '4px 8px';
+		const colWidths = { num: '5%', charge: '30%', curr: '10%', sell: '18%', basis: '12%', inr: '20%' };
+		const custColWidths = { label1: '15%', value1: '35%', label2: '15%', value2: '35%' };
+		const tableWidth = '15cm';
+		const maxTableWidth = '17cm';
 
-    let html = `<div style="max-width:${maxTableWidth};min-width:${tableWidth};width:auto;margin:0 auto;font-family:${fontStack};background:#ffffff;padding:4px;box-sizing:border-box;color:#1a1a1a;font-size:${dataSize};">
-        <p style="margin:0 0 4px 0;font-size:${titleSize};line-height:1.4;">Dear Sir/Madam,</p>
-        <br>
-        <p style="margin:0 0 10px 0;font-size:${titleSize};line-height:1.4;">Good Day !</p>
-        <div style="font-size:${titleSize};font-weight:800;color:#1e3a8a;">${modeLabel} QUOTATION / Quote: ${data.quoteNumber || 'DRAFT'}</div>
-        <br>
+		let html = `<div style="max-width:${maxTableWidth};min-width:${tableWidth};width:auto;margin:0 auto;font-family:${fontStack};background:#ffffff;padding:4px;box-sizing:border-box;color:#1a1a1a;font-size:${dataSize};">
+			<p style="margin:0 0 4px 0;font-size:${titleSize};line-height:1.4;">Dear Sir/Madam,</p>
+			<br>
+			<p style="margin:0 0 10px 0;font-size:${titleSize};line-height:1.4;">Good Day !</p>
+			<div style="font-size:${titleSize};font-weight:800;color:#1e3a8a;">${modeLabel} QUOTATION / Quote: ${data.quoteNumber || 'DRAFT'}</div>
+			<br>
 
-        <!-- Customer & Shipment Details (new order) -->
-        <div style="font-weight:700;font-size:${headingSize};border-bottom:2px solid #1e3a8a;padding-bottom:2px;">Customer & Shipment Details</div>
-        <br>
-        <table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
-            <colgroup>
-                <col style="width:${custColWidths.label1};"><col style="width:${custColWidths.value1};"><col style="width:${custColWidths.label2};"><col style="width:${custColWidths.value2};">
-            </colgroup>
-            <tbody>
-                <tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Client</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.client)}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Status</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.status)}</td></tr>
-                <tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">POL</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.pol)}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">POD</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.pod)}</td></tr>
-                <tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Commodity</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.commodity)}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Carrier</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.carrier)}</td></tr>
-                <tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Weight (KGS)</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${data.weight||'-'}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Incoterm</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.incoterm)}</td></tr>
-                <tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">${mode === 'sea' ? 'Container' : 'Volume (CBM)'}</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${mode === 'sea' ? toUpper(data.container) : (data.volume || '-')}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Transit Time</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${transitDisplay}</td></tr>
-                <tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Quote Date</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${data.autoDate||'-'}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Validity Date</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${validityDisplay}</td></tr>
-            </tbody>
-        </table>
-        <br>`;
+			<!-- Customer Details Table – heading as first row -->
+			<table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
+				<colgroup>
+					<col style="width:${custColWidths.label1};"><col style="width:${custColWidths.value1};"><col style="width:${custColWidths.label2};"><col style="width:${custColWidths.value2};">
+				</colgroup>
+				<thead>
+					<tr><th colspan="4" style="border:1px solid #1e3a8a;padding:${thPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;">Customer & Shipment Details</th></tr>
+				</thead>
+				<tbody>
+	<tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Client</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.client)}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Status</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.status)}</td></tr>
+	<tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">POL</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.pol)}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">POD</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.pod)}</td></tr>
+					<tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Commodity</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.commodity)}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Carrier</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.carrier)}</td></tr>
+					<tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Weight (KGS)</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${data.weight||'-'}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Incoterm</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.incoterm)}</td></tr>
+					<tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">${mode === 'sea' ? 'Container' : 'Volume (CBM)'}</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${mode === 'sea' ? toUpper(data.container) : (data.volume || '-')}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Transit Time</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${transitDisplay}</td></tr>
+					<tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Quote Date</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${data.autoDate||'-'}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Validity Date</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${validityDisplay}</td></tr>
+				</tbody>
+			</table>
+			<br>`;
 
-    // Charges – with running Sr. No., Basis before INR
-    if (Object.keys(chargesWithINR).length > 0) {
-        let srNo = 1;
-        Object.entries(order).forEach(([category, charges]) => {
-            if (charges.length === 0) return;
-            const catEntries = charges.filter(ch => chargesWithINR[ch]);
-            if (catEntries.length === 0) return;
+		// ---- Helper to build a group table with subtotal as tfoot ----
+		function buildGroupTableHTML(groupLabel, categoryNames, srStart) {
+			const groupCharges = [];
+			categoryNames.forEach(cat => {
+				if (order[cat]) {
+					order[cat].forEach(ch => {
+						if (chargesWithINR[ch]) {
+							groupCharges.push({ category: cat, charge: ch });
+						}
+					});
+				}
+			});
+			if (groupCharges.length === 0) return { html: '', subtotal: 0, nextSr: srStart };
 
-            html += `<div style="font-weight:700;font-size:${headingSize};border-bottom:2px solid #1e3a8a;padding-bottom:2px;">${category.toUpperCase()}</div>
-                <br>
-                <table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
-                    <colgroup>
-                        <col style="width:${colWidths.num};"><col style="width:${colWidths.charge};"><col style="width:${colWidths.curr};"><col style="width:${colWidths.sell};"><col style="width:${colWidths.basis};"><col style="width:${colWidths.inr};">
-                    </colgroup>
-                    <thead>
-                        <tr>
-                            <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#f1f5f9;font-weight:700;">Sr. No</th>
-                            <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#f1f5f9;font-weight:700;">Charge Type</th>
-                            <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#f1f5f9;font-weight:700;">Currency</th>
-                            <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:right;background:#f1f5f9;font-weight:700;">Sell Amount</th>
-                            <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#f1f5f9;font-weight:700;">Basis</th>
-                            <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:right;background:#f1f5f9;font-weight:700;">INR Equivalent</th>
-                        </tr>
-                    </thead>
-                    <tbody>`;
-            let catTotal = 0;
-            catEntries.forEach((ch) => {
-                const c = chargesWithINR[ch];
-                catTotal += c.sellINR;
-                const isFreight = ch.toUpperCase() === 'FREIGHT' || ch.toUpperCase() === 'AIR FREIGHT';
-                const rowStyle = isFreight ? 'background:#fee2e2;font-weight:700;color:#dc2626;' : '';
-                const basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
-                html += `<tr style="${rowStyle}">
-                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;">${srNo++}</td>
-                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${ch.toUpperCase()}</td>
-                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;">${c.currency}</td>
-                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;">${Number(c.unitSellAmt).toLocaleString('en-IN')}</td>
-                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;">${basisDisplay}</td>
-                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;">${formatINR(c.sellINR)}</td>
-                </tr>`;
-            });
-            html += `<tr style="background:#f1f5f9;font-weight:700;">
-                <td colspan="4" style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;">Subtotal:</td>
-                <td style="border:1px solid #d1d5db;padding:${tdPadding};"></td>
-                <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;">${formatINR(catTotal)}</td>
-            </tr></tbody></table><br>`;
-        });
+			let html = `<table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
+				<colgroup>
+					<col style="width:${colWidths.num};"><col style="width:${colWidths.charge};"><col style="width:${colWidths.curr};"><col style="width:${colWidths.sell};"><col style="width:${colWidths.basis};"><col style="width:${colWidths.inr};">
+				</colgroup>
+				<thead>
+					<tr><th colspan="6" style="border:1px solid #1e3a8a;padding:${thPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;">${groupLabel}</th></tr>
+					<tr>
+						<th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Sr. No</th>
+						<th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Charge Type</th>
+						<th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Currency</th>
+						<th style="border:1px solid #d1d5db;padding:${thPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Sell Amount</th>
+						<th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Basis</th>
+						<th style="border:1px solid #d1d5db;padding:${thPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">INR Equivalent</th>
+					</tr>
+				</thead>
+				<tbody>`;
 
-        html += `<table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;font-size:${headingSize};">
-            <colgroup><col style="width:80%;"><col style="width:20%;"></colgroup>
-            <tr style="background:#10b981;color:white;font-weight:700;">
-                <td colspan="5" style="border:1px solid #059669;padding:${thPadding};text-align:right;">GRAND TOTAL (INR)</td>
-                <td style="border:1px solid #059669;padding:${thPadding};text-align:right;">${formatINR(grandTotal)}</td>
-            </tr>
-        </table>`;
-    }
+			let sr = srStart;
+			let subtotal = 0;
+			groupCharges.forEach(({ charge }) => {
+				const c = chargesWithINR[charge];
+				subtotal += c.sellINR;
+				const isFreight = charge.toUpperCase() === 'FREIGHT' || charge.toUpperCase() === 'AIR FREIGHT';
+				const rowStyle = isFreight ? 'background:#fee2e2;font-weight:700;color:#dc2626;' : '';
+				const basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
+				html += `<tr style="${rowStyle}">
+					<td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${sr++}</td>
+					<td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${charge.toUpperCase()}</td>
+					<td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${c.currency}</td>
+					<td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${Number(c.unitSellAmt).toLocaleString('en-IN')}</td>
+					<td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${basisDisplay}</td>
+					<td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${formatINR(c.sellINR)}</td>
+				</tr>`;
+			});
 
-    if (data.remarks) {
-        html += `<br><div style="font-weight:700;font-size:${headingSize};border-bottom:2px solid #1e3a8a;padding-bottom:2px;">Remarks</div>
-            <table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
-                <tr><td style="border:1px solid #d1d5db;padding:${thPadding};white-space:normal;line-height:1.4;">${data.remarks.toUpperCase()}</td></tr>
-            </table>`;
-    }
+			// ---- SUBTOTAL ROW (inside table as tfoot) ----
+			html += `</tbody>
+				<tfoot>
+					<tr style="font-weight:700;background:#e6f7e6;">
+						<td colspan="5" style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Subtotal</td>
+						<td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${formatINR(subtotal)}</td>
+					</tr>
+				</tfoot>
+			</table>`;
 
-    html += `</div>`;
-    return html;
-}
+			return { html, subtotal, nextSr: sr };
+		}
+
+		const groupMap = getChargeGroups(mode);
+		const group1Label = "Freight & Carrier Charges";
+		const group2Label = "CFS / Transport Charges";
+		const group1Cats = groupMap.group1 || [];
+		const group2Cats = groupMap.group2 || [];
+
+		let srStart = 1;
+		let table1 = buildGroupTableHTML(group1Label, group1Cats, srStart);
+		srStart = table1.nextSr;
+		let table2 = buildGroupTableHTML(group2Label, group2Cats, srStart);
+
+		let chargeHtml = '';
+		if (table1.html) {
+			chargeHtml += table1.html;
+		}
+		if (table2.html) {
+			chargeHtml += table2.html;
+		}
+
+		// ---- GRAND TOTAL – margin-top:0 ----
+		if (chargeHtml) {
+			chargeHtml += `<table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
+				<colgroup>
+					<col style="width:${colWidths.num};"><col style="width:${colWidths.charge};"><col style="width:${colWidths.curr};"><col style="width:${colWidths.sell};"><col style="width:${colWidths.basis};"><col style="width:${colWidths.inr};">
+				</colgroup>
+				<tbody>
+					<tr style="background:#05964b;color:#edeef0;font-weight:800;font-size:15px;line-height:1;vertical-align:middle;">
+						<td colspan="5" style="border:1px solid #d1d5db;padding:4px 8px;text-align:right;">GRAND TOTAL (INR) + GST additional </td>
+						<td style="border:1px solid #d1d5db;padding:4px 8px;text-align:left;">${formatINR(grandTotal)}</td>
+					</tr>
+				</tbody>
+			</table>`;
+		}
+
+		html += chargeHtml;
+
+		// ---- REMARKS SECTION – mode‑specific remarks ----
+		let remarks;
+		if (mode === 'air') {
+			remarks = [
+				"1. Rate Subject To Booking Acceptance",
+				"2. 100% Of Total Freight Charges applicable  if Shipments Cancelled Within 48 Hours Before The Delivery Cut-Off Time",
+				"3. GST At Actual",
+				"4. Rest other charges if any at actual as per receipt.",
+				"5. Above rates are valid for 3 days",
+				"6. THC:0.95/KG – ac actual",
+				"7. For Air cargo payment term will be 15 Days from the date of invoice.",
+				"8. Surcharges are at cost and subject to change. This rate QUOTED for prepaid shipment.",
+				"9. This rate is quote valid for 1.1 General cargo, Stackable and Normal dimension cargo.",
+				"10. This rate is not valid for DG/UB /ODC / Fragile/ Special cargo.",
+				"11. Acceptance of shipment would be subject to space availability at the time of booking .",
+				"12. EY reserves the right to select routing as per space availability",
+				"13. Spot rates offered are valid only for two days from the date of quotation.",
+				"14. Under current scenario rates are subject to change without prior notice .",
+				"15. Reduction in weight by more than 15% would lead to  revision in ad Noc rates."
+			];
+		} else {
+			// sea or lcl
+			remarks = [
+				"1.      Rates are valid as per vessel sailing.",
+				"2.      Rates are subject to ACD, SEAL, GRI, PSS, Toll + Local Charges.",
+				"3.      Rates are Subject to space and inventory availability.",
+				"4.      Rates are Subject to cargo acceptance and Haz approval.",
+				"5.      All Govt. taxes are applicable at the time of shipment (GST Applicable).",
+				"6.      Booking cancellation charges will be applicable as per carrier guidelines for general & SPOT booking.",
+				"7.      Rates are subject to THC as per tariff if container pick-up from ICD locations.",
+				"8.      Rates are subject to Standard free time and for additional free time charges will be applicable.",
+				"9.      Rates are subject to POL - THC, Documentation charges and local charges, as per Tariff.",
+				"10.     SPOT rates are subject to change at the time of booking."
+			];
+		}
+
+		html += `<table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
+			<tbody>
+				<tr>
+					<th colspan="1" style="border:1px solid #1e3a8a;padding:2px 8px;text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;">Remarks</th>
+				</tr>
+				<tr>
+					<td style="border:1px solid #d1d5db;padding:${tdPadding};background:#ffffff;font-size:${dataSize};line-height:1.4;vertical-align:top;">
+						${remarks.map(line => `<p style="margin:2px 0;font-size:${dataSize};line-height:1.4;">${line}</p>`).join('')}
+					</td>
+				</tr>
+			</tbody>
+		</table>`;
+
+		html += `</div>`;
+		return html;
+	}
 
 // =============================================================
 // 1. previewDsrShipment - Main modal caller
