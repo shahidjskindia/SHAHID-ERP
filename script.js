@@ -33,12 +33,11 @@ const chargeCategories = {
 };
 
 const airChargePlaceholders = {
-    "AIR FREIGHT": "Min 850 INR",
     "CARTAGE": "Min 850 INR",
     "MCC": "Min 850 INR",
     "XRAY": "Min 850 INR",
     "GATE PASS": "Wt×3, Min 850",
-    "PALLETISATION": "1450/pallet"
+    "PALLETISATION": "1870/pallet"
 };
 
 const defaultContainerDimensions = [
@@ -169,7 +168,7 @@ const EMBEDDED_BACKUP = {
     {"pol":"MUNDRA, IN","commodity":"HAZ","charges":{"CFS":{"amount":29950,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"CLEARANCE":{"amount":3000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"VGM":{"amount":25,"currency":"USD","buyAmount":0,"buyCurrency":"USD","basis":"Normal"},"LASHING & CHOKING":{"amount":3000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"ON WHEEL":{"amount":5000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"LOLO":{"amount":5000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"OTHER LOCALS":{"amount":3320,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"}},"carrier":"ALL","container":"40 HC"}
   ],
   "defaultAirCharges": [
-    {"pol":"MUMBAI, IN","commodity":"NON HAZ","charges":{"CARTAGE":{"amount":850,"currency":"INR"},"MCC":{"amount":850,"currency":"INR"},"XRAY":{"amount":850,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":2500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"}}},
+    {"pol":"MUMBAI, IN","commodity":"NON HAZ","charges":{"CARTAGE":{"amount":850,"currency":"INR"},"MCC":{"amount":850,"currency":"INR"},"XRAY":{"amount":850,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":3500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"}}},
     {"pol":"MUMBAI, IN","commodity":"HAZ","charges":{"CARTAGE":{"amount":850,"currency":"INR"},"MCC":{"amount":850,"currency":"INR"},"XRAY":{"amount":850,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":2500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"},"DG FEES":{"amount":10000,"currency":"INR"},"DG AGENT FEE":{"amount":3500,"currency":"INR"}},"createdAt":"2026-07-30T16:23:38.785Z","updatedAt":"2026-07-30T16:23:38.785Z"},
     {"pol":"AHMEDABAD, IN","commodity":"NON HAZ","charges":{"CARTAGE":{"amount":850,"currency":"INR"},"MCC":{"amount":850,"currency":"INR"},"XRAY":{"amount":850,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":2500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"}},"createdAt":"2026-07-30T16:26:44.137Z","updatedAt":"2026-07-30T16:26:44.137Z"},
     {"pol":"AHMEDABAD, IN","commodity":"HAZ","charges":{"CARTAGE":{"amount":850,"currency":"INR"},"MCC":{"amount":850,"currency":"INR"},"XRAY":{"amount":850,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":2500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"},"DG FEES":{"amount":10000,"currency":"INR"},"DG AGENT FEE":{"amount":3500,"currency":"INR"}},"createdAt":"2026-07-30T16:27:00.870Z","updatedAt":"2026-07-30T16:27:00.870Z"}
@@ -1468,14 +1467,6 @@ function checkDuplicate(mode, client, pol, pod) {
 function calculateAirCharges() {
     const weight = parseFloat(document.getElementById('air-weight')?.value) || 0;
     const pallets = parseFloat(document.getElementById('air-pallets')?.value) || 0;
-    ['AIR FREIGHT', 'CARTAGE', 'MCC', 'XRAY'].forEach(charge => {
-        const el = document.getElementById(`air-amt-${charge.replace(/[^A-Z0-9]/gi,'_')}`);
-        if (el && !el.value) { el.value = 850; recalcCharge('air', charge); }
-    });
-    if (weight > 0) {
-        const el = document.getElementById('air-amt-GATE_PASS');
-        if (el && !el.value) { el.value = Math.max(weight * 3, 850).toFixed(2); recalcCharge('air', 'GATE PASS'); }
-    }
     if (pallets > 0) {
         const el = document.getElementById('air-amt-PALLETISATION');
         if (el && !el.value) { el.value = (pallets * 1450).toFixed(2); recalcCharge('air', 'PALLETISATION'); }
@@ -1841,9 +1832,7 @@ function onCarrierPolChangeInternal(mode) {
     const container = containerEl ? containerEl.value : '';
     const commodity = document.getElementById(`${mode}-commodity`).value;
 
-    // Log for debugging
-    console.log(db.defaultSeaCharges);(`🔄 Auto-fetch: mode=${mode}, carrier=${carrier}, pol=${pol}, container=${container}, commodity=${commodity}`);
-
+    // If carrier or POL is empty, just rebuild with empty charges (keep existing grid)
     if (!carrier || !pol) {
         buildChargesGrid(mode);
         return;
@@ -1852,47 +1841,78 @@ function onCarrierPolChangeInternal(mode) {
     let finalCharges = {};
 
     // ===== 1. DEFAULT CHARGES (always applied first) =====
-	if (mode === 'sea') {
-		const ownCfs = document.getElementById('sea-own-cfs')?.checked || false;
-		if (!ownCfs) {
-			const defaultMatch = db.defaultSeaCharges.find(d =>
-				d.pol === pol &&
-				d.commodity === commodity
-			);
-			if (defaultMatch) {
-				console.log('✅ Default SEA charges found for', pol, commodity);
-				const charges = { ...defaultMatch.charges };
-				// Map split charges based on container
-				let suffix = '';
-				if (container === '20 GP') suffix = '_20';
-				else if (container === '40 GP' || container === '40 HC') suffix = '_40';
-				if (suffix) {
-					Object.keys(charges).forEach(key => {
-						if (key.endsWith(suffix)) {
-							const base = key.slice(0, -3);
-							finalCharges[base] = charges[key];
-						}
-					});
-					Object.keys(charges).forEach(key => {
-						if (!key.endsWith('_20') && !key.endsWith('_40')) {
-							finalCharges[key] = charges[key];
-						}
-					});
-				} else {
-					Object.keys(charges).forEach(key => {
-						if (!key.endsWith('_20') && !key.endsWith('_40')) {
-							finalCharges[key] = charges[key];
-						}
-					});
-				}
-			} else {
-				console.warn('⚠️ No default SEA charges for', pol, commodity);
-			}
-		} else {
-			console.log('ℹ️ Own CFS checked – skipping default charges');
-		}
-	}
-
+    if (mode === 'sea') {
+        const ownCfs = document.getElementById('sea-own-cfs')?.checked || false;
+        if (!ownCfs) {
+            const defaultMatch = db.defaultSeaCharges.find(d =>
+                d.pol === pol &&
+                d.commodity === commodity
+            );
+            if (defaultMatch) {
+                console.log('✅ Default SEA charges found for', pol, commodity);
+                const charges = { ...defaultMatch.charges };
+                // Map split charges based on container
+                let suffix = '';
+                if (container === '20 GP') suffix = '_20';
+                else if (container === '40 GP' || container === '40 HC') suffix = '_40';
+                if (suffix) {
+                    Object.keys(charges).forEach(key => {
+                        if (key.endsWith(suffix)) {
+                            const base = key.slice(0, -3);
+                            finalCharges[base] = charges[key];
+                        }
+                    });
+                    Object.keys(charges).forEach(key => {
+                        if (!key.endsWith('_20') && !key.endsWith('_40')) {
+                            finalCharges[key] = charges[key];
+                        }
+                    });
+                } else {
+                    Object.keys(charges).forEach(key => {
+                        if (!key.endsWith('_20') && !key.endsWith('_40')) {
+                            finalCharges[key] = charges[key];
+                        }
+                    });
+                }
+            } else {
+                console.warn('⚠️ No default SEA charges for', pol, commodity);
+            }
+        } else {
+            console.log('ℹ️ Own CFS checked – skipping default charges');
+        }
+    }
+    else if (mode === 'air') {
+        // ----- AIR default charges -----
+        const defaultMatch = db.defaultAirCharges.find(d =>
+            d.pol === pol &&
+            d.commodity === commodity
+        );
+        if (defaultMatch) {
+            console.log('✅ Default AIR charges found for', pol, commodity);
+            // AIR charges do not have container split; just copy all charges
+            Object.entries(defaultMatch.charges).forEach(([key, val]) => {
+                finalCharges[key] = val;
+            });
+        } else {
+            console.warn('⚠️ No default AIR charges for', pol, commodity);
+        }
+    }
+    else if (mode === 'lcl') {
+        // ----- LCL default charges -----
+        const defaultMatch = db.defaultLclCharges.find(d =>
+            d.pol === pol &&
+            d.commodity === commodity
+        );
+        if (defaultMatch) {
+            console.log('✅ Default LCL charges found for', pol, commodity);
+            // LCL charges are per CBM; we keep as is (will be multiplied in recalc if basis is Per CBM)
+            Object.entries(defaultMatch.charges).forEach(([key, val]) => {
+                finalCharges[key] = val;
+            });
+        } else {
+            console.warn('⚠️ No default LCL charges for', pol, commodity);
+        }
+    }
 
     // ===== 2. CARRIER-SPECIFIC CHARGES (override/add) =====
     if (mode === 'sea') {
@@ -1914,11 +1934,11 @@ function onCarrierPolChangeInternal(mode) {
                 if (charges[thcKey]) {
                     finalCharges.THC = charges[thcKey];
                 }
-                // Remove the suffixed keys to avoid duplicates
+                // Remove suffixed keys to avoid duplicates
                 delete charges.THC_20;
                 delete charges.THC_40;
             }
-            // Merge other charges (SEAL, DOCS, etc.) – they override defaults
+            // Merge other charges (SEAL, DOCS, etc.)
             Object.entries(charges).forEach(([key, val]) => {
                 finalCharges[key] = val;
             });
@@ -1926,25 +1946,39 @@ function onCarrierPolChangeInternal(mode) {
             console.warn('⚠️ No carrier-specific SEA charges for', carrier, pol, commodity);
         }
     } else if (mode === 'air') {
-        const carrierMatch = db.carrierChargesAir.find(c => c.carrier === carrier && c.pol === pol);
+        const carrierMatch = db.carrierChargesAir.find(c =>
+            c.carrier === carrier &&
+            c.pol === pol &&
+            c.commodity === commodity
+        );
         if (carrierMatch) {
-            console.log('✅ Carrier-specific AIR charges found');
+            console.log('✅ Carrier-specific AIR charges found for', carrier);
             Object.entries(carrierMatch.charges).forEach(([key, val]) => {
                 finalCharges[key] = val;
             });
+        } else {
+            console.warn('⚠️ No carrier-specific AIR charges for', carrier, pol, commodity);
         }
     } else if (mode === 'lcl') {
-        const carrierMatch = db.carrierChargesSeaLcl.find(c => c.mode === mode && c.carrier === carrier && c.pol === pol);
+        const carrierMatch = db.carrierChargesSeaLcl.find(c =>
+            c.mode === mode &&
+            c.carrier === carrier &&
+            c.pol === pol &&
+            c.commodity === commodity
+        );
         if (carrierMatch) {
-            console.log('✅ Carrier-specific LCL charges found');
+            console.log('✅ Carrier-specific LCL charges found for', carrier);
             Object.entries(carrierMatch.charges).forEach(([key, val]) => {
                 finalCharges[key] = val;
             });
+        } else {
+            console.warn('⚠️ No carrier-specific LCL charges for', carrier, pol, commodity);
         }
     }
 
-    console.log('📋 Final charges to display:', Object.keys(finalCharges));
-    buildChargesGrid(mode, finalCharges);
+    // Build the charges grid with the merged charges (and retain custom order)
+    const order = chargesOrder[mode] || null;
+    buildChargesGrid(mode, finalCharges, order);
 }
 
 
@@ -4253,12 +4287,11 @@ function getChargeGroups(mode) {
     } else if (mode === 'lcl') {
         return {
             group1: ['Freight', 'Origin Charges'],
-            group2: [] // LCL may not have a second group; adjust if needed
+            group2: [] // LCL may not have a second group
         };
     }
     return { group1: [], group2: [] };
 }
-
 
 function previewQuote(mode) {
     const data = getFormData(mode);
@@ -6031,107 +6064,138 @@ function openEditDefaultChargeModal(mode, idx) {
     else rec = db.defaultLclCharges[idx];
     if (!rec) return alert('Record not found');
 
+    const isSea = (mode === 'sea');
+    const charges = rec.charges || {};
     const modeCharges = getDefaultChargeTypes(mode);
 
-    let html = `<h3 style="color:var(--primary);margin-bottom:12px;">Edit Default ${mode.toUpperCase()} Charge</h3>`;
-    html += `<div class="form-grid-2col">
-        <div class="form-group"><label>POL</label>
-            <select id="modal-dc-pol-edit">
-                <option value="">Select</option>
-                ${db.pol.map(p => `<option value="${p}" ${rec.pol===p?'selected':''}>${p}</option>`).join('')}
-            </select>
-        </div>
-        <div class="form-group"><label>Commodity</label>
-            <select id="modal-dc-commodity-edit">
-                <option value="">Select</option>
-                <option value="NON HAZ" ${rec.commodity==='NON HAZ'?'selected':''}>Non Haz</option>
-                <option value="HAZ" ${rec.commodity==='HAZ'?'selected':''}>Haz</option>
-            </select>
-        </div>
-    </div>`;
-
-    html += `<h4 style="color:var(--primary);margin:12px 0 8px;">Charges (20' and 40' values)</h4>
-        <div id="modal-dc-charges-list">`;
-
-    const charges = rec.charges || {};
-    // Group charges by base name (without _20/_40)
-    const groups = {};
-    Object.entries(charges).forEach(([key, val]) => {
+    // ---------- Build HTML for existing charges ----------
+    let chargesHtml = '';
+    const baseNames = new Set();
+    Object.keys(charges).forEach(key => {
         let base = key;
-        let suffix = '';
-        if (key.endsWith('_20')) { base = key.slice(0, -3); suffix = '20'; }
-        else if (key.endsWith('_40')) { base = key.slice(0, -3); suffix = '40'; }
-        if (!groups[base]) groups[base] = { name: base, values: {} };
-        groups[base].values[suffix] = val;
+        if (key.endsWith('_20') || key.endsWith('_40')) {
+            base = key.slice(0, -3);
+        }
+        baseNames.add(base);
     });
 
-    Object.values(groups).forEach(g => {
-        const v20 = g.values['20'] || { amount: 0, buyAmount: 0, currency: 'INR' };
-        const v40 = g.values['40'] || { amount: 0, buyAmount: 0, currency: 'INR' };
-        const cur = v20.currency || v40.currency || 'INR';
-        html += `<div style="margin-bottom:6px;background:var(--bg);padding:6px;border-radius:5px;border:1px solid var(--border);" data-charge-key="${g.name}">
-            <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${g.name}
-                <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button>
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                <div style="display:flex;gap:4px;">
-                    <label style="font-size:0.6rem;font-weight:600;">20' Sell</label>
-                    <input type="number" step="0.01" class="modal-chg-amt20" value="${v20.amount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+    baseNames.forEach(baseKey => {
+        let rowHtml = `
+            <div style="margin-bottom:6px;background:var(--bg);padding:6px;border-radius:5px;border:1px solid var(--border);" data-charge-key="${baseKey}">
+                <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${baseKey}
+                    <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button>
                 </div>
-                <div style="display:flex;gap:4px;">
-                    <label style="font-size:0.6rem;font-weight:600;">20' Buy</label>
-                    <input type="number" step="0.01" class="modal-chg-buy20" value="${v20.buyAmount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+        `;
+
+        if (isSea) {
+            const v20 = charges[baseKey + '_20'] || { amount: 0, buyAmount: 0, currency: 'INR' };
+            const v40 = charges[baseKey + '_40'] || { amount: 0, buyAmount: 0, currency: 'INR' };
+            const cur = v20.currency || v40.currency || 'INR';
+            rowHtml += `
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                    <div style="display:flex;gap:4px;">
+                        <label style="font-size:0.6rem;font-weight:600;">20' Sell</label>
+                        <input type="number" step="0.01" class="modal-chg-amt20" value="${v20.amount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    </div>
+                    <div style="display:flex;gap:4px;">
+                        <label style="font-size:0.6rem;font-weight:600;">20' Buy</label>
+                        <input type="number" step="0.01" class="modal-chg-buy20" value="${v20.buyAmount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    </div>
+                    <div style="display:flex;gap:4px;">
+                        <label style="font-size:0.6rem;font-weight:600;">40' Sell</label>
+                        <input type="number" step="0.01" class="modal-chg-amt40" value="${v40.amount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    </div>
+                    <div style="display:flex;gap:4px;">
+                        <label style="font-size:0.6rem;font-weight:600;">40' Buy</label>
+                        <input type="number" step="0.01" class="modal-chg-buy40" value="${v40.buyAmount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    </div>
+                    <div style="grid-column:1/-1;display:flex;gap:4px;align-items:center;">
+                        <label style="font-size:0.6rem;font-weight:600;">Currency</label>
+                        <select class="modal-chg-cur" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                            ${getCurrencyOptions(cur)}
+                        </select>
+                    </div>
                 </div>
-                <div style="display:flex;gap:4px;">
-                    <label style="font-size:0.6rem;font-weight:600;">40' Sell</label>
-                    <input type="number" step="0.01" class="modal-chg-amt40" value="${v40.amount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+            `;
+        } else {
+            const v = charges[baseKey] || { amount: 0, buyAmount: 0, currency: 'INR' };
+            rowHtml += `
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+                    <div style="display:flex;gap:4px;">
+                        <label style="font-size:0.6rem;font-weight:600;">Sell</label>
+                        <input type="number" step="0.01" class="modal-chg-single-sell" value="${v.amount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    </div>
+                    <div style="display:flex;gap:4px;">
+                        <label style="font-size:0.6rem;font-weight:600;">Buy</label>
+                        <input type="number" step="0.01" class="modal-chg-single-buy" value="${v.buyAmount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    </div>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                        <label style="font-size:0.6rem;font-weight:600;">Currency</label>
+                        <select class="modal-chg-cur" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                            ${getCurrencyOptions(v.currency || 'INR')}
+                        </select>
+                    </div>
                 </div>
-                <div style="display:flex;gap:4px;">
-                    <label style="font-size:0.6rem;font-weight:600;">40' Buy</label>
-                    <input type="number" step="0.01" class="modal-chg-buy40" value="${v40.buyAmount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                </div>
-                <div style="grid-column:1/-1;display:flex;gap:4px;align-items:center;">
-                    <label style="font-size:0.6rem;font-weight:600;">Currency</label>
-                    <select class="modal-chg-cur" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                        ${getCurrencyOptions(cur)}
-                    </select>
-                </div>
-            </div>
-        </div>`;
+            `;
+        }
+        rowHtml += `</div>`;
+        chargesHtml += rowHtml;
     });
 
-    html += `</div>
+    // ---------- Build the "Add Charge" section ----------
+    let addSectionHtml = '';
+    if (isSea) {
+        addSectionHtml = `
+            <div class="form-group" style="width:90px;"><label>20' Sell</label><input type="number" id="modal-dc-add-amt20" step="0.01"></div>
+            <div class="form-group" style="width:90px;"><label>20' Buy</label><input type="number" id="modal-dc-add-buy20" step="0.01"></div>
+            <div class="form-group" style="width:90px;"><label>40' Sell</label><input type="number" id="modal-dc-add-amt40" step="0.01"></div>
+            <div class="form-group" style="width:90px;"><label>40' Buy</label><input type="number" id="modal-dc-add-buy40" step="0.01"></div>
+        `;
+    } else {
+        addSectionHtml = `
+            <div class="form-group" style="width:90px;"><label>Sell</label><input type="number" id="modal-dc-add-sell" step="0.01"></div>
+            <div class="form-group" style="width:90px;"><label>Buy</label><input type="number" id="modal-dc-add-buy" step="0.01"></div>
+        `;
+    }
+
+    // ---------- Complete modal HTML ----------
+    const html = `
+        <h3 style="color:var(--primary);margin-bottom:12px;">Edit Default ${mode.toUpperCase()} Charge</h3>
+        <div class="form-grid-2col">
+            <div class="form-group"><label>POL</label>
+                <select id="modal-dc-pol-edit">
+                    ${db.pol.map(p => `<option value="${p}" ${rec.pol===p?'selected':''}>${p}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-group"><label>Commodity</label>
+                <select id="modal-dc-commodity-edit">
+                    <option value="">Select</option>
+                    <option value="NON HAZ" ${rec.commodity==='NON HAZ'?'selected':''}>Non Haz</option>
+                    <option value="HAZ" ${rec.commodity==='HAZ'?'selected':''}>Haz</option>
+                </select>
+            </div>
+        </div>
+        <h4 style="color:var(--primary);margin:12px 0 8px;">Charges</h4>
+        <div id="modal-dc-charges-list">
+            ${chargesHtml || '<p style="color:var(--text-light);padding:8px;">No charges added yet.</p>'}
+        </div>
         <div style="margin-top:8px;display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
             <div class="form-group" style="flex:1;min-width:120px;">
                 <label>Charge Name</label>
                 <select id="modal-dc-add-charge">${modeCharges.map(c => `<option value="${c}">${c}</option>`).join('')}</select>
             </div>
-            <div class="form-group" style="width:90px;">
-                <label>20' Sell</label>
-                <input type="number" id="modal-dc-add-amt20" step="0.01">
-            </div>
-            <div class="form-group" style="width:90px;">
-                <label>20' Buy</label>
-                <input type="number" id="modal-dc-add-buy20" step="0.01">
-            </div>
-            <div class="form-group" style="width:90px;">
-                <label>40' Sell</label>
-                <input type="number" id="modal-dc-add-amt40" step="0.01">
-            </div>
-            <div class="form-group" style="width:90px;">
-                <label>40' Buy</label>
-                <input type="number" id="modal-dc-add-buy40" step="0.01">
-            </div>
+            ${addSectionHtml}
             <div class="form-group" style="width:90px;">
                 <label>Currency</label>
                 <select id="modal-dc-add-cur">${getCurrencyOptions('INR')}</select>
             </div>
-            <button class="btn btn-sm btn-success" style="height:33px;" onclick="addChargeToDCModal()">+</button>
+            <button class="btn btn-sm btn-success" style="height:33px;" onclick="addChargeToDCModal('${mode}')">+</button>
         </div>
-        <div style="margin-top:16px;text-align:right;display:flex;gap:8px;justify-content:flex-end;">
+        <div style="margin-top:16px;text-align:right;">
             <button class="btn btn-clear" onclick="closeModal('previewModal')">Cancel</button>
             <button class="btn btn-quoted" onclick="saveEditDefaultCharge('${mode}',${idx})">Save</button>
-        </div>`;
+        </div>
+    `;
 
     document.getElementById('modal-title').textContent = `Edit Default ${mode.toUpperCase()} Charge`;
     document.getElementById('previewBody').innerHTML = html;
@@ -6139,159 +6203,220 @@ function openEditDefaultChargeModal(mode, idx) {
 }
 
 function saveEditDefaultCharge(mode, idx) {
+    const polEl = document.getElementById('modal-dc-pol-edit');
+    const commodityEl = document.getElementById('modal-dc-commodity-edit');
+    if (!polEl || !commodityEl) {
+        alert('❌ Edit modal not loaded properly. Please close and reopen the modal, then try again.');
+        return;
+    }
+    const pol = polEl.value.trim();
+    if (!pol) return alert('POL is required.');
+    const commodity = commodityEl.value;
+
     let arr;
     if (mode === 'sea') arr = db.defaultSeaCharges;
     else if (mode === 'air') arr = db.defaultAirCharges;
     else arr = db.defaultLclCharges;
-
     if (!arr || idx < 0 || idx >= arr.length) {
         alert('Record not found.');
         return;
     }
-    const rec = arr[idx];
 
-    const pol = document.getElementById('modal-dc-pol-edit').value.trim();
-    const commodity = document.getElementById('modal-dc-commodity-edit').value.trim();
-    if (!pol) return alert('POL is required.');
-
-    // Check duplicate
-    const dupCheck = arr.some((r, i) => i !== idx && r.pol === pol && r.commodity === commodity);
-    if (dupCheck) return alert('Duplicate entry!');
-
-    // Build charges from list (excluding CFS_20/CFS_40)
+    const isSea = (mode === 'sea');
     const charges = {};
-    document.querySelectorAll('#modal-dc-charges-list [data-charge-key]').forEach(row => {
-        const key = row.getAttribute('data-charge-key');
-        const sellAmt = parseFloat(row.querySelector('.modal-chg-amt').value) || 0;
-        const buyAmt = parseFloat(row.querySelector('.modal-chg-buy').value) || 0;
-        const cur = row.querySelector('.modal-chg-cur').value;
-        if (sellAmt > 0 || buyAmt > 0) {
-            charges[key] = { amount: sellAmt, buyAmount: buyAmt, currency: cur };
+    const rows = document.querySelectorAll('#modal-dc-charges-list [data-charge-key]');
+    if (rows.length === 0) {
+        return alert('Please add at least one charge with a value.');
+    }
+
+    rows.forEach(row => {
+        const baseKey = row.getAttribute('data-charge-key');
+        if (isSea) {
+            const amt20 = row.querySelector('.modal-chg-amt20');
+            const buy20 = row.querySelector('.modal-chg-buy20');
+            const amt40 = row.querySelector('.modal-chg-amt40');
+            const buy40 = row.querySelector('.modal-chg-buy40');
+            const cur = row.querySelector('.modal-chg-cur');
+            if (!amt20 || !buy20 || !amt40 || !buy40 || !cur) return;
+            const a20 = parseFloat(amt20.value) || 0;
+            const b20 = parseFloat(buy20.value) || 0;
+            const a40 = parseFloat(amt40.value) || 0;
+            const b40 = parseFloat(buy40.value) || 0;
+            const c = cur.value;
+            if (a20 > 0 || b20 > 0) {
+                charges[baseKey + '_20'] = { amount: a20, buyAmount: b20, currency: c };
+            }
+            if (a40 > 0 || b40 > 0) {
+                charges[baseKey + '_40'] = { amount: a40, buyAmount: b40, currency: c };
+            }
+        } else {
+            const sell = row.querySelector('.modal-chg-single-sell');
+            const buy = row.querySelector('.modal-chg-single-buy');
+            const cur = row.querySelector('.modal-chg-cur');
+            if (!sell || !buy || !cur) return;
+            const s = parseFloat(sell.value) || 0;
+            const b = parseFloat(buy.value) || 0;
+            const c = cur.value;
+            if (s > 0 || b > 0) {
+                charges[baseKey] = { amount: s, buyAmount: b, currency: c };
+            }
         }
     });
 
-    // Add CFS_20 and CFS_40 for SEA
-    if (mode === 'sea') {
-        const cfs20 = parseFloat(document.getElementById('modal-dc-cfs20').value) || 0;
-        const cfs20Buy = parseFloat(document.getElementById('modal-dc-cfs20-buy').value) || 0;
-        const cfs40 = parseFloat(document.getElementById('modal-dc-cfs40').value) || 0;
-        const cfs40Buy = parseFloat(document.getElementById('modal-dc-cfs40-buy').value) || 0;
-        if (cfs20 > 0 || cfs20Buy > 0) {
-            charges.CFS_20 = { amount: cfs20, buyAmount: cfs20Buy, currency: 'INR' };
-        }
-        if (cfs40 > 0 || cfs40Buy > 0) {
-            charges.CFS_40 = { amount: cfs40, buyAmount: cfs40Buy, currency: 'INR' };
-        }
+    if (Object.keys(charges).length === 0) {
+        return alert('Please add at least one charge with a value.');
     }
 
-    rec.pol = pol;
-    rec.commodity = commodity;
-    rec.charges = charges;
-    rec.updatedAt = new Date().toISOString();
+    arr[idx].pol = pol;
+    arr[idx].commodity = commodity;
+    arr[idx].charges = charges;
+    arr[idx].updatedAt = new Date().toISOString();
+
     saveDB();
     closeModal('previewModal');
     renderDefaultChargesMaster(mode);
-    alert('✅ Default charge updated.');
+    alert('✅ Default charge updated successfully!');
     autoBackup();
 }
 
 function openAddDefaultChargeModal(mode) {
     const isSea = (mode === 'sea');
-    let html = `<h3 style="color:var(--primary);margin-bottom:12px;">Add Default ${mode.toUpperCase()} Charge</h3>`;
-    html += `<div class="form-grid-2col">
-        <div class="form-group"><label>POL</label><select id="modal-dc-pol">${db.pol.map(p => `<option value="${p}">${p}</option>`).join('')}</select></div>
-        <div class="form-group"><label>Commodity</label><select id="modal-dc-commodity"><option value="">Select</option><option value="NON HAZ">Non Haz</option><option value="HAZ">Haz</option></select></div>
-    </div>`;
+    let html = `
+        <h3 style="color:var(--primary);margin-bottom:12px;">Add Default ${mode.toUpperCase()} Charge</h3>
+        <div class="form-grid-2col">
+            <div class="form-group"><label>POL</label><select id="modal-dc-pol">${db.pol.map(p => `<option value="${p}">${p}</option>`).join('')}</select></div>
+            <div class="form-group"><label>Commodity</label><select id="modal-dc-commodity"><option value="">Select</option><option value="NON HAZ">Non Haz</option><option value="HAZ">Haz</option></select></div>
+        </div>
+        <h4 style="color:var(--primary);margin:12px 0 8px;">Charges</h4>
+        <div id="modal-dc-charges-list"></div>
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
+            <div class="form-group" style="flex:1;min-width:120px;">
+                <label>Charge Name</label>
+                <select id="modal-dc-add-charge">${getDefaultChargeTypes(mode).map(c => `<option value="${c}">${c}</option>`).join('')}</select>
+            </div>
+    `;
 
-    html += `<h4 style="color:var(--primary);margin:12px 0 8px;">Charges (20' and 40' values)</h4>
-    <div id="modal-dc-charges-list"></div>
-    <div style="margin-top:8px;display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
-        <div class="form-group" style="flex:1;min-width:120px;">
-            <label>Charge Name</label>
-            <select id="modal-dc-add-charge">${getDefaultChargeTypes(mode).map(c => `<option value="${c}">${c}</option>`).join('')}</select>
+    if (isSea) {
+        html += `
+            <div class="form-group" style="width:90px;"><label>20' Sell</label><input type="number" id="modal-dc-add-amt20" step="0.01"></div>
+            <div class="form-group" style="width:90px;"><label>20' Buy</label><input type="number" id="modal-dc-add-buy20" step="0.01"></div>
+            <div class="form-group" style="width:90px;"><label>40' Sell</label><input type="number" id="modal-dc-add-amt40" step="0.01"></div>
+            <div class="form-group" style="width:90px;"><label>40' Buy</label><input type="number" id="modal-dc-add-buy40" step="0.01"></div>
+        `;
+    } else {
+        html += `
+            <div class="form-group" style="width:90px;"><label>Sell</label><input type="number" id="modal-dc-add-sell" step="0.01"></div>
+            <div class="form-group" style="width:90px;"><label>Buy</label><input type="number" id="modal-dc-add-buy" step="0.01"></div>
+        `;
+    }
+
+    html += `
+            <div class="form-group" style="width:90px;">
+                <label>Currency</label>
+                <select id="modal-dc-add-cur">${getCurrencyOptions('INR')}</select>
+            </div>
+            <button class="btn btn-sm btn-success" style="height:33px;" onclick="addChargeToDCModal('${mode}')">+</button>
         </div>
-        <div class="form-group" style="width:90px;">
-            <label>20' Sell</label>
-            <input type="number" id="modal-dc-add-amt20" step="0.01">
+        <div style="margin-top:16px;text-align:right;">
+            <button class="btn btn-clear" onclick="closeModal('previewModal')">Cancel</button>
+            <button class="btn btn-quoted" onclick="saveNewDefaultCharge('${mode}')">Save</button>
         </div>
-        <div class="form-group" style="width:90px;">
-            <label>20' Buy</label>
-            <input type="number" id="modal-dc-add-buy20" step="0.01">
-        </div>
-        <div class="form-group" style="width:90px;">
-            <label>40' Sell</label>
-            <input type="number" id="modal-dc-add-amt40" step="0.01">
-        </div>
-        <div class="form-group" style="width:90px;">
-            <label>40' Buy</label>
-            <input type="number" id="modal-dc-add-buy40" step="0.01">
-        </div>
-        <div class="form-group" style="width:90px;">
-            <label>Currency</label>
-            <select id="modal-dc-add-cur">${getCurrencyOptions('INR')}</select>
-        </div>
-        <button class="btn btn-sm btn-success" style="height:33px;" onclick="addChargeToDCModal()">+</button>
-    </div>
-    <div style="margin-top:16px;text-align:right;">
-        <button class="btn btn-clear" onclick="closeModal('previewModal')">Cancel</button>
-        <button class="btn btn-quoted" onclick="saveNewDefaultCharge('${mode}')">Save</button>
-    </div>`;
+    `;
+
     document.getElementById('modal-title').textContent = `Add Default ${mode.toUpperCase()} Charge`;
     document.getElementById('previewBody').innerHTML = html;
     openModal('previewModal');
 }
 
 
-function addChargeToDCModal() {
-    const key = document.getElementById('modal-dc-add-charge').value;
-    const amt20 = parseFloat(document.getElementById('modal-dc-add-amt20').value) || 0;
-    const buy20 = parseFloat(document.getElementById('modal-dc-add-buy20').value) || 0;
-    const amt40 = parseFloat(document.getElementById('modal-dc-add-amt40').value) || 0;
-    const buy40 = parseFloat(document.getElementById('modal-dc-add-buy40').value) || 0;
-    const cur = document.getElementById('modal-dc-add-cur').value;
+function addChargeToDCModal(mode) {
     const list = document.getElementById('modal-dc-charges-list');
-
+    if (!list) {
+        alert('Error: Charges list not found. Please close and reopen the modal.');
+        return;
+    }
+    const chargeSelect = document.getElementById('modal-dc-add-charge');
+    if (!chargeSelect) return alert('Charge selector not found.');
+    const key = chargeSelect.value;
+    if (!key) return alert('Please select a charge name.');
     if (list.querySelector(`[data-charge-key="${key}"]`)) {
         alert('Charge already added!');
         return;
     }
 
-    list.insertAdjacentHTML('beforeend', `
+    const isSea = (mode === 'sea');
+    let html = `
         <div style="margin-bottom:6px;background:var(--bg);padding:6px;border-radius:5px;border:1px solid var(--border);" data-charge-key="${key}">
             <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${key}
                 <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button>
             </div>
+    `;
+
+    if (isSea) {
+        html += `
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
                 <div style="display:flex;gap:4px;">
                     <label style="font-size:0.6rem;font-weight:600;">20' Sell</label>
-                    <input type="number" step="0.01" class="modal-chg-amt20" value="${amt20}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    <input type="number" step="0.01" class="modal-chg-amt20" value="0" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
                 </div>
                 <div style="display:flex;gap:4px;">
                     <label style="font-size:0.6rem;font-weight:600;">20' Buy</label>
-                    <input type="number" step="0.01" class="modal-chg-buy20" value="${buy20}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    <input type="number" step="0.01" class="modal-chg-buy20" value="0" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
                 </div>
                 <div style="display:flex;gap:4px;">
                     <label style="font-size:0.6rem;font-weight:600;">40' Sell</label>
-                    <input type="number" step="0.01" class="modal-chg-amt40" value="${amt40}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    <input type="number" step="0.01" class="modal-chg-amt40" value="0" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
                 </div>
                 <div style="display:flex;gap:4px;">
                     <label style="font-size:0.6rem;font-weight:600;">40' Buy</label>
-                    <input type="number" step="0.01" class="modal-chg-buy40" value="${buy40}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    <input type="number" step="0.01" class="modal-chg-buy40" value="0" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
                 </div>
                 <div style="grid-column:1/-1;display:flex;gap:4px;align-items:center;">
                     <label style="font-size:0.6rem;font-weight:600;">Currency</label>
                     <select class="modal-chg-cur" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                        ${getCurrencyOptions(cur)}
+                        ${getCurrencyOptions('INR')}
                     </select>
                 </div>
             </div>
-        </div>
-    `);
-    document.getElementById('modal-dc-add-amt20').value = '';
-    document.getElementById('modal-dc-add-buy20').value = '';
-    document.getElementById('modal-dc-add-amt40').value = '';
-    document.getElementById('modal-dc-add-buy40').value = '';
+        `;
+    } else {
+        html += `
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+                <div style="display:flex;gap:4px;">
+                    <label style="font-size:0.6rem;font-weight:600;">Sell</label>
+                    <input type="number" step="0.01" class="modal-chg-single-sell" value="0" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                </div>
+                <div style="display:flex;gap:4px;">
+                    <label style="font-size:0.6rem;font-weight:600;">Buy</label>
+                    <input type="number" step="0.01" class="modal-chg-single-buy" value="0" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                </div>
+                <div style="display:flex;gap:4px;align-items:center;">
+                    <label style="font-size:0.6rem;font-weight:600;">Currency</label>
+                    <select class="modal-chg-cur" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                        ${getCurrencyOptions('INR')}
+                    </select>
+                </div>
+            </div>
+        `;
+    }
+
+    html += `</div>`;
+    list.insertAdjacentHTML('beforeend', html);
+
+    // Clear the add fields (only if they exist)
+    if (isSea) {
+        ['modal-dc-add-amt20', 'modal-dc-add-buy20', 'modal-dc-add-amt40', 'modal-dc-add-buy40'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+    } else {
+        ['modal-dc-add-sell', 'modal-dc-add-buy'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+    }
 }
+
 
 function addCCChargeToModal() {
     const key = document.getElementById('modal-cc-add-charge').value;
@@ -6327,25 +6452,58 @@ function addCCChargeToModal() {
 
 
 function saveNewDefaultCharge(mode) {
-    const pol = document.getElementById('modal-dc-pol').value.trim();
-    if (!pol) return alert('POL is required');
-    const commodity = document.getElementById('modal-dc-commodity').value;
+    const polEl = document.getElementById('modal-dc-pol');
+    const commodityEl = document.getElementById('modal-dc-commodity');
+    if (!polEl || !commodityEl) {
+        alert('❌ Add modal not loaded properly. Please close and reopen the modal.');
+        return;
+    }
+    const pol = polEl.value.trim();
+    if (!pol) return alert('POL is required.');
+    const commodity = commodityEl.value;
 
+    const isSea = (mode === 'sea');
     const charges = {};
-    document.querySelectorAll('#modal-dc-charges-list [data-charge-key]').forEach(row => {
+    const rows = document.querySelectorAll('#modal-dc-charges-list [data-charge-key]');
+    if (rows.length === 0) return alert('Please add at least one charge with a value.');
+
+    rows.forEach(row => {
         const baseKey = row.getAttribute('data-charge-key');
-        const amt20 = parseFloat(row.querySelector('.modal-chg-amt20').value) || 0;
-        const buy20 = parseFloat(row.querySelector('.modal-chg-buy20').value) || 0;
-        const amt40 = parseFloat(row.querySelector('.modal-chg-amt40').value) || 0;
-        const buy40 = parseFloat(row.querySelector('.modal-chg-buy40').value) || 0;
-        const cur = row.querySelector('.modal-chg-cur').value;
-        if (amt20 > 0 || buy20 > 0) {
-            charges[baseKey + '_20'] = { amount: amt20, buyAmount: buy20, currency: cur };
-        }
-        if (amt40 > 0 || buy40 > 0) {
-            charges[baseKey + '_40'] = { amount: amt40, buyAmount: buy40, currency: cur };
+        if (isSea) {
+            const amt20 = row.querySelector('.modal-chg-amt20');
+            const buy20 = row.querySelector('.modal-chg-buy20');
+            const amt40 = row.querySelector('.modal-chg-amt40');
+            const buy40 = row.querySelector('.modal-chg-buy40');
+            const cur = row.querySelector('.modal-chg-cur');
+            if (!amt20 || !buy20 || !amt40 || !buy40 || !cur) return;
+            const a20 = parseFloat(amt20.value) || 0;
+            const b20 = parseFloat(buy20.value) || 0;
+            const a40 = parseFloat(amt40.value) || 0;
+            const b40 = parseFloat(buy40.value) || 0;
+            const c = cur.value;
+            if (a20 > 0 || b20 > 0) {
+                charges[baseKey + '_20'] = { amount: a20, buyAmount: b20, currency: c };
+            }
+            if (a40 > 0 || b40 > 0) {
+                charges[baseKey + '_40'] = { amount: a40, buyAmount: b40, currency: c };
+            }
+        } else {
+            const sell = row.querySelector('.modal-chg-single-sell');
+            const buy = row.querySelector('.modal-chg-single-buy');
+            const cur = row.querySelector('.modal-chg-cur');
+            if (!sell || !buy || !cur) return;
+            const s = parseFloat(sell.value) || 0;
+            const b = parseFloat(buy.value) || 0;
+            const c = cur.value;
+            if (s > 0 || b > 0) {
+                charges[baseKey] = { amount: s, buyAmount: b, currency: c };
+            }
         }
     });
+
+    if (Object.keys(charges).length === 0) {
+        return alert('Please add at least one charge with a value.');
+    }
 
     const record = { pol, commodity, charges, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     if (findDefaultChargeDuplicate(mode, record)) return alert('Duplicate entry!');
@@ -6357,7 +6515,7 @@ function saveNewDefaultCharge(mode) {
     saveDB();
     closeModal('previewModal');
     renderDefaultChargesMaster(mode);
-    alert('Added!');
+    alert('✅ Default charge added successfully!');
     autoBackup();
 }
 
@@ -6728,129 +6886,117 @@ function previewDefaultCharge(mode, idx) {
     else rec = db.defaultLclCharges[idx];
     if (!rec) return alert('Record not found');
 
-    let totalSell20 = 0, totalBuy20 = 0, totalSell40 = 0, totalBuy40 = 0;
-    const chargeKeys = Object.keys(rec.charges || {}).sort();
-    let chargeRows = '';
-
-    // Separate 20 and 40 charges
-    const charges20 = {};
-    const charges40 = {};
-    chargeKeys.forEach(key => {
-        if (key.endsWith('_20')) {
-            const base = key.slice(0, -3);
-            charges20[base] = rec.charges[key];
-        } else if (key.endsWith('_40')) {
-            const base = key.slice(0, -3);
-            charges40[base] = rec.charges[key];
-        }
-    });
-
-    // Combine all base names
-    const allBaseNames = new Set([...Object.keys(charges20), ...Object.keys(charges40)]);
-
-    let rowIndex = 0;
-    allBaseNames.forEach(base => {
-        const c20 = charges20[base];
-        const c40 = charges40[base];
-        const displayName = base;
-
-        if (c20) {
-            const sell20 = c20.amount || 0;
-            const buy20 = c20.buyAmount || 0;
-            const cur20 = c20.currency || 'INR';
-            const sellINR20 = toINR(sell20, cur20);
-            const buyINR20 = toINR(buy20, cur20);
-            totalSell20 += sellINR20;
-            totalBuy20 += buyINR20;
-            rowIndex++;
-            chargeRows += `
-                <tr>
-                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${rowIndex}</td>
-                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${displayName} (20')</td>
-                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right;">${Number(sell20).toLocaleString('en-IN')}</td>
-                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right;">${Number(buy20).toLocaleString('en-IN')}</td>
-                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${cur20}</td>
-                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 600;">${formatINR(sellINR20)}</td>
-                </tr>
-            `;
-        }
-        if (c40) {
-            const sell40 = c40.amount || 0;
-            const buy40 = c40.buyAmount || 0;
-            const cur40 = c40.currency || 'INR';
-            const sellINR40 = toINR(sell40, cur40);
-            const buyINR40 = toINR(buy40, cur40);
-            totalSell40 += sellINR40;
-            totalBuy40 += buyINR40;
-            rowIndex++;
-            chargeRows += `
-                <tr>
-                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${rowIndex}</td>
-                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${displayName} (40')</td>
-                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right;">${Number(sell40).toLocaleString('en-IN')}</td>
-                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right;">${Number(buy40).toLocaleString('en-IN')}</td>
-                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${cur40}</td>
-                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 600;">${formatINR(sellINR40)}</td>
-                </tr>
-            `;
-        }
-    });
-
-    const totalSell = totalSell20 + totalSell40;
-    const totalBuy = totalBuy20 + totalBuy40;
-
+    const isSea = (mode === 'sea');
+    const charges = rec.charges || {};
     const modeLabel = { sea: 'SEA', air: 'AIR', lcl: 'LCL' }[mode];
 
-    const html = `
-    <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 10px;">
-        <div style="background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; padding: 16px 20px; border-radius: 12px 12px 0 0; margin-bottom: 0;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div style="font-size: 1.2rem; font-weight: 700;">📋 Default Charges Preview</div>
-                <div style="background: rgba(255,255,255,0.2); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">${modeLabel}</div>
-            </div>
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; background: white; padding: 16px 20px; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0;">
-            <div><span style="font-weight: 600; color: #64748b; font-size: 0.7rem; text-transform: uppercase; display: block;">POL</span><span style="font-weight: 700;">${rec.pol}</span></div>
-            <div><span style="font-weight: 600; color: #64748b; font-size: 0.7rem; text-transform: uppercase; display: block;">Commodity</span><span style="font-weight: 700;">${rec.commodity || '—'}</span></div>
-            <div><span style="font-weight: 600; color: #64748b; font-size: 0.7rem; text-transform: uppercase; display: block;">Status</span><span style="background: #10b981; color: white; padding: 2px 14px; border-radius: 20px; font-size: 0.7rem; font-weight: 700;">Active</span></div>
-        </div>
+    let chargeRows = '';
+    let grandTotalSellINR = 0;
 
-        <div style="background: white; border: 1px solid #e2e8f0; border-radius: 0 0 12px 12px; overflow: hidden; margin-top: 0;">
-            <div style="padding: 10px 16px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #1e3a8a;">💲 Charges Breakdown</div>
-            <div style="overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
-                    <thead>
-                        <tr style="background: #f1f5f9;">
-                            <th style="padding: 8px 12px; text-align: center; border-bottom: 1px solid #e2e8f0;">#</th>
-                            <th style="padding: 8px 12px; text-align: left; border-bottom: 1px solid #e2e8f0;">Charge Name</th>
-                            <th style="padding: 8px 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">Sell Amt</th>
-                            <th style="padding: 8px 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">Buy Amt</th>
-                            <th style="padding: 8px 12px; text-align: center; border-bottom: 1px solid #e2e8f0;">Currency</th>
-                            <th style="padding: 8px 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">INR Equivalent</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${chargeRows || `<tr><td colspan="6" style="padding: 20px; text-align: center; color: #94a3b8;">No charges found</td></tr>`}
-                    </tbody>
-                    <tfoot>
-                        <tr style="background: #f1f5f9; font-weight: 700;">
-                            <td colspan="5" style="padding: 8px 12px; text-align: right;">Total Sell (INR) – 20'</td>
-                            <td style="padding: 8px 12px; text-align: right;">${formatINR(totalSell20)}</td>
-                        </tr>
-                        <tr style="background: #f1f5f9; font-weight: 700;">
-                            <td colspan="5" style="padding: 8px 12px; text-align: right;">Total Sell (INR) – 40'</td>
-                            <td style="padding: 8px 12px; text-align: right;">${formatINR(totalSell40)}</td>
-                        </tr>
-                        <tr style="background: linear-gradient(135deg, #10b981, #059669); color: white; font-weight: 700; font-size: 1rem;">
-                            <td colspan="5" style="padding: 8px 12px; text-align: right;">💰 Grand Total (INR)</td>
-                            <td style="padding: 8px 12px; text-align: right;">${formatINR(totalSell)}</td>
-                        </tr>
-                    </tfoot>
-                </table>
+    if (isSea) {
+        const baseNames = new Set();
+        Object.keys(charges).forEach(key => {
+            let base = key;
+            if (key.endsWith('_20') || key.endsWith('_40')) {
+                base = key.slice(0, -3);
+            }
+            baseNames.add(base);
+        });
+
+        let sr = 0;
+        baseNames.forEach(base => {
+            const v20 = charges[base + '_20'] || null;
+            const v40 = charges[base + '_40'] || null;
+
+            if (v20) {
+                sr++;
+                const sellINR = toINR(v20.amount, v20.currency);
+                grandTotalSellINR += sellINR;
+                chargeRows += `
+                    <tr>
+                        <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${sr}</td>
+                        <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${base} (20')</td>
+                        <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right;">${Number(v20.amount).toLocaleString('en-IN')}</td>
+                        <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right;">${Number(v20.buyAmount || 0).toLocaleString('en-IN')}</td>
+                        <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${v20.currency || 'INR'}</td>
+                        <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 600;">${formatINR(sellINR)}</td>
+                    </tr>
+                `;
+            }
+            if (v40) {
+                sr++;
+                const sellINR = toINR(v40.amount, v40.currency);
+                grandTotalSellINR += sellINR;
+                chargeRows += `
+                    <tr>
+                        <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${sr}</td>
+                        <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${base} (40')</td>
+                        <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right;">${Number(v40.amount).toLocaleString('en-IN')}</td>
+                        <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right;">${Number(v40.buyAmount || 0).toLocaleString('en-IN')}</td>
+                        <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${v40.currency || 'INR'}</td>
+                        <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 600;">${formatINR(sellINR)}</td>
+                    </tr>
+                `;
+            }
+        });
+    } else {
+        let sr = 0;
+        Object.entries(charges).forEach(([chargeName, val]) => {
+            sr++;
+            const sellINR = toINR(val.amount, val.currency);
+            grandTotalSellINR += sellINR;
+            chargeRows += `
+                <tr>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${sr}</td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${chargeName}</td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right;">${Number(val.amount).toLocaleString('en-IN')}</td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right;">${Number(val.buyAmount || 0).toLocaleString('en-IN')}</td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: center;">${val.currency || 'INR'}</td>
+                    <td style="padding: 6px 10px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 600;">${formatINR(sellINR)}</td>
+                </tr>
+            `;
+        });
+    }
+
+    const html = `
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 10px;">
+            <div style="background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; padding: 16px 20px; border-radius: 12px 12px 0 0; margin-bottom: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-size: 1.2rem; font-weight: 700;">📋 Default Charges Preview</div>
+                    <div style="background: rgba(255,255,255,0.2); padding: 4px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">${modeLabel}</div>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: white; padding: 16px 20px; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0;">
+                <div><span style="font-weight: 600; color: #64748b; font-size: 0.7rem; text-transform: uppercase; display: block;">POL</span><span style="font-weight: 700;">${rec.pol}</span></div>
+                <div><span style="font-weight: 600; color: #64748b; font-size: 0.7rem; text-transform: uppercase; display: block;">Commodity</span><span style="font-weight: 700;">${rec.commodity || '—'}</span></div>
+            </div>
+            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 0 0 12px 12px; overflow: hidden; margin-top: 0;">
+                <div style="padding: 10px 16px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #1e3a8a;">💲 Charges Breakdown</div>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                        <thead>
+                            <tr style="background: #f1f5f9;">
+                                <th style="padding: 8px 12px; text-align: center; border-bottom: 1px solid #e2e8f0;">#</th>
+                                <th style="padding: 8px 12px; text-align: left; border-bottom: 1px solid #e2e8f0;">Charge Name</th>
+                                <th style="padding: 8px 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">Sell Amt</th>
+                                <th style="padding: 8px 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">Buy Amt</th>
+                                <th style="padding: 8px 12px; text-align: center; border-bottom: 1px solid #e2e8f0;">Currency</th>
+                                <th style="padding: 8px 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">INR Equivalent</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${chargeRows || `<tr><td colspan="6" style="padding: 20px; text-align: center; color: #94a3b8;">No charges found</td></tr>`}
+                        </tbody>
+                        <tfoot>
+                            <tr style="background: linear-gradient(135deg, #10b981, #059669); color: white; font-weight: 700; font-size: 1rem;">
+                                <td colspan="5" style="padding: 8px 12px; text-align: right;">💰 Grand Total (INR)</td>
+                                <td style="padding: 8px 12px; text-align: right;">${formatINR(grandTotalSellINR)}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
             </div>
         </div>
-    </div>
     `;
 
     document.getElementById('modal-title').textContent = `Preview Default ${mode.toUpperCase()} Charge`;
@@ -9774,244 +9920,246 @@ function populateFreightDropdowns() {
 }
 // ==================== COMPACT EMAIL BUILDER ====================
 function buildCompactEmailHTML(data, mode) {
-		const modeLabel = { sea: 'SEA FREIGHT', air: 'AIR FREIGHT', lcl: 'LCL FREIGHT' }[mode];
-		const validityDisplay = data.validityDate ? new Date(data.validityDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
-		const transitDisplay = data.transit ? `${data.transit} Days` : '—';
-		const order = data.chargesOrder || getCurrentChargesOrder(mode);
-		const toUpper = (val) => val ? String(val).toUpperCase() : '-';
-		let grandTotal = 0;
-		const chargesWithINR = {};
+    const modeLabel = { sea: 'SEA FREIGHT', air: 'AIR FREIGHT', lcl: 'LCL FREIGHT' }[mode];
+    const validityDisplay = data.validityDate ? new Date(data.validityDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+    const transitDisplay = data.transit ? `${data.transit} Days` : '—';
+    const order = data.chargesOrder || getCurrentChargesOrder(mode);
+    const toUpper = (val) => val ? String(val).toUpperCase() : '-';
+    let grandTotal = 0;
+    const chargesWithINR = {};
 
-		// Calculate charges
-		Object.entries(data.charges || {}).forEach(([charge, c]) => {
-			let unitSellAmt = c.amount;
-			let unitBuyAmt = c.buyAmount || 0;
-			let totalSellAmt = unitSellAmt;
-			let totalBuyAmt = unitBuyAmt;
-			if (mode === 'air' || mode === 'lcl') {
-				const basis = c.basis || 'Normal';
-				if (basis === 'Per KGS') {
-					totalSellAmt *= (data.weight || 0);
-					totalBuyAmt *= (data.weight || 0);
-				} else if (basis === 'Per CBM') {
-					totalSellAmt *= (data.volume || 0);
-					totalBuyAmt *= (data.volume || 0);
-				} else if (basis === 'Per KGS × 3') {
-					totalSellAmt *= (data.weight || 0) * 3;
-					totalBuyAmt *= (data.weight || 0) * 3;
-				}
-			}
-			if (mode === 'lcl' && (charge === 'FREIGHT' || charge === 'THC')) {
-				const volume = data.volume || 0;
-				if (volume > 0) {
-					const basis = c.basis || 'Normal';
-					if (basis === 'Normal') {
-						totalSellAmt *= volume;
-						totalBuyAmt *= volume;
-					}
-				}
-			}
-			const sellINR = toINR(totalSellAmt, c.currency);
-			const buyINR = toINR(totalBuyAmt, c.buyCurrency || c.currency);
-			chargesWithINR[charge] = {
-				unitSellAmt,
-				totalSellAmt,
-				currency: c.currency,
-				sellINR,
-				buyINR,
-				basis: c.basis || 'Normal'
-			};
-			grandTotal += sellINR;
-		});
+    // Calculate charges
+    Object.entries(data.charges || {}).forEach(([charge, c]) => {
+        let unitSellAmt = c.amount;
+        let unitBuyAmt = c.buyAmount || 0;
+        let totalSellAmt = unitSellAmt;
+        let totalBuyAmt = unitBuyAmt;
+        if (mode === 'air' || mode === 'lcl') {
+            const basis = c.basis || 'Normal';
+            if (basis === 'Per KGS') {
+                totalSellAmt *= (data.weight || 0);
+                totalBuyAmt *= (data.weight || 0);
+            } else if (basis === 'Per CBM') {
+                totalSellAmt *= (data.volume || 0);
+                totalBuyAmt *= (data.volume || 0);
+            } else if (basis === 'Per KGS × 3') {
+                totalSellAmt *= (data.weight || 0) * 3;
+                totalBuyAmt *= (data.weight || 0) * 3;
+            }
+        }
+        if (mode === 'lcl' && (charge === 'FREIGHT' || charge === 'THC')) {
+            const volume = data.volume || 0;
+            if (volume > 0) {
+                const basis = c.basis || 'Normal';
+                if (basis === 'Normal') {
+                    totalSellAmt *= volume;
+                    totalBuyAmt *= volume;
+                }
+            }
+        }
+        const sellINR = toINR(totalSellAmt, c.currency);
+        const buyINR = toINR(totalBuyAmt, c.buyCurrency || c.currency);
+        chargesWithINR[charge] = {
+            unitSellAmt,
+            totalSellAmt,
+            currency: c.currency,
+            sellINR,
+            buyINR,
+            basis: c.basis || 'Normal'
+        };
+        grandTotal += sellINR;
+    });
 
-		const fontStack = "'Aptos', 'Segoe UI', Arial, sans-serif";
-		const dataSize = '10px';
-		const headingSize = '12px';
-		const titleSize = '13px';
-		const thPadding = '4px 8px';
-		const tdPadding = '4px 8px';
-		const colWidths = { num: '5%', charge: '30%', curr: '10%', sell: '18%', basis: '12%', inr: '20%' };
-		const custColWidths = { label1: '15%', value1: '35%', label2: '15%', value2: '35%' };
-		const tableWidth = '15cm';
-		const maxTableWidth = '17cm';
+    const fontStack = "'Aptos', 'Segoe UI', Arial, sans-serif";
+    const dataSize = '10px';
+    const headingSize = '12px';
+    const titleSize = '13px';
+    const thPadding = '4px 8px';
+    const tdPadding = '4px 8px';
+    const colWidths = { num: '5%', charge: '30%', curr: '10%', sell: '18%', basis: '12%', inr: '20%' };
+    const custColWidths = { label1: '15%', value1: '35%', label2: '15%', value2: '35%' };
+    const tableWidth = '15cm';
+    const maxTableWidth = '17cm';
 
-		let html = `<div style="max-width:${maxTableWidth};min-width:${tableWidth};width:auto;margin:0 auto;font-family:${fontStack};background:#ffffff;padding:4px;box-sizing:border-box;color:#1a1a1a;font-size:${dataSize};">
-			<p style="margin:0 0 4px 0;font-size:${titleSize};line-height:1.4;">Dear Sir/Madam,</p>
-			<br>
-			<p style="margin:0 0 10px 0;font-size:${titleSize};line-height:1.4;">Good Day !</p>
-			<div style="font-size:${titleSize};font-weight:800;color:#1e3a8a;">${modeLabel} QUOTATION / Quote: ${data.quoteNumber || 'DRAFT'}</div>
-			<br>
+    let html = `<div style="max-width:${maxTableWidth};min-width:${tableWidth};width:auto;margin:0 auto;font-family:${fontStack};background:#ffffff;padding:4px;box-sizing:border-box;color:#1a1a1a;font-size:${dataSize};">
+        <p style="margin:0 0 4px 0;font-size:${titleSize};line-height:1.4;">Dear Sir/Madam,</p>
+        <br>
+        <p style="margin:0 0 10px 0;font-size:${titleSize};line-height:1.4;">Good Day !</p>
+        <div style="font-size:${titleSize};font-weight:800;color:#1e3a8a;">${modeLabel} QUOTATION / Quote: ${data.quoteNumber || 'DRAFT'}</div>
+        <br>
 
-			<!-- Customer Details Table – heading as first row -->
-			<table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
-				<colgroup>
-					<col style="width:${custColWidths.label1};"><col style="width:${custColWidths.value1};"><col style="width:${custColWidths.label2};"><col style="width:${custColWidths.value2};">
-				</colgroup>
-				<thead>
-					<tr><th colspan="4" style="border:1px solid #1e3a8a;padding:${thPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;">Customer & Shipment Details</th></tr>
-				</thead>
-				<tbody>
-	<tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Client</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.client)}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Status</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.status)}</td></tr>
-	<tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">POL</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.pol)}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">POD</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.pod)}</td></tr>
-					<tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Commodity</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.commodity)}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Carrier</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.carrier)}</td></tr>
-					<tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Weight (KGS)</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${data.weight||'-'}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Incoterm</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.incoterm)}</td></tr>
-					<tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">${mode === 'sea' ? 'Container' : 'Volume (CBM)'}</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${mode === 'sea' ? toUpper(data.container) : (data.volume || '-')}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Transit Time</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${transitDisplay}</td></tr>
-					<tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Quote Date</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${data.autoDate||'-'}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Validity Date</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${validityDisplay}</td></tr>
-				</tbody>
-			</table>
-			<br>`;
+        <!-- Customer Details Table -->
+        <table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
+            <colgroup>
+                <col style="width:${custColWidths.label1};"><col style="width:${custColWidths.value1};"><col style="width:${custColWidths.label2};"><col style="width:${custColWidths.value2};">
+            </colgroup>
+            <thead>
+                <tr><th colspan="4" style="border:1px solid #1e3a8a;padding:${thPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;">Customer & Shipment Details</th></tr>
+            </thead>
+            <tbody>
+                <tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Client</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.client)}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Status</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.status)}</td></tr>
+                <tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">POL</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.pol)}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">POD</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.pod)}</td></tr>
+                <tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Commodity</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.commodity)}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Carrier</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.carrier)}</td></tr>
+                <tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Weight (KGS)</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${data.weight||'-'}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Incoterm</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${toUpper(data.incoterm)}</td></tr>
+                <tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">${mode === 'sea' ? 'Container' : 'Volume (CBM)'}</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${mode === 'sea' ? toUpper(data.container) : (data.volume || '-')}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Transit Time</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${transitDisplay}</td></tr>
+                <tr><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Quote Date</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${data.autoDate||'-'}</td><th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;">Validity Date</th><td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;">${validityDisplay}</td></tr>
+            </tbody>
+        </table>
+        <br>`;
 
-		// ---- Helper to build a group table with subtotal as tfoot ----
-		function buildGroupTableHTML(groupLabel, categoryNames, srStart) {
-			const groupCharges = [];
-			categoryNames.forEach(cat => {
-				if (order[cat]) {
-					order[cat].forEach(ch => {
-						if (chargesWithINR[ch]) {
-							groupCharges.push({ category: cat, charge: ch });
-						}
-					});
-				}
-			});
-			if (groupCharges.length === 0) return { html: '', subtotal: 0, nextSr: srStart };
+    // ---- Helper to build a group table with subtotal as tfoot ----
+    function buildGroupTableHTML(groupLabel, categoryNames, srStart) {
+        const groupCharges = [];
+        categoryNames.forEach(cat => {
+            if (order[cat]) {
+                order[cat].forEach(ch => {
+                    if (chargesWithINR[ch]) {
+                        groupCharges.push({ category: cat, charge: ch });
+                    }
+                });
+            }
+        });
+        if (groupCharges.length === 0) return { html: '', subtotal: 0, nextSr: srStart };
 
-			let html = `<table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
-				<colgroup>
-					<col style="width:${colWidths.num};"><col style="width:${colWidths.charge};"><col style="width:${colWidths.curr};"><col style="width:${colWidths.sell};"><col style="width:${colWidths.basis};"><col style="width:${colWidths.inr};">
-				</colgroup>
-				<thead>
-					<tr><th colspan="6" style="border:1px solid #1e3a8a;padding:${thPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;">${groupLabel}</th></tr>
-					<tr>
-						<th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Sr. No</th>
-						<th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Charge Type</th>
-						<th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Currency</th>
-						<th style="border:1px solid #d1d5db;padding:${thPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Sell Amount</th>
-						<th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Basis</th>
-						<th style="border:1px solid #d1d5db;padding:${thPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">INR Equivalent</th>
-					</tr>
-				</thead>
-				<tbody>`;
+        let html = `<table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
+            <colgroup>
+                <col style="width:${colWidths.num};"><col style="width:${colWidths.charge};"><col style="width:${colWidths.curr};"><col style="width:${colWidths.sell};"><col style="width:${colWidths.basis};"><col style="width:${colWidths.inr};">
+            </colgroup>
+            <thead>
+                <tr><th colspan="6" style="border:1px solid #1e3a8a;padding:${thPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;">${groupLabel}</th></tr>
+                <tr>
+                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Sr. No</th>
+                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Charge Type</th>
+                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Currency</th>
+                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Sell Amount</th>
+                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Basis</th>
+                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">INR Equivalent</th>
+                </tr>
+            </thead>
+            <tbody>`;
 
-			let sr = srStart;
-			let subtotal = 0;
-			groupCharges.forEach(({ charge }) => {
-				const c = chargesWithINR[charge];
-				subtotal += c.sellINR;
-				const isFreight = charge.toUpperCase() === 'FREIGHT' || charge.toUpperCase() === 'AIR FREIGHT';
-				const rowStyle = isFreight ? 'background:#fee2e2;font-weight:700;color:#dc2626;' : '';
-				const basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
-				html += `<tr style="${rowStyle}">
-					<td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${sr++}</td>
-					<td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${charge.toUpperCase()}</td>
-					<td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${c.currency}</td>
-					<td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${Number(c.unitSellAmt).toLocaleString('en-IN')}</td>
-					<td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${basisDisplay}</td>
-					<td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${formatINR(c.sellINR)}</td>
-				</tr>`;
-			});
+        let sr = srStart;
+        let subtotal = 0;
+        groupCharges.forEach(({ charge }) => {
+            const c = chargesWithINR[charge];
+            subtotal += c.sellINR;
+            const isFreight = charge.toUpperCase() === 'FREIGHT' || charge.toUpperCase() === 'AIR FREIGHT';
+            const rowStyle = isFreight ? 'background:#fee2e2;font-weight:700;color:#dc2626;' : '';
+            const basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
+            html += `<tr style="${rowStyle}">
+                <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${sr++}</td>
+                <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${charge.toUpperCase()}</td>
+                <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${c.currency}</td>
+                <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${Number(c.unitSellAmt).toLocaleString('en-IN')}</td>
+                <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${basisDisplay}</td>
+                <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${formatINR(c.sellINR)}</td>
+            </tr>`;
+        });
 
-			// ---- SUBTOTAL ROW (inside table as tfoot) ----
-			html += `</tbody>
-				<tfoot>
-					<tr style="font-weight:700;background:#e6f7e6;">
-						<td colspan="5" style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Subtotal</td>
-						<td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${formatINR(subtotal)}</td>
-					</tr>
-				</tfoot>
-			</table>`;
+        // ---- SUBTOTAL ROW ----
+        html += `</tbody>
+            <tfoot>
+                <tr style="font-weight:700;background:#e6f7e6;">
+                    <td colspan="5" style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Subtotal</td>
+                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${formatINR(subtotal)}</td>
+                </tr>
+            </tfoot>
+        </table>`;
 
-			return { html, subtotal, nextSr: sr };
-		}
+        return { html, subtotal, nextSr: sr };
+    }
 
-		const groupMap = getChargeGroups(mode);
-		const group1Label = "Freight & Carrier Charges";
-		const group2Label = "CFS / Transport Charges";
-		const group1Cats = groupMap.group1 || [];
-		const group2Cats = groupMap.group2 || [];
+    const groupMap = getChargeGroups(mode);
+    const group1Label = "Freight & Carrier Charges";
+    const group2Label = "CFS / Transport Charges";
+    const group1Cats = groupMap.group1 || [];
+    const group2Cats = groupMap.group2 || [];
 
-		let srStart = 1;
-		let table1 = buildGroupTableHTML(group1Label, group1Cats, srStart);
-		srStart = table1.nextSr;
-		let table2 = buildGroupTableHTML(group2Label, group2Cats, srStart);
+    let srStart = 1;
+    let chargeHtml = '';
 
-		let chargeHtml = '';
-		if (table1.html) {
-			chargeHtml += table1.html;
-		}
-		if (table2.html) {
-			chargeHtml += table2.html;
-		}
+    if (mode === 'air') {
+        // Combine both groups into one table for Air
+        const combinedCats = group1Cats.concat(group2Cats);
+        const combinedTable = buildGroupTableHTML("AIR FREIGHT CHARGES", combinedCats, srStart);
+        chargeHtml = combinedTable.html;
+    } else {
+        // Sea / LCL: two separate tables
+        let table1 = buildGroupTableHTML(group1Label, group1Cats, srStart);
+        srStart = table1.nextSr;
+        let table2 = buildGroupTableHTML(group2Label, group2Cats, srStart);
+        chargeHtml = (table1.html || '') + (table2.html || '');
+    }
 
-		// ---- GRAND TOTAL – margin-top:0 ----
-		if (chargeHtml) {
-			chargeHtml += `<table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
-				<colgroup>
-					<col style="width:${colWidths.num};"><col style="width:${colWidths.charge};"><col style="width:${colWidths.curr};"><col style="width:${colWidths.sell};"><col style="width:${colWidths.basis};"><col style="width:${colWidths.inr};">
-				</colgroup>
-				<tbody>
-					<tr style="background:#05964b;color:#edeef0;font-weight:800;font-size:15px;line-height:1;vertical-align:middle;">
-						<td colspan="5" style="border:1px solid #d1d5db;padding:4px 8px;text-align:right;">GRAND TOTAL (INR) + GST additional </td>
-						<td style="border:1px solid #d1d5db;padding:4px 8px;text-align:left;">${formatINR(grandTotal)}</td>
-					</tr>
-				</tbody>
-			</table>`;
-		}
+    // ---- GRAND TOTAL – margin-top:0 ----
+    if (chargeHtml) {
+        chargeHtml += `<table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
+            <colgroup>
+                <col style="width:${colWidths.num};"><col style="width:${colWidths.charge};"><col style="width:${colWidths.curr};"><col style="width:${colWidths.sell};"><col style="width:${colWidths.basis};"><col style="width:${colWidths.inr};">
+            </colgroup>
+            <tbody>
+                <tr style="background:#05964b;color:#edeef0;font-weight:800;font-size:15px;line-height:1;vertical-align:middle;">
+                    <td colspan="5" style="border:1px solid #d1d5db;padding:4px 8px;text-align:right;">GRAND TOTAL (INR) + GST additional </td>
+                    <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:left;">${formatINR(grandTotal)}</td>
+                </tr>
+            </tbody>
+        </table>`;
+    }
 
-		html += chargeHtml;
+    html += chargeHtml;
 
-		// ---- REMARKS SECTION – mode‑specific remarks ----
-		let remarks;
-		if (mode === 'air') {
-			remarks = [
-				"1. Rate Subject To Booking Acceptance",
-				"2. 100% Of Total Freight Charges applicable  if Shipments Cancelled Within 48 Hours Before The Delivery Cut-Off Time",
-				"3. GST At Actual",
-				"4. Rest other charges if any at actual as per receipt.",
-				"5. Above rates are valid for 3 days",
-				"6. THC:0.95/KG – ac actual",
-				"7. For Air cargo payment term will be 15 Days from the date of invoice.",
-				"8. Surcharges are at cost and subject to change. This rate QUOTED for prepaid shipment.",
-				"9. This rate is quote valid for 1.1 General cargo, Stackable and Normal dimension cargo.",
-				"10. This rate is not valid for DG/UB /ODC / Fragile/ Special cargo.",
-				"11. Acceptance of shipment would be subject to space availability at the time of booking .",
-				"12. EY reserves the right to select routing as per space availability",
-				"13. Spot rates offered are valid only for two days from the date of quotation.",
-				"14. Under current scenario rates are subject to change without prior notice .",
-				"15. Reduction in weight by more than 15% would lead to  revision in ad Noc rates."
-			];
-		} else {
-			// sea or lcl
-			remarks = [
-				"1.      Rates are valid as per vessel sailing.",
-				"2.      Rates are subject to ACD, SEAL, GRI, PSS, Toll + Local Charges.",
-				"3.      Rates are Subject to space and inventory availability.",
-				"4.      Rates are Subject to cargo acceptance and Haz approval.",
-				"5.      All Govt. taxes are applicable at the time of shipment (GST Applicable).",
-				"6.      Booking cancellation charges will be applicable as per carrier guidelines for general & SPOT booking.",
-				"7.      Rates are subject to THC as per tariff if container pick-up from ICD locations.",
-				"8.      Rates are subject to Standard free time and for additional free time charges will be applicable.",
-				"9.      Rates are subject to POL - THC, Documentation charges and local charges, as per Tariff.",
-				"10.     SPOT rates are subject to change at the time of booking."
-			];
-		}
+    // ---- REMARKS SECTION – mode‑specific ----
+    let remarks;
+    if (mode === 'air') {
+        remarks = [
+            "1. Rate Subject To Booking Acceptance",
+            "2. 100% Of Total Freight Charges applicable  if Shipments Cancelled Within 48 Hours Before The Delivery Cut-Off Time",
+            "3. GST At Actual",
+            "4. Rest other charges if any at actual as per receipt.",
+            "5. Above rates are valid for 3 days",
+            "6. THC:0.95/KG – ac actual",
+            "7. For Air cargo payment term will be 15 Days from the date of invoice.",
+            "8. Surcharges are at cost and subject to change. This rate QUOTED for prepaid shipment.",
+            "9. This rate is quote valid for 1.1 General cargo, Stackable and Normal dimension cargo.",
+            "10. This rate is not valid for DG/UB /ODC / Fragile/ Special cargo.",
+            "11. Acceptance of shipment would be subject to space availability at the time of booking .",
+            "12. EY reserves the right to select routing as per space availability",
+            "13. Spot rates offered are valid only for two days from the date of quotation.",
+            "14. Under current scenario rates are subject to change without prior notice .",
+            "15. Reduction in weight by more than 15% would lead to  revision in ad Noc rates."
+        ];
+    } else {
+        // sea or lcl
+        remarks = [
+            "1.      Rates are valid as per vessel sailing.",
+            "2.      Rates are subject to ACD, SEAL, GRI, PSS, Toll + Local Charges.",
+            "3.      Rates are Subject to space and inventory availability.",
+            "4.      Rates are Subject to cargo acceptance and Haz approval.",
+            "5.      All Govt. taxes are applicable at the time of shipment (GST Applicable).",
+            "6.      Booking cancellation charges will be applicable as per carrier guidelines for general & SPOT booking.",
+            "7.      Rates are subject to THC as per tariff if container pick-up from ICD locations.",
+            "8.      Rates are subject to Standard free time and for additional free time charges will be applicable.",
+            "9.      Rates are subject to POL - THC, Documentation charges and local charges, as per Tariff.",
+            "10.     SPOT rates are subject to change at the time of booking."
+        ];
+    }
 
-		html += `<table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
-			<tbody>
-				<tr>
-					<th colspan="1" style="border:1px solid #1e3a8a;padding:2px 8px;text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;">Remarks</th>
-				</tr>
-				<tr>
-					<td style="border:1px solid #d1d5db;padding:${tdPadding};background:#ffffff;font-size:${dataSize};line-height:1.4;vertical-align:top;">
-						${remarks.map(line => `<p style="margin:2px 0;font-size:${dataSize};line-height:1.4;">${line}</p>`).join('')}
-					</td>
-				</tr>
-			</tbody>
-		</table>`;
+    html += `<table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
+        <tbody>
+            <tr>
+                <th colspan="1" style="border:1px solid #1e3a8a;padding:2px 8px;text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;">Remarks</th>
+            </tr>
+            <tr>
+                <td style="border:1px solid #d1d5db;padding:${tdPadding};background:#ffffff;font-size:${dataSize};line-height:1.4;vertical-align:top;">
+                    ${remarks.map(line => `<p style="margin:2px 0;font-size:${dataSize};line-height:1.4;">${line}</p>`).join('')}
+                </td>
+            </tr>
+        </tbody>
+    </table>`;
 
-		html += `</div>`;
-		return html;
-	}
-
+    html += `</div>`;
+    return html;
+}
 // =============================================================
 // 1. previewDsrShipment - Main modal caller
 // =============================================================
@@ -11513,8 +11661,8 @@ function loadBackupPath() {
 
     if (inputEl) inputEl.value = path;
 
-    // Load handle from IndexedDB
-    if (typeof getFolderHandle === 'function') {
+    // Try to restore folder handle from IndexedDB (only works in secure contexts)
+    if (window.location.protocol !== 'file:' && typeof getFolderHandle === 'function') {
         getFolderHandle().then(handle => {
             backupFolderHandle = handle;
             if (displayEl) {
@@ -11522,19 +11670,20 @@ function loadBackupPath() {
                 if (handle) displayText += ' (handle available)';
                 displayEl.textContent = displayText;
             }
-            if (handle && typeof startAutoBackup === 'function') {
-                startAutoBackup();
-            }
+            if (handle && !autoBackupInterval) startAutoBackup();
         }).catch(err => {
             console.warn('Could not retrieve folder handle:', err);
             if (displayEl) {
                 displayEl.textContent = path ? `📁 ${path}` : 'No folder selected';
             }
+            if (!autoBackupInterval) startAutoBackup();
         });
     } else {
+        // file: protocol – just show the saved path, no handle
         if (displayEl) {
             displayEl.textContent = path ? `📁 ${path}` : 'No folder selected';
         }
+        if (!autoBackupInterval) startAutoBackup();
     }
 }
 
@@ -11892,6 +12041,7 @@ async function selectBackupFolder() {
 
 
 
+
 // ===== 2. saveBackupPath – stores the typed path exactly as entered =====
 function saveBackupPath() {
     const inputEl = document.getElementById('backup-folder-path-input');
@@ -11906,12 +12056,11 @@ function saveBackupPath() {
     const displayEl = document.getElementById('backup-folder-path');
     if (displayEl) {
         let displayText = `📁 ${path}`;
-        if (backupFolderHandle) {
-            displayText += ' (handle available)';
-        }
+        if (backupFolderHandle) displayText += ' (handle available)';
         displayEl.textContent = displayText;
     }
-    alert('✅ Full backup path saved permanently!');
+    alert('✅ Backup path saved!');
+    if (!autoBackupInterval) startAutoBackup();
 }
 
 // ===== 3. loadBackupPath – restores the saved path and the handle =====
