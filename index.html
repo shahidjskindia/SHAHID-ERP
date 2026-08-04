@@ -109,12 +109,6 @@
 						<div class="form-group"><label>Client Name *</label><input type="text" id="sea-client" oninput="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
 
 						<div class="form-group">
-							<label>Carrier *</label>
-							<input type="text" id="sea-carrier" list="sea-carrier-list" placeholder="Type Carrier..." onchange="onCarrierChange('sea');markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
-							<datalist id="sea-carrier-list"></datalist>
-						</div>
-
-						<div class="form-group">
 							<label>POL *</label>
 							<input type="text" id="sea-pol" list="sea-pol-list" placeholder="Type POL..." onchange="onPolChange('sea');markUnsaved('sea');checkSeaRateAuto()" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
 							<datalist id="sea-pol-list"></datalist>
@@ -124,12 +118,6 @@
 							<label>POD *</label>
 							<input type="text" id="sea-pod" list="sea-pod-list" placeholder="Type POD..." onchange="markUnsaved('sea');checkSeaRateAuto()" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
 							<datalist id="sea-pod-list"></datalist>
-						</div>
-
-						<div class="form-group">
-							<label>Incoterm</label>
-							<input type="text" id="sea-incoterm" list="sea-incoterm-list" placeholder="Type Incoterm..." onchange="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
-							<datalist id="sea-incoterm-list"></datalist>
 						</div>
 
 						<div class="form-group">
@@ -149,6 +137,18 @@
 								<option value="NON HAZ">
 								<option value="HAZ">
 							</datalist>
+						</div>
+
+						<div class="form-group">
+							<label>Carrier *</label>
+							<input type="text" id="sea-carrier" list="sea-carrier-list" placeholder="Type Carrier..." onchange="onCarrierChange('sea');markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+							<datalist id="sea-carrier-list"></datalist>
+						</div>
+
+						<div class="form-group">
+							<label>Incoterm</label>
+							<input type="text" id="sea-incoterm" list="sea-incoterm-list" placeholder="Type Incoterm..." onchange="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+							<datalist id="sea-incoterm-list"></datalist>
 						</div>
 
 						<div class="form-group"><label>Weight (KGS)</label><input type="number" id="sea-weight" oninput="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
@@ -207,12 +207,6 @@
 					<div class="form-group"><label>Client Name *</label><input type="text" id="air-client" oninput="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
 
 					<div class="form-group">
-						<label>Carrier *</label>
-						<input type="text" id="air-carrier" list="air-carrier-list" placeholder="Type Carrier..." onchange="onCarrierChange('air');markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
-						<datalist id="air-carrier-list"></datalist>
-					</div>
-
-					<div class="form-group">
 						<label>POL *</label>
 						<input type="text" id="air-pol" list="air-pol-list" placeholder="Type POL..." onchange="onPolChange('air');markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
 						<datalist id="air-pol-list"></datalist>
@@ -222,12 +216,6 @@
 						<label>POD *</label>
 						<input type="text" id="air-pod" list="air-pod-list" placeholder="Type POD..." onchange="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
 						<datalist id="air-pod-list"></datalist>
-					</div>
-
-					<div class="form-group">
-						<label>Incoterm</label>
-						<input type="text" id="air-incoterm" list="air-incoterm-list" placeholder="Type Incoterm..." onchange="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
-						<datalist id="air-incoterm-list"></datalist>
 					</div>
 
 					<div class="form-group">
@@ -243,6 +231,18 @@
 						</datalist>
 					</div>
 
+					<div class="form-group">
+						<label>Carrier *</label>
+						<input type="text" id="air-carrier" list="air-carrier-list" placeholder="Type Carrier..." onchange="onCarrierChange('air');markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+						<datalist id="air-carrier-list"></datalist>
+					</div>
+
+					<div class="form-group">
+						<label>Incoterm</label>
+						<input type="text" id="air-incoterm" list="air-incoterm-list" placeholder="Type Incoterm..." onchange="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+						<datalist id="air-incoterm-list"></datalist>
+					</div>					
+					
 					<div class="form-group"><label>Chargeable Weight (KGS)</label><input type="number" id="air-weight" oninput="calculateAirCharges();markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
 					<div class="form-group"><label>Volume (CBM)</label><input type="number" id="air-volume" oninput="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
 					<div class="form-group"><label>Number of Pallets</label><input type="number" id="air-pallets" oninput="calculateAirCharges();markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
@@ -295,12 +295,6 @@
 					<div class="form-group"><label>Client Name *</label><input type="text" id="lcl-client" oninput="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
 
 					<div class="form-group">
-						<label>Carrier *</label>
-						<input type="text" id="lcl-carrier" list="lcl-carrier-list" placeholder="Type Carrier..." onchange="onCarrierChange('lcl');markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
-						<datalist id="lcl-carrier-list"></datalist>
-					</div>
-
-					<div class="form-group">
 						<label>POL *</label>
 						<input type="text" id="lcl-pol" list="lcl-pol-list" placeholder="Type POL..." onchange="onPolChange('lcl');markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
 						<datalist id="lcl-pol-list"></datalist>
@@ -310,12 +304,6 @@
 						<label>POD *</label>
 						<input type="text" id="lcl-pod" list="lcl-pod-list" placeholder="Type POD..." onchange="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
 						<datalist id="lcl-pod-list"></datalist>
-					</div>
-
-					<div class="form-group">
-						<label>Incoterm</label>
-						<input type="text" id="lcl-incoterm" list="lcl-incoterm-list" placeholder="Type Incoterm..." onchange="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
-						<datalist id="lcl-incoterm-list"></datalist>
 					</div>
 
 					<div class="form-group">
@@ -329,6 +317,18 @@
 							<option value="NON HAZ">
 							<option value="HAZ">
 						</datalist>
+					</div>
+
+					<div class="form-group">
+						<label>Carrier *</label>
+						<input type="text" id="lcl-carrier" list="lcl-carrier-list" placeholder="Type Carrier..." onchange="onCarrierChange('lcl');markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+						<datalist id="lcl-carrier-list"></datalist>
+					</div>
+
+					<div class="form-group">
+						<label>Incoterm</label>
+						<input type="text" id="lcl-incoterm" list="lcl-incoterm-list" placeholder="Type Incoterm..." onchange="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
+						<datalist id="lcl-incoterm-list"></datalist>
 					</div>
 
 					<div class="form-group"><label>Weight (KGS)</label><input type="number" id="lcl-weight" oninput="markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
