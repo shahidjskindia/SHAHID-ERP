@@ -1,4 +1,4 @@
-	<!DOCTYPE html>
+		<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
@@ -163,7 +163,58 @@
 							<div class="form-group" style="grid-column:1/-1;"><label>Remarks</label><textarea id="sea-remarks" rows="2" oninput="markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></textarea></div>
 						</div>
 					</div>
-
+					
+					<!-- Freight & Surcharges -->
+					<div class="form-section">
+						<h3>🚢 Freight & Surcharges</h3>
+						<div style="border: 4px solid #000; border-radius: 6px; overflow: hidden;">
+							<table style="width:100%; border-collapse:collapse; font-size:0.85rem; margin:0;">
+								<thead>
+									<tr style="background:#1e3a8a; color:white;">
+										<th style="border:4px solid #000; padding:6px 8px; text-align:center;">Container</th>
+										<th style="border:4px solid #000; padding:6px 8px; text-align:center;">OFT</th>
+										<th style="border:4px solid #000; padding:6px 8px; text-align:center;">SUB. C</th>
+										<th style="border:4px solid #000; padding:6px 8px; text-align:center;">HAZ</th>
+										<th style="border:4px solid #000; padding:6px 8px; text-align:center;">OW</th>
+										<th style="border:4px solid #000; padding:6px 8px; text-align:center;">OTHER</th>
+										<th style="border:4px solid #000; padding:6px 8px; text-align:center;">OTHER 2</th>
+										<th style="border:4px solid #000; padding:6px 8px; text-align:center;">OTHER 3</th>
+										<th style="border:4px solid #000; padding:6px 8px; text-align:center;">TRK</th>
+										<th style="border:4px solid #000; padding:6px 8px; text-align:center;">DDP</th>
+										<th style="border:4px solid #000; padding:6px 8px; text-align:center; background:#059669;">TOTAL</th>
+									</tr>
+								</thead>
+								<tbody>
+									<tr>
+										<td style="border:2px solid #000; padding:4px 6px; font-weight:700; text-align:center;">20 GP</td>
+										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-oft-20" step="0.01" class="fs-input" data-row="20" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
+										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-subc-20" step="0.01" class="fs-input" data-row="20" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
+										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-haz-20" step="0.01" class="fs-input" data-row="20" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
+										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-ow-20" step="0.01" class="fs-input" data-row="20" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
+										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-other-20" step="0.01" class="fs-input" data-row="20" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
+										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-other2-20" step="0.01" class="fs-input" data-row="20" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
+										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-other3-20" step="0.01" class="fs-input" data-row="20" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
+										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-trk-20" step="0.01" class="fs-input" data-row="20" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
+										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-ddp-20" step="0.01" class="fs-input" data-row="20" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
+										<td style="border:2px solid #000; padding:4px 6px; font-weight:700; text-align:center; background:#d1fae5;" id="sea-fs-total-20">0.00</td>
+									</tr>
+									<tr>
+										<td style="border:2px solid #000; padding:4px 6px; font-weight:700; text-align:center;">40 HC</td>
+										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-oft-40" step="0.01" class="fs-input" data-row="40" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
+										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-subc-40" step="0.01" class="fs-input" data-row="40" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
+										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-haz-40" step="0.01" class="fs-input" data-row="40" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
+										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-ow-40" step="0.01" class="fs-input" data-row="40" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
+										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-other-40" step="0.01" class="fs-input" data-row="40" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
+										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-other2-40" step="0.01" class="fs-input" data-row="40" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
+										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-other3-40" step="0.01" class="fs-input" data-row="40" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
+										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-trk-40" step="0.01" class="fs-input" data-row="40" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
+										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-ddp-40" step="0.01" class="fs-input" data-row="40" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
+										<td style="border:2px solid #000; padding:4px 6px; font-weight:700; text-align:center; background:#d1fae5;" id="sea-fs-total-40">0.00</td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+					</div>
                 <div class="charges-section">
                     <h3>💰 Freight & Local Charges <span style="font-size:0.72rem;color:var(--buy-red);font-weight:400;">(Drag to reorder • Buy rates in RED)</span></h3>
                     <div class="charges-header">
@@ -251,6 +302,52 @@
 					<div class="form-group" style="grid-column:1/-1;"><label>Remarks</label><textarea id="air-remarks" rows="2" oninput="markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></textarea></div>
 				</div>
 			</div>
+
+			<!-- Freight & Surcharges (AIR) -->
+			<div class="form-section">
+				<h3>✈️ Freight & Surcharges</h3>
+				<div style="overflow-x:auto;">
+					<div style="border: 2px solid #000; border-radius: 4px; overflow: hidden;">
+						<table style="width:100%; border-collapse:collapse; font-size:0.85rem; margin:0;">
+							<thead>
+								<tr style="background:#1e3a8a; color:white;">
+									<th style="border:1px solid #000; padding:6px 8px; text-align:center;">FRT</th>
+									<th style="border:1px solid #000; padding:6px 8px; text-align:center;">FUEL</th>
+									<th style="border:1px solid #000; padding:6px 8px; text-align:center;">CARTING</th>
+									<th style="border:1px solid #000; padding:6px 8px; text-align:center;">MCC</th>
+									<th style="border:1px solid #000; padding:6px 8px; text-align:center;">XRAY</th>
+									<th style="border:1px solid #000; padding:6px 8px; text-align:center;">OTHER</th>
+									<th style="border:1px solid #000; padding:6px 8px; text-align:center; background:#059669;">TOTAL</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr>
+									<td style="border:1px solid #000; padding:4px 6px;">
+										<input type="number" id="air-fs-frt" step="0.01" class="fs-input-air" oninput="calcAirFSTotal()" style="width:100%; padding:4px; border:1px solid #ccc; border-radius:4px; text-align:center;" />
+									</td>
+									<td style="border:1px solid #000; padding:4px 6px;">
+										<input type="number" id="air-fs-fuel" step="0.01" class="fs-input-air" oninput="calcAirFSTotal()" style="width:100%; padding:4px; border:1px solid #ccc; border-radius:4px; text-align:center;" />
+									</td>
+									<td style="border:1px solid #000; padding:4px 6px;">
+										<input type="number" id="air-fs-carting" step="0.01" class="fs-input-air" oninput="calcAirFSTotal()" style="width:100%; padding:4px; border:1px solid #ccc; border-radius:4px; text-align:center;" />
+									</td>
+									<td style="border:1px solid #000; padding:4px 6px;">
+										<input type="number" id="air-fs-mcc" step="0.01" class="fs-input-air" oninput="calcAirFSTotal()" style="width:100%; padding:4px; border:1px solid #ccc; border-radius:4px; text-align:center;" />
+									</td>
+									<td style="border:1px solid #000; padding:4px 6px;">
+										<input type="number" id="air-fs-xray" step="0.01" class="fs-input-air" oninput="calcAirFSTotal()" style="width:100%; padding:4px; border:1px solid #ccc; border-radius:4px; text-align:center;" />
+									</td>
+									<td style="border:1px solid #000; padding:4px 6px;">
+										<input type="number" id="air-fs-other" step="0.01" class="fs-input-air" oninput="calcAirFSTotal()" style="width:100%; padding:4px; border:1px solid #ccc; border-radius:4px; text-align:center;" />
+									</td>
+									<td style="border:1px solid #000; padding:4px 6px; font-weight:700; text-align:center; background:#d1fae5;" id="air-fs-total">0.00</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+
 
                 <div class="charges-section">
                     <h3>💰 Freight & Local Charges <span style="font-size:0.72rem;color:var(--buy-red);font-weight:400;">(Drag to reorder • Auto-calculated)</span></h3>
