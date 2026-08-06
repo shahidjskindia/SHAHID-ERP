@@ -1,10 +1,29 @@
 // ==================== DATA DEFINITIONS ====================
+const AIR_MIN_THRESHOLDS = {
+    'CARTAGE': 450,
+    'MCC': 550,
+    'XRAY': 850,
+    'GATE PASS': 850
+};
+
+const airChargePlaceholders = {
+    "AIR FREIGHT": "Min 850 INR",
+    "CARTAGE": "Rate per KGS (min 450)",
+    "MCC": "Rate per KGS (min 550)",
+    "XRAY": "Rate per KGS (min 850)",
+    "GATE PASS": "Rate per KGS ×4 (min 850)",
+    "PALLETISATION": "₹1,875/pallet (auto)",
+    "PLY": "₹600/ply (auto)"
+};
+
+
+
 const defaultCharges = {
     sea: ["FREIGHT", "THC", "SEAL", "MUC", "DOCS", "SWITCH BL", "ETS", "HAZ DOCS", "AMS", "CFS", "CLEARANCE", "VGM",
         "TOLL", "LASHING & CHOKING", "HAZ STICKER", "TRANSPORTATION", "LOLO", "ON WHEEL", "OTHER LOCALS"
     ],
     air: ["AIR FREIGHT", "CARTAGE", "MCC", "XRAY", "GATE PASS", "ASI GMAX", "CUSTOM CLEARANCE", "TERMINAL TRANSFER",
-        "AWB FEES", "TEDI", "AMS", "PALLETISATION", "LOADING & UNLOADING", "DG FEES", "DG AGENT FEE", "PLY",
+        "AWB FEES", "TEDI", "AMS", "PALLETISATION", "PLY", "LOADING & UNLOADING", "DG FEES", "DG AGENT FEE",
         "REPACKING", "TRANSPORATION", "ADD.SURCHARGE"
     ],
     lcl: ["FREIGHT", "THC", "MUC", "DOCS", "SWITCH BL", "HAZ DOCS", "AMS", "CLEARANCE", "VGM"]
@@ -20,8 +39,8 @@ const chargeCategories = {
     },
     air: {
         "Freight": ["AIR FREIGHT"],
-        "Origin Charges": ["CARTAGE", "MCC", "XRAY", "GATE PASS", "ASI GMAX", "AMS", "PALLETISATION",
-            "LOADING & UNLOADING", "DG FEES", "DG AGENT FEE", "PLY", "REPACKING", "AWB FEES", "TEDI",
+        "Origin Charges": ["CARTAGE", "MCC", "XRAY", "GATE PASS", "ASI GMAX", "AMS", "PALLETISATION", "PLY",
+            "LOADING & UNLOADING", "DG FEES", "DG AGENT FEE", "REPACKING", "AWB FEES", "TEDI",
             "ADD.SURCHARGE", "TRANSPORATION"
         ],
         "Local Charges": ["CUSTOM CLEARANCE", "TERMINAL TRANSFER"]
@@ -32,13 +51,6 @@ const chargeCategories = {
     }
 };
 
-const airChargePlaceholders = {
-    "CARTAGE": "Min 850 INR",
-    "MCC": "Min 850 INR",
-    "XRAY": "Min 850 INR",
-    "GATE PASS": "Wt×3, Min 850",
-    "PALLETISATION": "1870/pallet"
-};
 
 const defaultContainerDimensions = [
     { type: "20 GP", length: "5.898m", width: "2.352m", height: "2.393m", maxWeight: "28,200 kg", cbm: "33.2" },
@@ -168,8 +180,8 @@ const EMBEDDED_BACKUP = {
     {"pol":"MUNDRA, IN","commodity":"HAZ","charges":{"CFS":{"amount":29950,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"CLEARANCE":{"amount":3000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"VGM":{"amount":25,"currency":"USD","buyAmount":0,"buyCurrency":"USD","basis":"Normal"},"LASHING & CHOKING":{"amount":3000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"ON WHEEL":{"amount":5000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"LOLO":{"amount":5000,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"},"OTHER LOCALS":{"amount":3320,"currency":"INR","buyAmount":0,"buyCurrency":"INR","basis":"Normal"}},"carrier":"ALL","container":"40 HC"}
   ],
   "defaultAirCharges": [
-    {"pol":"MUMBAI, IN","commodity":"NON HAZ","charges":{"CARTAGE":{"amount":850,"currency":"INR"},"MCC":{"amount":850,"currency":"INR"},"XRAY":{"amount":850,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":3500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"}}},
-    {"pol":"MUMBAI, IN","commodity":"HAZ","charges":{"CARTAGE":{"amount":850,"currency":"INR"},"MCC":{"amount":850,"currency":"INR"},"XRAY":{"amount":850,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":2500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"},"DG FEES":{"amount":10000,"currency":"INR"},"DG AGENT FEE":{"amount":3500,"currency":"INR"}},"createdAt":"2026-07-30T16:23:38.785Z","updatedAt":"2026-07-30T16:23:38.785Z"},
+    {"pol":"MUMBAI, IN","commodity":"NON HAZ","charges":{"CARTAGE":{"amount":1,"currency":"INR"},"MCC":{"amount":1,"currency":"INR"},"XRAY":{"amount":3.14,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":3500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"}}},
+    {"pol":"MUMBAI, IN","commodity":"HAZ","charges":{"CARTAGE":{"amount":1,"currency":"INR"},"MCC":{"amount":1,"currency":"INR"},"XRAY":{"amount":3,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":2500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"},"DG FEES":{"amount":10000,"currency":"INR"},"DG AGENT FEE":{"amount":3500,"currency":"INR"}},"createdAt":"2026-07-30T16:23:38.785Z","updatedAt":"2026-07-30T16:23:38.785Z"},
     {"pol":"AHMEDABAD, IN","commodity":"NON HAZ","charges":{"CARTAGE":{"amount":850,"currency":"INR"},"MCC":{"amount":850,"currency":"INR"},"XRAY":{"amount":850,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":2500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"}},"createdAt":"2026-07-30T16:26:44.137Z","updatedAt":"2026-07-30T16:26:44.137Z"},
     {"pol":"AHMEDABAD, IN","commodity":"HAZ","charges":{"CARTAGE":{"amount":850,"currency":"INR"},"MCC":{"amount":850,"currency":"INR"},"XRAY":{"amount":850,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":2500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"},"DG FEES":{"amount":10000,"currency":"INR"},"DG AGENT FEE":{"amount":3500,"currency":"INR"}},"createdAt":"2026-07-30T16:27:00.870Z","updatedAt":"2026-07-30T16:27:00.870Z"}
   ],
@@ -1467,11 +1479,33 @@ function checkDuplicate(mode, client, pol, pod) {
 function calculateAirCharges() {
     const weight = parseFloat(document.getElementById('air-weight')?.value) || 0;
     const pallets = parseFloat(document.getElementById('air-pallets')?.value) || 0;
+    
+    console.log('🔄 calculateAirCharges called with pallets:', pallets);
+    
     if (pallets > 0) {
-        const el = document.getElementById('air-amt-PALLETISATION');
-        if (el && !el.value) { el.value = (pallets * 1450).toFixed(2); recalcCharge('air', 'PALLETISATION'); }
+        const plies = pallets * 2;
+        
+        // ---- PALLETISATION: pallets × 1,875 ----
+        const palletCharge = pallets * 1875;
+        const palletEl = document.getElementById('air-amt-PALLETISATION');
+        if (palletEl) {
+            palletEl.value = palletCharge.toFixed(2);
+            console.log('✅ PALLETISATION set to:', palletCharge);
+        }
+        
+        // ---- PLY: plies × 600 ----
+        const plyCharge = plies * 600;
+        const plyEl = document.getElementById('air-amt-PLY');
+        if (plyEl) {
+            plyEl.value = plyCharge.toFixed(2);
+            console.log('✅ PLY set to:', plyCharge);
+        }
     }
+    
+    // Force recalculation of all charges
+    recalcTotal('air');
 }
+
 
 function updateLCLPerCBM() {
     const volume = parseFloat(document.getElementById('lcl-volume')?.value) || 0;
@@ -1509,29 +1543,38 @@ function buildChargesGrid(mode, savedCharges = {}, customOrder = null) {
             const freightClass = isFreight ? ' freight-row' : '';
             let basisHtml = '';
             let basisVal = 'Normal';
-            if (mode === 'air') {
-                if (['AIR FREIGHT', 'CARTAGE', 'MCC', 'XRAY'].includes(charge)) basisVal = 'Per KGS';
-                else if (charge === 'GATE PASS') basisVal = 'Per KGS × 3';
-                else basisVal = data.basis || 'Normal';
-            }
+			if (mode === 'air') {
+				if (charge === 'AIR FREIGHT') {
+					basisVal = 'Per KGS';
+				} else if (['CARTAGE', 'MCC', 'XRAY'].includes(charge)) {
+					basisVal = 'Per KGS';
+					placeholder = 'Rate per KGS (min ' + AIR_MIN_THRESHOLDS[charge] + ')';
+				} else if (charge === 'GATE PASS') {
+					basisVal = 'Per KGS × 4';
+					placeholder = 'Rate per KGS ×4 (min ' + AIR_MIN_THRESHOLDS[charge] + ')';
+				} else if (charge === 'PALLETISATION' || charge === 'PLY') {
+					basisVal = 'Normal';
+					placeholder = airChargePlaceholders[charge] || '0.00';
+				} else {
+					basisVal = data.basis || 'Normal';
+				}
+			}
             if (mode === 'lcl') {
                 if (charge === 'FREIGHT' || charge === 'THC') basisVal = 'Per CBM';
                 else basisVal = data.basis || 'Normal';
             }
-            if (mode === 'air' || mode === 'lcl') {
-                const basis = basisVal;
-                let opts = '';
-                if (mode === 'air') {
-                    if (charge === 'GATE PASS') {
-                        opts = `<option value="Normal">Normal</option><option value="Per KGS">Per KGS</option><option value="Per KGS × 3" selected>Per KGS × 3</option><option value="Per CBM">Per CBM</option>`;
-                    } else {
-                        opts = `<option value="Normal" ${basis==='Normal'?'selected':''}>Normal</option><option value="Per KGS" ${basis==='Per KGS'?'selected':''}>Per KGS</option><option value="Per CBM" ${basis==='Per CBM'?'selected':''}>Per CBM</option>`;
-                    }
-                } else {
-                    opts = `<option value="Normal" ${basis==='Normal'?'selected':''}>Normal</option><option value="Per KGS" ${basis==='Per KGS'?'selected':''}>Per KGS</option><option value="Per CBM" ${basis==='Per CBM'?'selected':''}>Per CBM</option>`;
-                }
-                basisHtml = `<select class="charge-basis" onchange="recalcCharge('${mode}','${charge}')">${opts}</select>`;
+            let opts = '';
+            if (mode === 'air') {
+                const basisOptions = ['Normal', 'Per KGS', 'Per KGS × 3', 'Per KGS × 4', 'Per CBM'];
+                opts = basisOptions.map(b => `<option value="${b}" ${basisVal===b?'selected':''}>${b}</option>`).join('');
+            } else if (mode === 'lcl') {
+                const basisOptions = ['Normal', 'Per KGS', 'Per CBM'];
+                opts = basisOptions.map(b => `<option value="${b}" ${basisVal===b?'selected':''}>${b}</option>`).join('');
+            } else {
+                opts = `<option value="Normal" selected>Normal</option>`;
             }
+            basisHtml = `<select class="charge-basis" onchange="recalcCharge('${mode}','${charge}')">${opts}</select>`;
+
             let curOpts = getCurrencyOptions(data.currency || 'INR');
             let buyCurOpts = getCurrencyOptions(data.buyCurrency || 'INR');
             if ((mode === 'sea' || mode === 'lcl') && isFreight) { curOpts = getCurrencyOptions('USD'); buyCurOpts = getCurrencyOptions('USD'); }
@@ -1655,90 +1698,235 @@ function recalcCharge(mode, charge) {
     let buyAmt = parseFloat(document.getElementById(`${mode}-buyAmt-${safe}`)?.value) || 0;
     const sellCur = document.getElementById(`${mode}-cur-${safe}`)?.value || 'INR';
     const buyCur = document.getElementById(`${mode}-buyCur-${safe}`)?.value || 'INR';
-    if (mode === 'air' || mode === 'lcl') {
-        const row = document.querySelector(`#${mode}-charges-grid .charge-row[data-charge="${charge}"]`);
-        const basisEl = row ? row.querySelector('.charge-basis') : null;
-        if (basisEl) {
-            const basis = basisEl.value;
-            if (basis === 'Per KGS') {
-                const weight = parseFloat(document.getElementById(`${mode}-weight`)?.value) || 0;
-                sellAmt *= weight; buyAmt *= weight;
-            } else if (basis === 'Per CBM') {
-                const volume = parseFloat(document.getElementById(`${mode}-volume`)?.value) || 0;
-                sellAmt *= volume; buyAmt *= volume;
-            } else if (basis === 'Per KGS × 3') {
-                const weight = parseFloat(document.getElementById(`${mode}-weight`)?.value) || 0;
-                sellAmt *= weight * 3; buyAmt *= weight * 3;
+
+    const row = document.querySelector(`#${mode}-charges-grid .charge-row[data-charge="${charge}"]`);
+    const basisEl = row ? row.querySelector('.charge-basis') : null;
+    const basis = basisEl ? basisEl.value : 'Normal';
+
+    let totalSellAmt = sellAmt;
+    let totalBuyAmt = buyAmt;
+
+    // ---- Special logic for PALLETISATION ----
+    if (mode === 'air' && charge === 'PALLETISATION') {
+        const pallets = parseFloat(document.getElementById('air-pallets')?.value) || 0;
+        if (pallets > 0) {
+            totalSellAmt = pallets * 1875;
+            totalBuyAmt = Math.max(totalBuyAmt, totalSellAmt);
+            const inputEl = document.getElementById(`${mode}-amt-${safe}`);
+            if (inputEl && parseFloat(inputEl.value) !== totalSellAmt) {
+                inputEl.value = totalSellAmt;
             }
         }
     }
-    const sellINR = toINR(sellAmt, sellCur);
-    const buyINR = toINR(buyAmt, buyCur);
+
+    // ---- Special logic for PLY ----
+    if (mode === 'air' && charge === 'PLY') {
+        const pallets = parseFloat(document.getElementById('air-pallets')?.value) || 0;
+        if (pallets > 0) {
+            const plies = pallets * 2;
+            totalSellAmt = plies * 600;
+            totalBuyAmt = Math.max(totalBuyAmt, totalSellAmt);
+            const inputEl = document.getElementById(`${mode}-amt-${safe}`);
+            if (inputEl && parseFloat(inputEl.value) !== totalSellAmt) {
+                inputEl.value = totalSellAmt;
+            }
+        }
+    }
+
+    // ---- Apply basis multipliers for other charges ----
+    if (mode === 'air' || mode === 'lcl') {
+        const weight = parseFloat(document.getElementById(`${mode}-weight`)?.value) || 0;
+        const volume = parseFloat(document.getElementById(`${mode}-volume`)?.value) || 0;
+        if (basis === 'Per KGS') {
+            totalSellAmt *= weight;
+            totalBuyAmt *= weight;
+        } else if (basis === 'Per CBM') {
+            totalSellAmt *= volume;
+            totalBuyAmt *= volume;
+        } else if (basis === 'Per KGS × 3') {
+            totalSellAmt *= weight * 3;
+            totalBuyAmt *= weight * 3;
+        } else if (basis === 'Per KGS × 4') {
+            totalSellAmt *= weight * 4;
+            totalBuyAmt *= weight * 4;
+        }
+    }
+
+    // ---- AIR minimum threshold - EXCLUDING PALLETISATION and PLY ----
+    if (mode === 'air' && charge !== 'PALLETISATION' && charge !== 'PLY') {
+        if (basis === 'Per KGS' || basis === 'Per KGS × 4') {
+            if (AIR_MIN_THRESHOLDS[charge]) {
+                const minVal = AIR_MIN_THRESHOLDS[charge];
+                totalSellAmt = Math.max(totalSellAmt, minVal);
+                totalBuyAmt = Math.max(totalBuyAmt, minVal);
+            }
+        }
+    }
+
+    // ---- LCL FREIGHT/THC per CBM ----
+    if (mode === 'lcl' && (charge === 'FREIGHT' || charge === 'THC')) {
+        const volume = parseFloat(document.getElementById('lcl-volume')?.value) || 0;
+        if (volume > 0 && basis === 'Normal') {
+            totalSellAmt *= volume;
+            totalBuyAmt *= volume;
+        }
+    }
+
+    const sellINR = toINR(totalSellAmt, sellCur);
+    const buyINR = toINR(totalBuyAmt, buyCur);
     const margin = sellINR - buyINR;
     const marginPct = sellINR > 0 ? (margin / sellINR) * 100 : 0;
+
     const inrEl = document.getElementById(`${mode}-inr-${safe}`);
     const buyInrEl = document.getElementById(`${mode}-buyInr-${safe}`);
     const marginEl = document.getElementById(`${mode}-margin-${safe}`);
     const marginPctEl = document.getElementById(`${mode}-marginPct-${safe}`);
-    if (inrEl) inrEl.textContent = sellAmt ? formatINR(sellINR) : '—';
-    if (buyInrEl) buyInrEl.textContent = buyAmt ? formatINR(buyINR) : '—';
+    if (inrEl) inrEl.textContent = totalSellAmt ? formatINR(sellINR) : '—';
+    if (buyInrEl) buyInrEl.textContent = totalBuyAmt ? formatINR(buyINR) : '—';
     if (marginEl) {
-        marginEl.textContent = (sellAmt || buyAmt) ? formatINR(margin) : '—';
+        marginEl.textContent = (totalSellAmt || totalBuyAmt) ? formatINR(margin) : '—';
         marginEl.style.color = margin < 0 ? 'var(--danger)' : margin > 0 ? 'var(--success)' : 'var(--text)';
     }
     if (marginPctEl) marginPctEl.textContent = sellINR > 0 ? marginPct.toFixed(2) + '%' : 'N/A';
+
     recalcTotal(mode);
 }
+
+
+
 function recalcTotal(mode) {
     let totalSell = 0, totalBuy = 0;
+    
     document.querySelectorAll(`#${mode}-charges-grid .charge-row`).forEach(row => {
         const charge = row.getAttribute('data-charge');
         const safe = charge.replace(/[^A-Z0-9]/gi, '_');
+        
         let sellAmt = parseFloat(document.getElementById(`${mode}-amt-${safe}`)?.value) || 0;
         const sellCur = document.getElementById(`${mode}-cur-${safe}`)?.value || 'INR';
         let buyAmt = parseFloat(document.getElementById(`${mode}-buyAmt-${safe}`)?.value) || 0;
         const buyCur = document.getElementById(`${mode}-buyCur-${safe}`)?.value || 'INR';
-        if (mode === 'air' || mode === 'lcl') {
-            const basisEl = row.querySelector('.charge-basis');
-            if (basisEl) {
-                const basis = basisEl.value;
-                if (basis === 'Per KGS') {
-                    const weight = parseFloat(document.getElementById(`${mode}-weight`)?.value) || 0;
-                    sellAmt *= weight; buyAmt *= weight;
-                } else if (basis === 'Per CBM') {
-                    const volume = parseFloat(document.getElementById(`${mode}-volume`)?.value) || 0;
-                    sellAmt *= volume; buyAmt *= volume;
-                } else if (basis === 'Per KGS × 3') {
-                    const weight = parseFloat(document.getElementById(`${mode}-weight`)?.value) || 0;
-                    sellAmt *= weight * 3; buyAmt *= weight * 3;
+
+        const basisEl = row.querySelector('.charge-basis');
+        const basis = basisEl ? basisEl.value : 'Normal';
+
+        let totalSellAmt = sellAmt;
+        let totalBuyAmt = buyAmt;
+
+        // ---- Special logic for PALLETISATION (calculate from pallets) ----
+        if (mode === 'air' && charge === 'PALLETISATION') {
+            const pallets = parseFloat(document.getElementById('air-pallets')?.value) || 0;
+            if (pallets > 0) {
+                totalSellAmt = pallets * 1875;
+                totalBuyAmt = Math.max(totalBuyAmt, totalSellAmt);
+                const inputEl = document.getElementById(`${mode}-amt-${safe}`);
+                if (inputEl && parseFloat(inputEl.value) !== totalSellAmt) {
+                    inputEl.value = totalSellAmt;
                 }
             }
         }
+
+        // ---- Special logic for PLY (calculate from pallets × 2 × 600) ----
+        if (mode === 'air' && charge === 'PLY') {
+            const pallets = parseFloat(document.getElementById('air-pallets')?.value) || 0;
+            if (pallets > 0) {
+                const plies = pallets * 2;
+                totalSellAmt = plies * 600;
+                totalBuyAmt = Math.max(totalBuyAmt, totalSellAmt);
+                const inputEl = document.getElementById(`${mode}-amt-${safe}`);
+                if (inputEl && parseFloat(inputEl.value) !== totalSellAmt) {
+                    inputEl.value = totalSellAmt;
+                }
+            }
+        }
+
+        // ---- Apply basis multipliers for other charges ----
+        if (mode === 'air' || mode === 'lcl') {
+            const weight = parseFloat(document.getElementById(`${mode}-weight`)?.value) || 0;
+            const volume = parseFloat(document.getElementById(`${mode}-volume`)?.value) || 0;
+            if (basis === 'Per KGS') {
+                totalSellAmt *= weight;
+                totalBuyAmt *= weight;
+            } else if (basis === 'Per CBM') {
+                totalSellAmt *= volume;
+                totalBuyAmt *= volume;
+            } else if (basis === 'Per KGS × 3') {
+                totalSellAmt *= weight * 3;
+                totalBuyAmt *= weight * 3;
+            } else if (basis === 'Per KGS × 4') {
+                totalSellAmt *= weight * 4;
+                totalBuyAmt *= weight * 4;
+            }
+        }
+
+        // ---- AIR minimum threshold - EXCLUDING PALLETISATION and PLY ----
+        if (mode === 'air' && charge !== 'PALLETISATION' && charge !== 'PLY') {
+            if (basis === 'Per KGS' || basis === 'Per KGS × 4') {
+                if (AIR_MIN_THRESHOLDS[charge]) {
+                    const minVal = AIR_MIN_THRESHOLDS[charge];
+                    totalSellAmt = Math.max(totalSellAmt, minVal);
+                    totalBuyAmt = Math.max(totalBuyAmt, minVal);
+                }
+            }
+        }
+
+        // ---- LCL FREIGHT/THC per CBM ----
         if (mode === 'lcl' && (charge === 'FREIGHT' || charge === 'THC')) {
             const volume = parseFloat(document.getElementById('lcl-volume')?.value) || 0;
-            if (volume > 0) {
-                const basisEl = row.querySelector('.charge-basis');
-                if (!basisEl || basisEl.value === 'Normal') {
-                    sellAmt = sellAmt * volume;
-                    buyAmt = buyAmt * volume;
-                }
+            if (volume > 0 && basis === 'Normal') {
+                totalSellAmt *= volume;
+                totalBuyAmt *= volume;
             }
         }
-        totalSell += toINR(sellAmt, sellCur);
-        totalBuy += toINR(buyAmt, buyCur);
+
+        totalSell += toINR(totalSellAmt, sellCur);
+        totalBuy += toINR(totalBuyAmt, buyCur);
     });
+
     const margin = totalSell - totalBuy;
     const marginPct = totalSell > 0 ? (margin / totalSell) * 100 : 0;
     document.getElementById(`${mode}-totalSell`).textContent = formatINR(totalSell);
     document.getElementById(`${mode}-totalBuy`).textContent = formatINR(totalBuy);
     document.getElementById(`${mode}-totalMargin`).textContent = formatINR(margin);
     document.getElementById(`${mode}-totalMarginPct`).textContent = totalSell > 0 ? marginPct.toFixed(2) + '%' : 'N/A';
+
     const warningEl = document.getElementById(`${mode}-margin-warning`);
     if (warningEl) {
         if (margin < 0 && (totalSell > 0 || totalBuy > 0)) warningEl.classList.add('show');
         else warningEl.classList.remove('show');
     }
 }
+
+function calcSeaFSTotal() {
+    ['20', '40'].forEach(row => {
+        const ids = ['oft', 'subc', 'haz', 'ow', 'other', 'other2', 'other3', 'trk', 'ddp'];
+        let total = 0;
+        ids.forEach(id => {
+            const el = document.getElementById(`sea-fs-${id}-${row}`);
+            if (el) {
+                const val = parseFloat(el.value) || 0;
+                total += val;
+            }
+        });
+        const totalEl = document.getElementById(`sea-fs-total-${row}`);
+        if (totalEl) totalEl.textContent = total.toFixed(2);
+    });
+}
+
+
+function calcAirFSTotal() {
+    const ids = ['frt', 'fuel', 'carting', 'mcc', 'xray', 'other'];
+    let total = 0;
+    ids.forEach(id => {
+        const el = document.getElementById(`air-fs-${id}`);
+        if (el) {
+            const val = parseFloat(el.value) || 0;
+            total += val;
+        }
+    });
+    const totalEl = document.getElementById('air-fs-total');
+    if (totalEl) totalEl.textContent = total.toFixed(2);
+}
+
 
 // ==================== ADD CUSTOM CHARGE ====================
 function openAddChargeModal(mode) {
@@ -1832,155 +2020,173 @@ function onCarrierPolChangeInternal(mode) {
     const container = containerEl ? containerEl.value : '';
     const commodity = document.getElementById(`${mode}-commodity`).value;
 
-    // If carrier or POL is empty, just rebuild with empty charges (keep existing grid)
     if (!carrier || !pol) {
         buildChargesGrid(mode);
         return;
     }
 
-    let finalCharges = {};
+    // Collect existing manual values to avoid overwriting
+    const existingValues = {};
+    document.querySelectorAll(`#${mode}-charges-grid .charge-row`).forEach(row => {
+        const charge = row.getAttribute('data-charge');
+        const safe = charge.replace(/[^A-Z0-9]/gi, '_');
+        const sellEl = document.getElementById(`${mode}-amt-${safe}`);
+        const curEl = document.getElementById(`${mode}-cur-${safe}`);
+        const buyEl = document.getElementById(`${mode}-buyAmt-${safe}`);
+        const buyCurEl = document.getElementById(`${mode}-buyCur-${safe}`);
+        const basisEl = row.querySelector('.charge-basis');
+        if (sellEl && sellEl.value) {
+            existingValues[charge] = {
+                amount: parseFloat(sellEl.value) || 0,
+                currency: curEl ? curEl.value : 'INR',
+                buyAmount: buyEl ? parseFloat(buyEl.value) || 0 : 0,
+                buyCurrency: buyCurEl ? buyCurEl.value : 'INR',
+                basis: basisEl ? basisEl.value : 'Normal'
+            };
+        }
+    });
 
-    // ===== 1. DEFAULT CHARGES (always applied first) =====
+    let defaultCharges = {};
     if (mode === 'sea') {
         const ownCfs = document.getElementById('sea-own-cfs')?.checked || false;
         if (!ownCfs) {
             const defaultMatch = db.defaultSeaCharges.find(d =>
-                d.pol === pol &&
-                d.commodity === commodity
+                d.pol === pol && d.commodity === commodity
             );
             if (defaultMatch) {
-                console.log('✅ Default SEA charges found for', pol, commodity);
-                const charges = { ...defaultMatch.charges };
-                // Map split charges based on container
+                defaultCharges = { ...defaultMatch.charges };
                 let suffix = '';
                 if (container === '20 GP') suffix = '_20';
                 else if (container === '40 GP' || container === '40 HC') suffix = '_40';
                 if (suffix) {
-                    Object.keys(charges).forEach(key => {
+                    Object.keys(defaultCharges).forEach(key => {
                         if (key.endsWith(suffix)) {
                             const base = key.slice(0, -3);
-                            finalCharges[base] = charges[key];
+                            defaultCharges[base] = defaultCharges[key];
                         }
                     });
-                    Object.keys(charges).forEach(key => {
-                        if (!key.endsWith('_20') && !key.endsWith('_40')) {
-                            finalCharges[key] = charges[key];
-                        }
-                    });
-                } else {
-                    Object.keys(charges).forEach(key => {
-                        if (!key.endsWith('_20') && !key.endsWith('_40')) {
-                            finalCharges[key] = charges[key];
-                        }
+                    Object.keys(defaultCharges).forEach(key => {
+                        if (key.endsWith('_20') || key.endsWith('_40')) delete defaultCharges[key];
                     });
                 }
-            } else {
-                console.warn('⚠️ No default SEA charges for', pol, commodity);
             }
-        } else {
-            console.log('ℹ️ Own CFS checked – skipping default charges');
         }
-    }
-    else if (mode === 'air') {
-        // ----- AIR default charges -----
+    } else if (mode === 'air') {
         const defaultMatch = db.defaultAirCharges.find(d =>
-            d.pol === pol &&
-            d.commodity === commodity
+            d.pol === pol && d.commodity === commodity
         );
-        if (defaultMatch) {
-            console.log('✅ Default AIR charges found for', pol, commodity);
-            // AIR charges do not have container split; just copy all charges
-            Object.entries(defaultMatch.charges).forEach(([key, val]) => {
-                finalCharges[key] = val;
-            });
-        } else {
-            console.warn('⚠️ No default AIR charges for', pol, commodity);
-        }
-    }
-    else if (mode === 'lcl') {
-        // ----- LCL default charges -----
+        if (defaultMatch) defaultCharges = { ...defaultMatch.charges };
+    } else if (mode === 'lcl') {
         const defaultMatch = db.defaultLclCharges.find(d =>
-            d.pol === pol &&
-            d.commodity === commodity
+            d.pol === pol && d.commodity === commodity
         );
-        if (defaultMatch) {
-            console.log('✅ Default LCL charges found for', pol, commodity);
-            // LCL charges are per CBM; we keep as is (will be multiplied in recalc if basis is Per CBM)
-            Object.entries(defaultMatch.charges).forEach(([key, val]) => {
-                finalCharges[key] = val;
-            });
-        } else {
-            console.warn('⚠️ No default LCL charges for', pol, commodity);
-        }
+        if (defaultMatch) defaultCharges = { ...defaultMatch.charges };
     }
 
-    // ===== 2. CARRIER-SPECIFIC CHARGES (override/add) =====
+    let carrierCharges = {};
     if (mode === 'sea') {
         const carrierMatch = db.carrierChargesSeaLcl.find(c =>
-            c.mode === mode &&
-            c.carrier === carrier &&
-            c.pol === pol &&
-            c.commodity === commodity
+            c.mode === mode && c.carrier === carrier && c.pol === pol && c.commodity === commodity
         );
-        if (carrierMatch) {
-            console.log('✅ Carrier-specific SEA charges found for', carrier);
-            const charges = { ...carrierMatch.charges };
-            // Map THC_20/THC_40 → THC based on container
-            let suffix = '';
-            if (container === '20 GP') suffix = '_20';
-            else if (container === '40 GP' || container === '40 HC') suffix = '_40';
-            if (suffix) {
-                const thcKey = 'THC' + suffix;
-                if (charges[thcKey]) {
-                    finalCharges.THC = charges[thcKey];
-                }
-                // Remove suffixed keys to avoid duplicates
-                delete charges.THC_20;
-                delete charges.THC_40;
-            }
-            // Merge other charges (SEAL, DOCS, etc.)
-            Object.entries(charges).forEach(([key, val]) => {
-                finalCharges[key] = val;
-            });
-        } else {
-            console.warn('⚠️ No carrier-specific SEA charges for', carrier, pol, commodity);
+        if (carrierMatch) carrierCharges = { ...carrierMatch.charges };
+        let suffix = '';
+        if (container === '20 GP') suffix = '_20';
+        else if (container === '40 GP' || container === '40 HC') suffix = '_40';
+        if (suffix) {
+            const thcKey = 'THC' + suffix;
+            if (carrierCharges[thcKey]) carrierCharges.THC = carrierCharges[thcKey];
+            delete carrierCharges.THC_20;
+            delete carrierCharges.THC_40;
         }
     } else if (mode === 'air') {
         const carrierMatch = db.carrierChargesAir.find(c =>
-            c.carrier === carrier &&
-            c.pol === pol &&
-            c.commodity === commodity
+            c.carrier === carrier && c.pol === pol && c.commodity === commodity
         );
-        if (carrierMatch) {
-            console.log('✅ Carrier-specific AIR charges found for', carrier);
-            Object.entries(carrierMatch.charges).forEach(([key, val]) => {
-                finalCharges[key] = val;
-            });
-        } else {
-            console.warn('⚠️ No carrier-specific AIR charges for', carrier, pol, commodity);
-        }
+        if (carrierMatch) carrierCharges = { ...carrierMatch.charges };
     } else if (mode === 'lcl') {
         const carrierMatch = db.carrierChargesSeaLcl.find(c =>
-            c.mode === mode &&
-            c.carrier === carrier &&
-            c.pol === pol &&
-            c.commodity === commodity
+            c.mode === mode && c.carrier === carrier && c.pol === pol && c.commodity === commodity
         );
-        if (carrierMatch) {
-            console.log('✅ Carrier-specific LCL charges found for', carrier);
-            Object.entries(carrierMatch.charges).forEach(([key, val]) => {
-                finalCharges[key] = val;
-            });
+        if (carrierMatch) carrierCharges = { ...carrierMatch.charges };
+    }
+
+    const mergedCharges = { ...defaultCharges, ...carrierCharges };
+
+    const finalCharges = {};
+    Object.keys(mergedCharges).forEach(charge => {
+        const existing = existingValues[charge];
+        const manualAmount = existing ? existing.amount : 0;
+        if (manualAmount > 0) {
+            finalCharges[charge] = {
+                amount: manualAmount,
+                currency: existing.currency || 'INR',
+                buyAmount: existing.buyAmount || 0,
+                buyCurrency: existing.buyCurrency || 'INR',
+                basis: existing.basis || 'Normal'
+            };
         } else {
-            console.warn('⚠️ No carrier-specific LCL charges for', carrier, pol, commodity);
+            const val = mergedCharges[charge];
+            if (val) {
+                finalCharges[charge] = {
+                    amount: val.amount || 0,
+                    currency: val.currency || 'INR',
+                    buyAmount: val.buyAmount || 0,
+                    buyCurrency: val.buyCurrency || 'INR',
+                    basis: val.basis || 'Normal'
+                };
+            }
+        }
+    });
+
+    Object.keys(existingValues).forEach(charge => {
+        if (!finalCharges[charge]) {
+            finalCharges[charge] = {
+                amount: existingValues[charge].amount,
+                currency: existingValues[charge].currency,
+                buyAmount: existingValues[charge].buyAmount,
+                buyCurrency: existingValues[charge].buyCurrency,
+                basis: existingValues[charge].basis
+            };
+        }
+    });
+
+    const order = chargesOrder[mode] || null;
+    buildChargesGrid(mode, finalCharges, order);
+
+    // Immediately apply higher-of logic for AIR if weight > 0
+    if (mode === 'air') {
+        // Force PALLETISATION calculation when charges are loaded
+        setTimeout(() => {
+            recalcCharge('air', 'PALLETISATION');
+        }, 100);
+        const weight = parseFloat(document.getElementById('air-weight')?.value) || 0;
+        if (weight > 0) {
+            Object.keys(finalCharges).forEach(charge => {
+                const basis = finalCharges[charge]?.basis || 'Normal';
+                if (basis === 'Per KGS' || basis === 'Per KGS × 4') {
+                    recalcCharge('air', charge);
+                }
+            });
         }
     }
 
-    // Build the charges grid with the merged charges (and retain custom order)
-    const order = chargesOrder[mode] || null;
-    buildChargesGrid(mode, finalCharges, order);
-}
 
+
+    // For LCL with Per CBM, recalc if volume > 0
+    if (mode === 'lcl') {
+        const volume = parseFloat(document.getElementById('lcl-volume')?.value) || 0;
+        if (volume > 0) {
+            Object.keys(finalCharges).forEach(charge => {
+                const basis = finalCharges[charge]?.basis || 'Normal';
+                if (basis === 'Per CBM') {
+                    recalcCharge('lcl', charge);
+                }
+            });
+        }
+    }
+
+    recalcTotal(mode);
+}
 
 function onOwnCfsToggle(mode) {
     if (mode === 'sea') {
@@ -2081,16 +2287,20 @@ function getFormData(mode) {
     const data = { mode: mode.toUpperCase(), timestamp: new Date().toISOString(), lastModified: new Date().toISOString() };
     data.autoDate = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     data.sales = getLoggedInUserName() || db.defaultUser || 'N/A';
+
     const fields = ['client', 'carrier', 'pol', 'pod', 'incoterm', 'commodity', 'weight', 'transit', 'validityDate'];
     if (mode === 'sea') fields.push('container');
     if (mode === 'air' || mode === 'lcl') fields.push('volume');
     if (mode === 'air') fields.push('pallets');
+
     fields.forEach(f => {
         const el = document.getElementById(`${mode}-${f}`);
         if (el && el.value) data[f] = el.value;
     });
+
     const remarksEl = document.getElementById(`${mode}-remarks`);
     if (remarksEl && remarksEl.value) data.remarks = remarksEl.value;
+
     data.charges = {};
     document.querySelectorAll(`#${mode}-charges-grid .charge-row`).forEach(row => {
         const charge = row.getAttribute('data-charge');
@@ -2106,6 +2316,48 @@ function getFormData(mode) {
         }
     });
     data.chargesOrder = chargesOrder[mode] || getCurrentChargesOrder(mode);
+
+    // ---- Freight & Surcharges (only for SEA) ----
+    if (mode === 'sea') {
+        data.freightSurcharges = {
+            '20': {
+                oft: parseFloat(document.getElementById('sea-fs-oft-20')?.value) || 0,
+                subc: parseFloat(document.getElementById('sea-fs-subc-20')?.value) || 0,
+                haz: parseFloat(document.getElementById('sea-fs-haz-20')?.value) || 0,
+                ow: parseFloat(document.getElementById('sea-fs-ow-20')?.value) || 0,
+                other: parseFloat(document.getElementById('sea-fs-other-20')?.value) || 0,
+                other2: parseFloat(document.getElementById('sea-fs-other2-20')?.value) || 0,
+                other3: parseFloat(document.getElementById('sea-fs-other3-20')?.value) || 0,
+                trk: parseFloat(document.getElementById('sea-fs-trk-20')?.value) || 0,
+                ddp: parseFloat(document.getElementById('sea-fs-ddp-20')?.value) || 0,
+            },
+            '40': {
+                oft: parseFloat(document.getElementById('sea-fs-oft-40')?.value) || 0,
+                subc: parseFloat(document.getElementById('sea-fs-subc-40')?.value) || 0,
+                haz: parseFloat(document.getElementById('sea-fs-haz-40')?.value) || 0,
+                ow: parseFloat(document.getElementById('sea-fs-ow-40')?.value) || 0,
+                other: parseFloat(document.getElementById('sea-fs-other-40')?.value) || 0,
+                other2: parseFloat(document.getElementById('sea-fs-other2-40')?.value) || 0,
+                other3: parseFloat(document.getElementById('sea-fs-other3-40')?.value) || 0,
+                trk: parseFloat(document.getElementById('sea-fs-trk-40')?.value) || 0,
+                ddp: parseFloat(document.getElementById('sea-fs-ddp-40')?.value) || 0,
+            }
+        };
+    }
+
+	if (mode === 'air') {
+		data.freightSurcharges = {
+			frt: parseFloat(document.getElementById('air-fs-frt')?.value) || 0,
+			fuel: parseFloat(document.getElementById('air-fs-fuel')?.value) || 0,
+			carting: parseFloat(document.getElementById('air-fs-carting')?.value) || 0,
+			mcc: parseFloat(document.getElementById('air-fs-mcc')?.value) || 0,
+			xray: parseFloat(document.getElementById('air-fs-xray')?.value) || 0,
+			other: parseFloat(document.getElementById('air-fs-other')?.value) || 0,
+		};
+	}
+
+
+
     data.totalSellINR = 0;
     data.totalBuyINR = 0;
     Object.values(data.charges).forEach(c => {
@@ -2114,6 +2366,7 @@ function getFormData(mode) {
     });
     data.marginINR = data.totalSellINR - data.totalBuyINR;
     data.marginPct = data.totalSellINR > 0 ? (data.marginINR / data.totalSellINR) * 100 : 0;
+
     return data;
 }
 
@@ -2227,6 +2480,18 @@ function clearForm(mode) {
         if (el.tagName === 'SELECT') el.selectedIndex = 0;
         else el.value = '';
     });
+
+    // ---- Reset Freight & Surcharges for SEA ----
+    if (mode === 'sea') {
+        document.querySelectorAll('#sea .fs-input').forEach(el => el.value = '');
+        calcSeaFSTotal();
+    }
+
+	if (mode === 'air') {
+		document.querySelectorAll('#air .fs-input-air').forEach(el => el.value = '');
+		calcAirFSTotal();
+	}
+
     document.getElementById(`${mode}-qn-box`).classList.remove('show');
     document.getElementById(`${mode}-dup-alert`).classList.remove('show');
     document.getElementById(`${mode}-margin-warning`).classList.remove('show');
@@ -2236,6 +2501,10 @@ function clearForm(mode) {
     hasUnsavedChanges[mode] = false;
     setValidityDefault(mode);
 }
+
+
+
+
 function setValidityDefault(mode) {
     const now = new Date();
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -2250,16 +2519,45 @@ function editRecord(target, mode, idx) {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.querySelector(`.tab-btn-vertical[data-tab="${mode}"]`).classList.add('active');
     document.getElementById(mode).classList.add('active');
+
     const fields = ['client', 'carrier', 'pol', 'pod', 'incoterm', 'commodity', 'weight', 'transit', 'validityDate'];
     if (mode === 'sea') fields.push('container');
     if (mode === 'air' || mode === 'lcl') fields.push('volume');
     if (mode === 'air') fields.push('pallets');
+
     fields.forEach(f => {
         const el = document.getElementById(`${mode}-${f}`);
         if (el && rec[f]) el.value = rec[f];
     });
+
     const remarksEl = document.getElementById(`${mode}-remarks`);
     if (remarksEl) remarksEl.value = rec.remarks || '';
+
+    // ---- Load Freight & Surcharges (only for SEA) ----
+    if (mode === 'sea' && rec.freightSurcharges) {
+        const fs = rec.freightSurcharges;
+        ['20', '40'].forEach(row => {
+            const keys = ['oft', 'subc', 'haz', 'ow', 'other', 'other2', 'other3', 'trk', 'ddp'];
+            keys.forEach(key => {
+                const el = document.getElementById(`sea-fs-${key}-${row}`);
+                if (el) el.value = fs[row]?.[key] || 0;
+            });
+        });
+        calcSeaFSTotal();
+    }
+
+	// ---- Load Freight & Surcharges (AIR) ----
+	if (mode === 'air' && rec.freightSurcharges) {
+		const fs = rec.freightSurcharges;
+		const keys = ['frt', 'fuel', 'carting', 'mcc', 'xray', 'other'];
+		keys.forEach(key => {
+			const el = document.getElementById(`air-fs-${key}`);
+			if (el) el.value = fs[key] || 0;
+		});
+		calcAirFSTotal();
+	}
+
+
     setTimeout(() => {
         chargesOrder[mode] = rec.chargesOrder || null;
         buildChargesGrid(mode, rec.charges || {}, chargesOrder[mode]);
@@ -2268,6 +2566,7 @@ function editRecord(target, mode, idx) {
             document.getElementById(`${mode}-qn-box`).classList.add('show');
         }
     }, 80);
+
     editingRecord = { target, mode, index: idx, originalQN: rec.quoteNumber };
     hasUnsavedChanges[mode] = false;
 }
@@ -3320,33 +3619,41 @@ function bulkImport() {
 // ==================== BACKUP FUNCTIONS ====================
 
 function startAutoBackup() {
+    if (window.location.protocol === 'file:') {
+        const statusEl = document.getElementById('auto-backup-status');
+        if (statusEl) statusEl.textContent = '⏸️ Auto-backup disabled on file:// (use http://localhost)';
+        return;
+    }
+
     if (autoBackupInterval) clearInterval(autoBackupInterval);
     autoBackupInterval = setInterval(() => {
         if (backupFolderHandle) {
             autoBackupToFolder();
         } else {
-            fallbackBackupDownload();
+            console.warn('⚠️ No folder handle – auto-backup skipped. Click "Browse Folder" to select one.');
+            const statusEl = document.getElementById('backup-status');
+            statusEl.textContent = '⏳ Waiting for folder selection...';
+            statusEl.className = 'backup-status';
         }
     }, 60000);
+
     const statusEl = document.getElementById('auto-backup-status');
-    if (statusEl) statusEl.textContent = '✅ Running (every 1 min)';
+    if (statusEl) statusEl.textContent = '✅ Running (every 1 min) – writing to folder';
 }
 
 
 async function autoBackup() {
-    try {
-        if (backupFolderHandle) {
-            await autoBackupToFolder();
-        } else {
-            await fallbackBackupDownload();
-        }
-    } catch (e) {
-        console.error('Auto backup failed:', e);
-        const statusEl = document.getElementById('backup-status');
-        statusEl.textContent = `❌ Backup failed: ${e.message}`;
-        statusEl.className = 'backup-status error';
+    if (window.location.protocol === 'file:') {
+        alert('Auto-backup is disabled on file://. Please use http://localhost for folder writing.');
+        return;
+    }
+    if (backupFolderHandle) {
+        await autoBackupToFolder();
+    } else {
+        alert('No folder selected. Click "Browse Folder" first.');
     }
 }
+
 
 // ==================== EXPORT/IMPORT ====================
 function exportToExcel() {
@@ -3582,19 +3889,97 @@ function buildEmailHTML(data, mode) {
     const modeLabel = { sea: 'SEA FREIGHT', air: 'AIR FREIGHT', lcl: 'LCL FREIGHT' }[mode];
     const order = data.chargesOrder || getCurrentChargesOrder(mode);
     const toUpper = (val) => val ? String(val).toUpperCase() : '-';
-    const { chargesWithINR, grandTotal } = calculateChargesWithINR(data, mode);
+    let grandTotal = 0;
+    const chargesWithINR = {};
+
+    Object.entries(data.charges || {}).forEach(([charge, c]) => {
+        const manualSellAmt = c.amount;
+        const manualBuyAmt = c.buyAmount || 0;
+        let totalSellAmt = manualSellAmt;
+        let totalBuyAmt = manualBuyAmt;
+        let minApplied = false;
+
+        // ---- Special logic for PALLETISATION (AIR only) ----
+        if (mode === 'air' && charge === 'PALLETISATION') {
+            const pallets = data.pallets || 0;
+            if (pallets > 0) {
+                const plies = pallets * 2;
+                const palletCharge = pallets * 1875;
+                const plyCharge = plies * 600;
+                totalSellAmt = Math.max(palletCharge, plyCharge);
+                totalBuyAmt = Math.max(totalBuyAmt, totalSellAmt);
+            }
+        }
+
+        // ---- Apply basis multipliers ----
+        if (mode === 'air' || mode === 'lcl') {
+            const basis = c.basis || 'Normal';
+            if (basis === 'Per KGS') {
+                totalSellAmt *= (data.weight || 0);
+                totalBuyAmt *= (data.weight || 0);
+            } else if (basis === 'Per CBM') {
+                totalSellAmt *= (data.volume || 0);
+                totalBuyAmt *= (data.volume || 0);
+            } else if (basis === 'Per KGS × 3') {
+                totalSellAmt *= (data.weight || 0) * 3;
+                totalBuyAmt *= (data.weight || 0) * 3;
+            } else if (basis === 'Per KGS × 4') {
+                totalSellAmt *= (data.weight || 0) * 4;
+                totalBuyAmt *= (data.weight || 0) * 4;
+            }
+        }
+
+        // ---- AIR minimum threshold - EXCLUDING PALLETISATION ----
+        if (mode === 'air' && charge !== 'PALLETISATION') {
+            const basis = c.basis || 'Normal';
+            if ((basis === 'Per KGS' || basis === 'Per KGS × 4') && AIR_MIN_THRESHOLDS && AIR_MIN_THRESHOLDS[charge]) {
+                const minVal = AIR_MIN_THRESHOLDS[charge];
+                if (totalSellAmt < minVal) {
+                    minApplied = true;
+                    totalSellAmt = minVal;
+                    totalBuyAmt = Math.max(totalBuyAmt, minVal);
+                }
+            }
+        }
+
+        // ---- LCL FREIGHT/THC per CBM ----
+        if (mode === 'lcl' && (charge === 'FREIGHT' || charge === 'THC')) {
+            const volume = data.volume || 0;
+            if (volume > 0) {
+                const basis = c.basis || 'Normal';
+                if (basis === 'Normal') {
+                    totalSellAmt *= volume;
+                    totalBuyAmt *= volume;
+                }
+            }
+        }
+
+        const sellINR = toINR(totalSellAmt, c.currency);
+        const buyINR = toINR(totalBuyAmt, c.buyCurrency || c.currency);
+        chargesWithINR[charge] = {
+            unitSellAmt: manualSellAmt,
+            currency: c.currency,
+            sellINR,
+            buyINR,
+            basis: c.basis || 'Normal',
+            minApplied: minApplied
+        };
+        grandTotal += sellINR;
+    });
+
+
+    // ---- Build HTML ----
     let chargeRowsHtml = '';
     if (Object.keys(chargesWithINR).length > 0) {
         Object.entries(order).forEach(([category, charges]) => {
             if (charges.length === 0) return;
             const catEntries = charges.filter(ch => chargesWithINR[ch]);
             if (catEntries.length === 0) return;
+
             chargeRowsHtml += `
             <table width="100%" cellspacing="0" cellpadding="0" style="margin-top:12px;">
                 <tr><td style="background:#1e3a8a;color:white;padding:6px 10px;font-weight:bold;font-family:Arial;font-size:11px;">${category.toUpperCase()}</td></tr>
             </table>
-            `;
-            chargeRowsHtml += `
             <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #d1d5db;font-family:Arial;font-size:11px;">
                 <thead>
                     <tr style="background:#1e3a8a;color:white;">
@@ -3607,12 +3992,28 @@ function buildEmailHTML(data, mode) {
                     </tr>
                 </thead>
                 <tbody>`;
+
             let catTotal = 0;
             catEntries.forEach((ch, i) => {
                 const c = chargesWithINR[ch];
                 catTotal += c.sellINR;
                 const isFreight = ch.toUpperCase() === 'FREIGHT' || ch.toUpperCase() === 'AIR FREIGHT';
                 const rowStyle = isFreight ? 'background:#fee2e2;font-weight:bold;' : '';
+
+                // Determine basis display
+                let basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
+                if (mode === 'air' && AIR_MIN_THRESHOLDS && AIR_MIN_THRESHOLDS[ch]) {
+                    if (c.minApplied) {
+                        basisDisplay = 'Minimum';
+                    } else {
+                        if (ch === 'GATE PASS') {
+                            basisDisplay = 'At Actual';
+                        } else {
+                            basisDisplay = 'Per KGS';
+                        }
+                    }
+                }
+
                 chargeRowsHtml += `
                 <tr style="${rowStyle}">
                     <td style="padding:5px;border-bottom:1px solid #d1d5db;border-right:1px solid #d1d5db;">${i+1}</td>
@@ -3620,9 +4021,10 @@ function buildEmailHTML(data, mode) {
                     <td style="padding:5px;border-bottom:1px solid #d1d5db;border-right:1px solid #d1d5db;text-align:right;">${Number(c.unitSellAmt).toLocaleString('en-IN')}</td>
                     <td style="padding:5px;border-bottom:1px solid #d1d5db;border-right:1px solid #d1d5db;">${c.currency}</td>
                     <td style="padding:5px;border-bottom:1px solid #d1d5db;border-right:1px solid #d1d5db;text-align:right;">${formatINR(c.sellINR)}</td>
-                    <td style="padding:5px;border-bottom:1px solid #d1d5db;">${c.basis}</td>
+                    <td style="padding:5px;border-bottom:1px solid #d1d5db;">${basisDisplay}</td>
                 </tr>`;
             });
+
             chargeRowsHtml += `
                 <tr style="background:#f1f5f9;">
                     <td colspan="5" style="padding:5px;text-align:right;border-bottom:1px solid #d1d5db;font-weight:bold;">Subtotal:</td>
@@ -3630,6 +4032,7 @@ function buildEmailHTML(data, mode) {
                 </tr>
             </tbody></table>`;
         });
+
         chargeRowsHtml += `
         <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-top:6px;">
             <tr style="background:#10b981;color:white;font-weight:bold;">
@@ -3638,6 +4041,8 @@ function buildEmailHTML(data, mode) {
             </tr>
         </table>`;
     }
+
+    // ---- Customer Details ----
     const detailRows = [
         ['Client', toUpper(data.client), 'Quote Date', data.autoDate || '-'],
         ['Carrier', toUpper(data.carrier), 'Incoterm', toUpper(data.incoterm)],
@@ -3646,6 +4051,7 @@ function buildEmailHTML(data, mode) {
         [mode === 'sea' ? 'Container' : 'Volume (CBM)', mode === 'sea' ? toUpper(data.container) : (data.volume || '-'), 'Transit Time', data.transit ? data.transit + ' Days' : '-'],
         ['Validity Date', data.validityDate ? new Date(data.validityDate).toLocaleDateString('en-IN') : '-', 'Status', toUpper(data.status)]
     ];
+
     let detailHtml = `<table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;font-family:Arial;font-size:11px;">
         <tbody>`;
     detailRows.forEach((row, idx) => {
@@ -3659,6 +4065,8 @@ function buildEmailHTML(data, mode) {
         </tr>`;
     });
     detailHtml += `</tbody></table>`;
+
+    // ---- Title ----
     const titleHtml = `
     <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:12px;">
         <tr>
@@ -3666,6 +4074,8 @@ function buildEmailHTML(data, mode) {
             <td style="font-family:monospace;color:#d97706;font-weight:bold;font-size:12px;background:#fffbeb;padding:4px 10px;text-align:right;">Quote No: ${data.quoteNumber||'DRAFT'}</td>
         </tr>
     </table>`;
+
+    // ---- Remarks ----
     let remarksHtml = '';
     if (data.remarks) {
         remarksHtml = `
@@ -3674,6 +4084,8 @@ function buildEmailHTML(data, mode) {
             <tr><td style="border:1px solid #d1d5db;padding:8px;font-family:Arial;font-size:11px;">${data.remarks.toUpperCase()}</td></tr>
         </table>`;
     }
+
+    // ---- Final Output ----
     return `<!DOCTYPE html>
     <html><head><meta charset="UTF-8"></head>
     <body style="font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:20px;background:#ffffff;">
@@ -3808,10 +4220,25 @@ function calculateChargesWithINR(data, mode) {
     let grandTotal = 0;
     const chargesWithINR = {};
     Object.entries(data.charges || {}).forEach(([charge, c]) => {
-        let unitSellAmt = c.amount;
-        let unitBuyAmt = c.buyAmount || 0;
-        let totalSellAmt = unitSellAmt;
-        let totalBuyAmt = unitBuyAmt;
+        const manualSellAmt = c.amount;
+        const manualBuyAmt = c.buyAmount || 0;
+        let totalSellAmt = manualSellAmt;
+        let totalBuyAmt = manualBuyAmt;
+        let minApplied = false;
+
+        // ---- Special logic for PALLETISATION (AIR only) ----
+        if (mode === 'air' && charge === 'PALLETISATION') {
+            const pallets = data.pallets || 0;
+            if (pallets > 0) {
+                const plies = pallets * 2;
+                const palletCharge = pallets * 1875;
+                const plyCharge = plies * 600;
+                totalSellAmt = Math.max(palletCharge, plyCharge);
+                totalBuyAmt = Math.max(totalBuyAmt, totalSellAmt);
+            }
+        }
+
+        // ---- Apply basis multipliers ----
         if (mode === 'air' || mode === 'lcl') {
             const basis = c.basis || 'Normal';
             if (basis === 'Per KGS') {
@@ -3823,8 +4250,26 @@ function calculateChargesWithINR(data, mode) {
             } else if (basis === 'Per KGS × 3') {
                 totalSellAmt *= (data.weight || 0) * 3;
                 totalBuyAmt *= (data.weight || 0) * 3;
+            } else if (basis === 'Per KGS × 4') {
+                totalSellAmt *= (data.weight || 0) * 4;
+                totalBuyAmt *= (data.weight || 0) * 4;
             }
         }
+
+        // ---- AIR minimum threshold - EXCLUDING PALLETISATION ----
+        if (mode === 'air' && charge !== 'PALLETISATION') {
+            const basis = c.basis || 'Normal';
+            if ((basis === 'Per KGS' || basis === 'Per KGS × 4') && AIR_MIN_THRESHOLDS && AIR_MIN_THRESHOLDS[charge]) {
+                const minVal = AIR_MIN_THRESHOLDS[charge];
+                if (totalSellAmt < minVal) {
+                    minApplied = true;
+                    totalSellAmt = minVal;
+                    totalBuyAmt = Math.max(totalBuyAmt, minVal);
+                }
+            }
+        }
+
+        // ---- LCL FREIGHT/THC per CBM ----
         if (mode === 'lcl' && (charge === 'FREIGHT' || charge === 'THC')) {
             const volume = data.volume || 0;
             if (volume > 0) {
@@ -3835,15 +4280,16 @@ function calculateChargesWithINR(data, mode) {
                 }
             }
         }
+
         const sellINR = toINR(totalSellAmt, c.currency);
         const buyINR = toINR(totalBuyAmt, c.buyCurrency || c.currency);
         chargesWithINR[charge] = {
-            unitSellAmt,
-            totalSellAmt,
+            unitSellAmt: manualSellAmt,
             currency: c.currency,
             sellINR,
             buyINR,
-            basis: c.basis || 'Normal'
+            basis: c.basis || 'Normal',
+            minApplied: minApplied
         };
         grandTotal += sellINR;
     });
@@ -3857,53 +4303,16 @@ function buildPDFDefinition(data, mode) {
     const toUpper = (val) => val ? String(val).toUpperCase() : '-';
     const { chargesWithINR, grandTotal } = calculateChargesWithINR(data, mode);
 
-    function buildChargeTableRows(category, charges, startSr) {
-        const catEntries = charges.filter(ch => chargesWithINR[ch]);
-        if (catEntries.length === 0) return null;
-
-        let rows = [
-            [
-                { text: 'Sr. No', style: 'Aptos', alignment: 'center' },
-                { text: 'Charge Type', style: 'Aptos', alignment: 'center' },
-                { text: 'Currency', style: 'Aptos', alignment: 'center' },
-                { text: 'Sell Amount', style: 'Aptos', alignment: 'center' },
-                { text: 'Basis', style: 'Aptos', alignment: 'center' },
-                { text: 'INR Equivalent', style: 'Aptos', alignment: 'center' }
-            ]
-        ];
-        let catTotal = 0;
-        let sr = startSr;
-        catEntries.forEach((ch) => {
-            const c = chargesWithINR[ch];
-            catTotal += c.sellINR;
-            const isFreight = ch.toUpperCase() === 'FREIGHT' || ch.toUpperCase() === 'AIR FREIGHT';
-            const basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
-            rows.push([
-                { text: String(sr), alignment: 'center' },
-                { text: ch.toUpperCase(), bold: isFreight, color: isFreight ? '#dc2626' : '#000' },
-                { text: c.currency, alignment: 'center' },
-                { text: Number(c.unitSellAmt).toLocaleString('en-IN'), alignment: 'center' },
-                { text: basisDisplay, alignment: 'center' },
-                { text: formatINR(c.sellINR), alignment: 'center' }
-            ]);
-            sr++;
-        });
-        rows.push([
-            { text: 'Subtotal:', colSpan: 4, alignment: 'right', bold: true },
-            {}, {}, {},
-            {}, // empty cell for Basis
-            { text: formatINR(catTotal), alignment: 'center', bold: true }
-        ]);
-        return { rows, nextSr: sr };
-    }
-
     const content = [];
+
+
     content.push(
         { text: db.companyName || 'GATEWAY EXIM', style: 'companyName' },
         { text: db.companyAddress || '', style: 'companyAddress' },
         { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2, lineColor: '#1e3a8a' }] },
         { text: ' ' }
     );
+
     content.push({
         columns: [
             { text: modeLabel + ' QUOTATION', style: 'title' },
@@ -3911,7 +4320,6 @@ function buildPDFDefinition(data, mode) {
         ]
     });
 
-    // Customer details – conditional Container / Volume
     const detailRows = [
         [{ text: 'Client', style: 'detailLabel' }, { text: toUpper(data.client) }, { text: 'Status', style: 'detailLabel' }, { text: toUpper(data.status) }],
         [{ text: 'POL', style: 'detailLabel' }, { text: toUpper(data.pol) }, { text: 'POD', style: 'detailLabel' }, { text: toUpper(data.pod) }],
@@ -3942,7 +4350,61 @@ function buildPDFDefinition(data, mode) {
         margin: [0, 10, 0, 10]
     });
 
-    // Charges – running Sr. No., Basis before INR
+
+    // ---- Charge tables ----
+    function buildChargeTableRows(category, charges, startSr) {
+        const catEntries = charges.filter(ch => chargesWithINR[ch]);
+        if (catEntries.length === 0) return null;
+
+        let rows = [
+            [
+                { text: 'Sr. No', style: 'Aptos', alignment: 'center' },
+                { text: 'Charge Type', style: 'Aptos', alignment: 'center' },
+                { text: 'Currency', style: 'Aptos', alignment: 'center' },
+                { text: 'Sell Amount', style: 'Aptos', alignment: 'center' },
+                { text: 'Basis', style: 'Aptos', alignment: 'center' },
+                { text: 'INR Equivalent', style: 'Aptos', alignment: 'center' }
+            ]
+        ];
+        let catTotal = 0;
+        let sr = startSr;
+        catEntries.forEach((ch) => {
+            const c = chargesWithINR[ch];
+            catTotal += c.sellINR;
+            const isFreight = ch.toUpperCase() === 'FREIGHT' || ch.toUpperCase() === 'AIR FREIGHT';
+
+            let basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
+            if (mode === 'air' && AIR_MIN_THRESHOLDS && AIR_MIN_THRESHOLDS[ch]) {
+                if (c.minApplied) {
+                    basisDisplay = 'Minimum';
+                } else {
+                    if (ch === 'GATE PASS') {
+                        basisDisplay = 'At Actual';
+                    } else {
+                        basisDisplay = 'Per KGS';
+                    }
+                }
+            }
+
+            rows.push([
+                { text: String(sr), alignment: 'center' },
+                { text: ch.toUpperCase(), bold: isFreight, color: isFreight ? '#dc2626' : '#000' },
+                { text: c.currency, alignment: 'center' },
+                { text: Number(c.unitSellAmt).toLocaleString('en-IN'), alignment: 'center' },
+                { text: basisDisplay, alignment: 'center' },
+                { text: formatINR(c.sellINR), alignment: 'center' }
+            ]);
+            sr++;
+        });
+        rows.push([
+            { text: 'Subtotal:', colSpan: 4, alignment: 'right', bold: true },
+            {}, {}, {},
+            {},
+            { text: formatINR(catTotal), alignment: 'center', bold: true }
+        ]);
+        return { rows, nextSr: sr };
+    }
+
     if (Object.keys(chargesWithINR).length > 0) {
         let currentSr = 1;
         Object.entries(order).forEach(([category, charges]) => {
@@ -3970,7 +4432,6 @@ function buildPDFDefinition(data, mode) {
                 margin: [0, 5, 0, 10]
             });
         });
-        // Grand total
         content.push({
             table: {
                 widths: ['*', 'auto'],
@@ -4065,12 +4526,26 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
     let grandTotal = 0;
     const chargesWithINR = {};
 
-    // Calculate charges (same logic)
     Object.entries(data.charges || {}).forEach(([charge, c]) => {
-        let unitSellAmt = c.amount;
-        let unitBuyAmt = c.buyAmount || 0;
-        let totalSellAmt = unitSellAmt;
-        let totalBuyAmt = unitBuyAmt;
+        const manualSellAmt = c.amount;
+        const manualBuyAmt = c.buyAmount || 0;
+        let totalSellAmt = manualSellAmt;
+        let totalBuyAmt = manualBuyAmt;
+        let minApplied = false;
+
+        // ---- Special logic for PALLETISATION (AIR only) ----
+        if (mode === 'air' && charge === 'PALLETISATION') {
+            const pallets = data.pallets || 0;
+            if (pallets > 0) {
+                const plies = pallets * 2;
+                const palletCharge = pallets * 1875;
+                const plyCharge = plies * 600;
+                totalSellAmt = Math.max(palletCharge, plyCharge);
+                totalBuyAmt = Math.max(totalBuyAmt, totalSellAmt);
+            }
+        }
+
+        // ---- Apply basis multipliers ----
         if (mode === 'air' || mode === 'lcl') {
             const basis = c.basis || 'Normal';
             if (basis === 'Per KGS') {
@@ -4082,8 +4557,26 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
             } else if (basis === 'Per KGS × 3') {
                 totalSellAmt *= (data.weight || 0) * 3;
                 totalBuyAmt *= (data.weight || 0) * 3;
+            } else if (basis === 'Per KGS × 4') {
+                totalSellAmt *= (data.weight || 0) * 4;
+                totalBuyAmt *= (data.weight || 0) * 4;
             }
         }
+
+        // ---- AIR minimum threshold - EXCLUDING PALLETISATION ----
+        if (mode === 'air' && charge !== 'PALLETISATION') {
+            const basis = c.basis || 'Normal';
+            if ((basis === 'Per KGS' || basis === 'Per KGS × 4') && AIR_MIN_THRESHOLDS && AIR_MIN_THRESHOLDS[charge]) {
+                const minVal = AIR_MIN_THRESHOLDS[charge];
+                if (totalSellAmt < minVal) {
+                    minApplied = true;
+                    totalSellAmt = minVal;
+                    totalBuyAmt = Math.max(totalBuyAmt, minVal);
+                }
+            }
+        }
+
+        // ---- LCL FREIGHT/THC per CBM ----
         if (mode === 'lcl' && (charge === 'FREIGHT' || charge === 'THC')) {
             const volume = data.volume || 0;
             if (volume > 0) {
@@ -4094,24 +4587,21 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
                 }
             }
         }
+
         const sellINR = toINR(totalSellAmt, c.currency);
         const buyINR = toINR(totalBuyAmt, c.buyCurrency || c.currency);
         chargesWithINR[charge] = {
-            unitSellAmt,
-            totalSellAmt,
+            unitSellAmt: manualSellAmt,
             currency: c.currency,
             sellINR,
             buyINR,
-            basis: c.basis || 'Normal'
+            basis: c.basis || 'Normal',
+            minApplied: minApplied
         };
         grandTotal += sellINR;
     });
 
-    // Define group mapping based on mode
-    const groupMap = getChargeGroups(mode);
-    // groupMap = { group1: ['Freight', 'Carrier Charges'], group2: ['CFS / Transport Charges'] } etc.
-
-    // Font sizes for compact/email mode
+    // ----- HTML generation (same as before) -----
     const baseFont = compact ? '0.65rem' : '0.78rem';
     const headingFont = compact ? '0.65rem' : '0.78rem';
     const titleFont = compact ? '0.9rem' : '1.2rem';
@@ -4119,7 +4609,7 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
     const cellPadding = compact ? '2px 3px' : '4px 7px';
     const containerPadding = compact ? '4px' : '10px';
 
-    // Customer details table (unchanged)
+
     const detailRows = [
         ['Client', toUpper(data.client), 'Status', toUpper(data.status)],
         ['POL', toUpper(data.pol), 'POD', toUpper(data.pod)],
@@ -4150,9 +4640,7 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
     });
     detailHtml += `</tbody></table>`;
 
-    // ---- Helper to build a table for a group ----
     function buildGroupTable(groupLabel, categoryNames, srStart) {
-        // Collect charges belonging to these categories (in order)
         const groupCharges = [];
         categoryNames.forEach(cat => {
             if (order[cat]) {
@@ -4180,12 +4668,25 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
 
         let sr = srStart;
         let subtotal = 0;
-        groupCharges.forEach(({ category, charge }) => {
+        groupCharges.forEach(({ charge }) => {
             const c = chargesWithINR[charge];
             subtotal += c.sellINR;
             const isFreight = charge.toUpperCase() === 'FREIGHT' || charge.toUpperCase() === 'AIR FREIGHT';
             const rowStyle = isFreight ? 'background:#fee2e2 !important;font-weight:700;color:#dc2626 !important;' : '';
-            const basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
+
+            let basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
+            if (mode === 'air' && AIR_MIN_THRESHOLDS && AIR_MIN_THRESHOLDS[charge]) {
+                if (c.minApplied) {
+                    basisDisplay = 'Minimum';
+                } else {
+                    if (charge === 'GATE PASS') {
+                        basisDisplay = 'At Actual';
+                    } else {
+                        basisDisplay = 'Per KGS';
+                    }
+                }
+            }
+
             html += `<tr style="${rowStyle}">
                 <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:center;">${sr++}</td>
                 <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:left;">${charge.toUpperCase()}</td>
@@ -4196,37 +4697,34 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
             </tr>`;
         });
 
-        // Subtotal row
         html += `<tr style="background:#f1f5f9;font-weight:700;">
             <td colspan="5" style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;">${groupLabel} Subtotal</td>
-            <td style="border:1px solid #00e394 padding:${cellPadding};text-align:right;">${formatINR(subtotal)}</td>
+            <td style="border:1px solid #d1d5db;padding:${cellPadding};text-align:right;">${formatINR(subtotal)}</td>
         </tr>`;
         html += `</tbody></table>`;
         return { html, subtotal, nextSr: sr };
     }
 
-    // ---- Build group1 and group2 ----
+    const groupMap = getChargeGroups(mode);
     const group1Label = "Freight & Carrier Charges";
     const group2Label = "CFS / Transport Charges";
     const group1Cats = groupMap.group1 || [];
     const group2Cats = groupMap.group2 || [];
 
     let srStart = 1;
-    let table1 = buildGroupTable(group1Label, group1Cats, srStart);
-    srStart = table1.nextSr;
-    let table2 = buildGroupTable(group2Label, group2Cats, srStart);
-
     let chargeHtml = '';
-    if (table1.html) {
-        chargeHtml += `<div style="background:#1e3a8a;color:white;font-weight:700;padding:${padding};margin-top:8px;border-radius:4px 4px 0 0;font-size:${headingFont};text-align:center;">${group1Label}</div>`;
-        chargeHtml += table1.html;
-    }
-    if (table2.html) {
-        chargeHtml += `<div style="background:#1e3a8a;color:white;font-weight:700;padding:${padding};margin-top:8px;border-radius:4px 4px 0 0;font-size:${headingFont};text-align:center;">${group2Label}</div>`;
-        chargeHtml += table2.html;
+
+    if (mode === 'air') {
+        const combinedCats = group1Cats.concat(group2Cats);
+        const combinedTable = buildGroupTable("AIR FREIGHT CHARGES", combinedCats, srStart);
+        chargeHtml = combinedTable.html;
+    } else {
+        let table1 = buildGroupTable(group1Label, group1Cats, srStart);
+        srStart = table1.nextSr;
+        let table2 = buildGroupTable(group2Label, group2Cats, srStart);
+        chargeHtml = (table1.html || '') + (table2.html || '');
     }
 
-    // Grand total row (separate table)
     if (chargeHtml) {
         chargeHtml += `<table style="width:100%;border-collapse:collapse;font-size:${baseFont};margin-top:4px;">
             <tr style="background: linear-gradient(135deg, #10b981, #059669) !important; color: white !important; font-weight: bold;">
@@ -4236,7 +4734,6 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
         </table>`;
     }
 
-    // Remarks (if any)
     let remarksHtml = '';
     if (data.remarks) {
         remarksHtml = `<div style="background:#1e3a8a;color:white;font-weight:700;padding:${padding};margin-top:8px;border-radius:4px 4px 0 0;font-size:${headingFont};">Remarks</div>
@@ -4245,7 +4742,6 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
             </table>`;
     }
 
-    // Final assembly
     return `
         <div id="preview-content-container" style="background:#ffffff;color:#1a1a1a;font-family:'Segoe UI',Arial,sans-serif;max-width:${maxWidth};margin:0 auto;padding:${containerPadding};box-sizing:border-box;">
             <div style="border-bottom:2px solid #1e3a8a;padding-bottom:6px;margin-bottom:8px;">
@@ -4275,20 +4771,11 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
 // Helper function to define charge groups per mode
 function getChargeGroups(mode) {
     if (mode === 'sea') {
-        return {
-            group1: ['Freight', 'Carrier Charges'],
-            group2: ['CFS / Transport Charges']
-        };
+        return { group1: ['Freight', 'Carrier Charges'], group2: ['CFS / Transport Charges'] };
     } else if (mode === 'air') {
-        return {
-            group1: ['Freight', 'Origin Charges'],
-            group2: ['Local Charges']
-        };
+        return { group1: ['Freight', 'Origin Charges'], group2: ['Local Charges'] };
     } else if (mode === 'lcl') {
-        return {
-            group1: ['Freight', 'Origin Charges'],
-            group2: [] // LCL may not have a second group
-        };
+        return { group1: ['Freight', 'Origin Charges'], group2: [] };
     }
     return { group1: [], group2: [] };
 }
@@ -6062,7 +6549,10 @@ function openEditDefaultChargeModal(mode, idx) {
     if (mode === 'sea') rec = db.defaultSeaCharges[idx];
     else if (mode === 'air') rec = db.defaultAirCharges[idx];
     else rec = db.defaultLclCharges[idx];
-    if (!rec) return alert('Record not found');
+    if (!rec) {
+        alert('Record not found');
+        return;
+    }
 
     const isSea = (mode === 'sea');
     const charges = rec.charges || {};
@@ -6079,66 +6569,74 @@ function openEditDefaultChargeModal(mode, idx) {
         baseNames.add(base);
     });
 
-    baseNames.forEach(baseKey => {
-        let rowHtml = `
-            <div style="margin-bottom:6px;background:var(--bg);padding:6px;border-radius:5px;border:1px solid var(--border);" data-charge-key="${baseKey}">
-                <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${baseKey}
-                    <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button>
-                </div>
-        `;
+    if (baseNames.size === 0) {
+        chargesHtml = '<p style="color:var(--text-light);padding:8px;">No charges added yet. Use the "Add Charge" section below.</p>';
+    }
 
+    baseNames.forEach(baseKey => {
+        let rowHtml = '';
         if (isSea) {
             const v20 = charges[baseKey + '_20'] || { amount: 0, buyAmount: 0, currency: 'INR' };
             const v40 = charges[baseKey + '_40'] || { amount: 0, buyAmount: 0, currency: 'INR' };
             const cur = v20.currency || v40.currency || 'INR';
-            rowHtml += `
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                    <div style="display:flex;gap:4px;">
-                        <label style="font-size:0.6rem;font-weight:600;">20' Sell</label>
-                        <input type="number" step="0.01" class="modal-chg-amt20" value="${v20.amount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+
+            rowHtml = `
+                <div style="margin-bottom:6px;background:var(--bg);padding:6px;border-radius:5px;border:1px solid var(--border);" data-charge-key="${baseKey}" data-mode="sea">
+                    <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${baseKey}
+                        <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button>
                     </div>
-                    <div style="display:flex;gap:4px;">
-                        <label style="font-size:0.6rem;font-weight:600;">20' Buy</label>
-                        <input type="number" step="0.01" class="modal-chg-buy20" value="${v20.buyAmount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                    </div>
-                    <div style="display:flex;gap:4px;">
-                        <label style="font-size:0.6rem;font-weight:600;">40' Sell</label>
-                        <input type="number" step="0.01" class="modal-chg-amt40" value="${v40.amount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                    </div>
-                    <div style="display:flex;gap:4px;">
-                        <label style="font-size:0.6rem;font-weight:600;">40' Buy</label>
-                        <input type="number" step="0.01" class="modal-chg-buy40" value="${v40.buyAmount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                    </div>
-                    <div style="grid-column:1/-1;display:flex;gap:4px;align-items:center;">
-                        <label style="font-size:0.6rem;font-weight:600;">Currency</label>
-                        <select class="modal-chg-cur" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                            ${getCurrencyOptions(cur)}
-                        </select>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                        <div style="display:flex;gap:4px;">
+                            <label style="font-size:0.6rem;font-weight:600;">20' Sell</label>
+                            <input type="number" step="0.01" class="modal-chg-amt20" value="${v20.amount}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                        </div>
+                        <div style="display:flex;gap:4px;">
+                            <label style="font-size:0.6rem;font-weight:600;">20' Buy</label>
+                            <input type="number" step="0.01" class="modal-chg-buy20" value="${v20.buyAmount}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                        </div>
+                        <div style="display:flex;gap:4px;">
+                            <label style="font-size:0.6rem;font-weight:600;">40' Sell</label>
+                            <input type="number" step="0.01" class="modal-chg-amt40" value="${v40.amount}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                        </div>
+                        <div style="display:flex;gap:4px;">
+                            <label style="font-size:0.6rem;font-weight:600;">40' Buy</label>
+                            <input type="number" step="0.01" class="modal-chg-buy40" value="${v40.buyAmount}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                        </div>
+                        <div style="grid-column:1/-1;display:flex;gap:4px;align-items:center;">
+                            <label style="font-size:0.6rem;font-weight:600;">Currency</label>
+                            <select class="modal-chg-cur" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                                ${getCurrencyOptions(cur)}
+                            </select>
+                        </div>
                     </div>
                 </div>
             `;
         } else {
             const v = charges[baseKey] || { amount: 0, buyAmount: 0, currency: 'INR' };
-            rowHtml += `
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
-                    <div style="display:flex;gap:4px;">
-                        <label style="font-size:0.6rem;font-weight:600;">Sell</label>
-                        <input type="number" step="0.01" class="modal-chg-single-sell" value="${v.amount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+            rowHtml = `
+                <div style="margin-bottom:6px;background:var(--bg);padding:6px;border-radius:5px;border:1px solid var(--border);" data-charge-key="${baseKey}" data-mode="air">
+                    <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${baseKey}
+                        <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button>
                     </div>
-                    <div style="display:flex;gap:4px;">
-                        <label style="font-size:0.6rem;font-weight:600;">Buy</label>
-                        <input type="number" step="0.01" class="modal-chg-single-buy" value="${v.buyAmount||0}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                    </div>
-                    <div style="display:flex;gap:4px;align-items:center;">
-                        <label style="font-size:0.6rem;font-weight:600;">Currency</label>
-                        <select class="modal-chg-cur" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                            ${getCurrencyOptions(v.currency || 'INR')}
-                        </select>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+                        <div style="display:flex;gap:4px;">
+                            <label style="font-size:0.6rem;font-weight:600;">Sell</label>
+                            <input type="number" step="0.01" class="modal-chg-single-sell" value="${v.amount}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                        </div>
+                        <div style="display:flex;gap:4px;">
+                            <label style="font-size:0.6rem;font-weight:600;">Buy</label>
+                            <input type="number" step="0.01" class="modal-chg-single-buy" value="${v.buyAmount}" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                        </div>
+                        <div style="display:flex;gap:4px;align-items:center;">
+                            <label style="font-size:0.6rem;font-weight:600;">Currency</label>
+                            <select class="modal-chg-cur" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                                ${getCurrencyOptions(v.currency || 'INR')}
+                            </select>
+                        </div>
                     </div>
                 </div>
             `;
         }
-        rowHtml += `</div>`;
         chargesHtml += rowHtml;
     });
 
@@ -6146,15 +6644,15 @@ function openEditDefaultChargeModal(mode, idx) {
     let addSectionHtml = '';
     if (isSea) {
         addSectionHtml = `
-            <div class="form-group" style="width:90px;"><label>20' Sell</label><input type="number" id="modal-dc-add-amt20" step="0.01"></div>
-            <div class="form-group" style="width:90px;"><label>20' Buy</label><input type="number" id="modal-dc-add-buy20" step="0.01"></div>
-            <div class="form-group" style="width:90px;"><label>40' Sell</label><input type="number" id="modal-dc-add-amt40" step="0.01"></div>
-            <div class="form-group" style="width:90px;"><label>40' Buy</label><input type="number" id="modal-dc-add-buy40" step="0.01"></div>
+            <div class="form-group" style="width:90px;"><label>20' Sell</label><input type="number" id="modal-dc-add-amt20" step="0.01" value="0"></div>
+            <div class="form-group" style="width:90px;"><label>20' Buy</label><input type="number" id="modal-dc-add-buy20" step="0.01" value="0"></div>
+            <div class="form-group" style="width:90px;"><label>40' Sell</label><input type="number" id="modal-dc-add-amt40" step="0.01" value="0"></div>
+            <div class="form-group" style="width:90px;"><label>40' Buy</label><input type="number" id="modal-dc-add-buy40" step="0.01" value="0"></div>
         `;
     } else {
         addSectionHtml = `
-            <div class="form-group" style="width:90px;"><label>Sell</label><input type="number" id="modal-dc-add-sell" step="0.01"></div>
-            <div class="form-group" style="width:90px;"><label>Buy</label><input type="number" id="modal-dc-add-buy" step="0.01"></div>
+            <div class="form-group" style="width:90px;"><label>Sell</label><input type="number" id="modal-dc-add-sell" step="0.01" value="0"></div>
+            <div class="form-group" style="width:90px;"><label>Buy</label><input type="number" id="modal-dc-add-buy" step="0.01" value="0"></div>
         `;
     }
 
@@ -6177,12 +6675,14 @@ function openEditDefaultChargeModal(mode, idx) {
         </div>
         <h4 style="color:var(--primary);margin:12px 0 8px;">Charges</h4>
         <div id="modal-dc-charges-list">
-            ${chargesHtml || '<p style="color:var(--text-light);padding:8px;">No charges added yet.</p>'}
+            ${chargesHtml}
         </div>
-        <div style="margin-top:8px;display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:end;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px;">
             <div class="form-group" style="flex:1;min-width:120px;">
                 <label>Charge Name</label>
-                <select id="modal-dc-add-charge">${modeCharges.map(c => `<option value="${c}">${c}</option>`).join('')}</select>
+                <select id="modal-dc-add-charge">
+                    ${modeCharges.map(c => `<option value="${c}">${c}</option>`).join('')}
+                </select>
             </div>
             ${addSectionHtml}
             <div class="form-group" style="width:90px;">
@@ -6191,9 +6691,9 @@ function openEditDefaultChargeModal(mode, idx) {
             </div>
             <button class="btn btn-sm btn-success" style="height:33px;" onclick="addChargeToDCModal('${mode}')">+</button>
         </div>
-        <div style="margin-top:16px;text-align:right;">
+        <div style="margin-top:16px;text-align:right;display:flex;gap:8px;justify-content:flex-end;">
             <button class="btn btn-clear" onclick="closeModal('previewModal')">Cancel</button>
-            <button class="btn btn-quoted" onclick="saveEditDefaultCharge('${mode}',${idx})">Save</button>
+            <button class="btn btn-quoted" onclick="saveEditDefaultCharge('${mode}', ${idx})">💾 Save</button>
         </div>
     `;
 
@@ -6202,82 +6702,112 @@ function openEditDefaultChargeModal(mode, idx) {
     openModal('previewModal');
 }
 
+
 function saveEditDefaultCharge(mode, idx) {
+    // ---- 1. Safely get modal elements ----
     const polEl = document.getElementById('modal-dc-pol-edit');
     const commodityEl = document.getElementById('modal-dc-commodity-edit');
+
     if (!polEl || !commodityEl) {
-        alert('❌ Edit modal not loaded properly. Please close and reopen the modal, then try again.');
+        alert('❌ Edit modal is not open or elements are missing. Please reopen the modal and try again.');
         return;
     }
-    const pol = polEl.value.trim();
-    if (!pol) return alert('POL is required.');
-    const commodity = commodityEl.value;
 
+    const pol = polEl.value.trim();
+    const commodity = commodityEl.value.trim();
+
+    if (!pol) {
+        alert('POL is required.');
+        return;
+    }
+
+    // ---- 2. Validate the record index ----
     let arr;
     if (mode === 'sea') arr = db.defaultSeaCharges;
     else if (mode === 'air') arr = db.defaultAirCharges;
     else arr = db.defaultLclCharges;
+
     if (!arr || idx < 0 || idx >= arr.length) {
         alert('Record not found.');
         return;
     }
+    const rec = arr[idx];
 
-    const isSea = (mode === 'sea');
+    // ---- 3. Collect charges ----
     const charges = {};
     const rows = document.querySelectorAll('#modal-dc-charges-list [data-charge-key]');
+
     if (rows.length === 0) {
-        return alert('Please add at least one charge with a value.');
+        alert('No charges found. Please add at least one charge.');
+        return;
     }
 
+    let hasValidCharge = false;
     rows.forEach(row => {
         const baseKey = row.getAttribute('data-charge-key');
-        if (isSea) {
+        if (!baseKey) return;
+
+        const rowMode = row.getAttribute('data-mode') || 'sea';
+
+        if (rowMode === 'sea') {
             const amt20 = row.querySelector('.modal-chg-amt20');
             const buy20 = row.querySelector('.modal-chg-buy20');
             const amt40 = row.querySelector('.modal-chg-amt40');
             const buy40 = row.querySelector('.modal-chg-buy40');
             const cur = row.querySelector('.modal-chg-cur');
-            if (!amt20 || !buy20 || !amt40 || !buy40 || !cur) return;
-            const a20 = parseFloat(amt20.value) || 0;
-            const b20 = parseFloat(buy20.value) || 0;
-            const a40 = parseFloat(amt40.value) || 0;
-            const b40 = parseFloat(buy40.value) || 0;
-            const c = cur.value;
-            if (a20 > 0 || b20 > 0) {
-                charges[baseKey + '_20'] = { amount: a20, buyAmount: b20, currency: c };
-            }
-            if (a40 > 0 || b40 > 0) {
-                charges[baseKey + '_40'] = { amount: a40, buyAmount: b40, currency: c };
+
+            if (amt20 && buy20 && amt40 && buy40 && cur) {
+                const a20 = parseFloat(amt20.value) || 0;
+                const b20 = parseFloat(buy20.value) || 0;
+                const a40 = parseFloat(amt40.value) || 0;
+                const b40 = parseFloat(buy40.value) || 0;
+                const currency = cur.value || 'INR';
+
+                if (a20 > 0 || b20 > 0) {
+                    charges[baseKey + '_20'] = { amount: a20, buyAmount: b20, currency: currency };
+                    hasValidCharge = true;
+                }
+                if (a40 > 0 || b40 > 0) {
+                    charges[baseKey + '_40'] = { amount: a40, buyAmount: b40, currency: currency };
+                    hasValidCharge = true;
+                }
             }
         } else {
             const sell = row.querySelector('.modal-chg-single-sell');
             const buy = row.querySelector('.modal-chg-single-buy');
             const cur = row.querySelector('.modal-chg-cur');
-            if (!sell || !buy || !cur) return;
-            const s = parseFloat(sell.value) || 0;
-            const b = parseFloat(buy.value) || 0;
-            const c = cur.value;
-            if (s > 0 || b > 0) {
-                charges[baseKey] = { amount: s, buyAmount: b, currency: c };
+
+            if (sell && buy && cur) {
+                const s = parseFloat(sell.value) || 0;
+                const b = parseFloat(buy.value) || 0;
+                const currency = cur.value || 'INR';
+
+                if (s > 0 || b > 0) {
+                    charges[baseKey] = { amount: s, buyAmount: b, currency: currency };
+                    hasValidCharge = true;
+                }
             }
-        }
+        }	
     });
 
-    if (Object.keys(charges).length === 0) {
-        return alert('Please add at least one charge with a value.');
+    if (!hasValidCharge) {
+        alert('Please add at least one charge with a positive value.');
+        return;
     }
 
-    arr[idx].pol = pol;
-    arr[idx].commodity = commodity;
-    arr[idx].charges = charges;
-    arr[idx].updatedAt = new Date().toISOString();
+    // ---- 4. Update and save ----
+    rec.pol = pol;
+    rec.commodity = commodity;
+    rec.charges = charges;
+    rec.updatedAt = new Date().toISOString();
 
     saveDB();
     closeModal('previewModal');
     renderDefaultChargesMaster(mode);
-    alert('✅ Default charge updated successfully!');
+    alert('✅ Default charge updated successfully.');
     autoBackup();
 }
+
 
 function openAddDefaultChargeModal(mode) {
     const isSea = (mode === 'sea');
@@ -6330,80 +6860,99 @@ function openAddDefaultChargeModal(mode) {
 
 
 function addChargeToDCModal(mode) {
+    // ---- 1. Verify the modal is open ----
     const list = document.getElementById('modal-dc-charges-list');
     if (!list) {
-        alert('Error: Charges list not found. Please close and reopen the modal.');
+        alert('❌ Error: The charges list container is not found.\nPlease open the "Add/Edit Default Charge" modal first.');
         return;
     }
+
+    // ---- 2. Get the charge name selector ----
     const chargeSelect = document.getElementById('modal-dc-add-charge');
-    if (!chargeSelect) return alert('Charge selector not found.');
-    const key = chargeSelect.value;
-    if (!key) return alert('Please select a charge name.');
-    if (list.querySelector(`[data-charge-key="${key}"]`)) {
-        alert('Charge already added!');
+    if (!chargeSelect) {
+        alert('❌ Error: Charge selector not found. Please reopen the modal.');
         return;
     }
 
-    const isSea = (mode === 'sea');
-    let html = `
-        <div style="margin-bottom:6px;background:var(--bg);padding:6px;border-radius:5px;border:1px solid var(--border);" data-charge-key="${key}">
-            <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${key}
-                <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button>
-            </div>
-    `;
+    const key = chargeSelect.value.trim();
+    if (!key) {
+        alert('Please select a charge name from the dropdown.');
+        return;
+    }
 
+    // ---- 3. Prevent duplicate charges ----
+    if (list.querySelector(`[data-charge-key="${key}"]`)) {
+        alert('⚠️ Charge "' + key + '" already added. Please remove the existing one first.');
+        return;
+    }
+
+    // ---- 4. Build the HTML for the new charge row ----
+    const isSea = (mode === 'sea');
+    let html = '';
+    
     if (isSea) {
-        html += `
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                <div style="display:flex;gap:4px;">
-                    <label style="font-size:0.6rem;font-weight:600;">20' Sell</label>
-                    <input type="number" step="0.01" class="modal-chg-amt20" value="0" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+        // SEA mode: 20' and 40' sell/buy fields
+        html = `
+            <div style="margin-bottom:6px;background:var(--bg);padding:6px;border-radius:5px;border:1px solid var(--border);" data-charge-key="${key}" data-mode="sea">
+                <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${key}
+                    <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button>
                 </div>
-                <div style="display:flex;gap:4px;">
-                    <label style="font-size:0.6rem;font-weight:600;">20' Buy</label>
-                    <input type="number" step="0.01" class="modal-chg-buy20" value="0" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                </div>
-                <div style="display:flex;gap:4px;">
-                    <label style="font-size:0.6rem;font-weight:600;">40' Sell</label>
-                    <input type="number" step="0.01" class="modal-chg-amt40" value="0" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                </div>
-                <div style="display:flex;gap:4px;">
-                    <label style="font-size:0.6rem;font-weight:600;">40' Buy</label>
-                    <input type="number" step="0.01" class="modal-chg-buy40" value="0" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                </div>
-                <div style="grid-column:1/-1;display:flex;gap:4px;align-items:center;">
-                    <label style="font-size:0.6rem;font-weight:600;">Currency</label>
-                    <select class="modal-chg-cur" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                        ${getCurrencyOptions('INR')}
-                    </select>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                    <div style="display:flex;gap:4px;">
+                        <label style="font-size:0.6rem;font-weight:600;">20' Sell</label>
+                        <input type="number" step="0.01" class="modal-chg-amt20" value="0" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    </div>
+                    <div style="display:flex;gap:4px;">
+                        <label style="font-size:0.6rem;font-weight:600;">20' Buy</label>
+                        <input type="number" step="0.01" class="modal-chg-buy20" value="0" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    </div>
+                    <div style="display:flex;gap:4px;">
+                        <label style="font-size:0.6rem;font-weight:600;">40' Sell</label>
+                        <input type="number" step="0.01" class="modal-chg-amt40" value="0" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    </div>
+                    <div style="display:flex;gap:4px;">
+                        <label style="font-size:0.6rem;font-weight:600;">40' Buy</label>
+                        <input type="number" step="0.01" class="modal-chg-buy40" value="0" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    </div>
+                    <div style="grid-column:1/-1;display:flex;gap:4px;align-items:center;">
+                        <label style="font-size:0.6rem;font-weight:600;">Currency</label>
+                        <select class="modal-chg-cur" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                            ${getCurrencyOptions('INR')}
+                        </select>
+                    </div>
                 </div>
             </div>
         `;
     } else {
-        html += `
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
-                <div style="display:flex;gap:4px;">
-                    <label style="font-size:0.6rem;font-weight:600;">Sell</label>
-                    <input type="number" step="0.01" class="modal-chg-single-sell" value="0" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+        // AIR / LCL mode: single sell/buy fields
+        html = `
+            <div style="margin-bottom:6px;background:var(--bg);padding:6px;border-radius:5px;border:1px solid var(--border);" data-charge-key="${key}" data-mode="air">
+                <div style="font-weight:700;color:var(--primary);margin-bottom:4px;font-size:0.8rem;">${key}
+                    <button class="btn btn-sm btn-clear" style="float:right;height:22px;padding:2px 6px;" onclick="this.closest('[data-charge-key]').remove()">×</button>
                 </div>
-                <div style="display:flex;gap:4px;">
-                    <label style="font-size:0.6rem;font-weight:600;">Buy</label>
-                    <input type="number" step="0.01" class="modal-chg-single-buy" value="0" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                </div>
-                <div style="display:flex;gap:4px;align-items:center;">
-                    <label style="font-size:0.6rem;font-weight:600;">Currency</label>
-                    <select class="modal-chg-cur" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
-                        ${getCurrencyOptions('INR')}
-                    </select>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+                    <div style="display:flex;gap:4px;">
+                        <label style="font-size:0.6rem;font-weight:600;">Sell</label>
+                        <input type="number" step="0.01" class="modal-chg-single-sell" value="0" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    </div>
+                    <div style="display:flex;gap:4px;">
+                        <label style="font-size:0.6rem;font-weight:600;">Buy</label>
+                        <input type="number" step="0.01" class="modal-chg-single-buy" value="0" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                    </div>
+                    <div style="display:flex;gap:4px;align-items:center;">
+                        <label style="font-size:0.6rem;font-weight:600;">Currency</label>
+                        <select class="modal-chg-cur" style="flex:1;padding:4px 6px;border:1px solid var(--border);border-radius:3px;">
+                            ${getCurrencyOptions('INR')}
+                        </select>
+                    </div>
                 </div>
             </div>
         `;
     }
 
-    html += `</div>`;
     list.insertAdjacentHTML('beforeend', html);
 
-    // Clear the add fields (only if they exist)
+    // ---- 5. Clear the input fields used to add the charge ----
     if (isSea) {
         ['modal-dc-add-amt20', 'modal-dc-add-buy20', 'modal-dc-add-amt40', 'modal-dc-add-buy40'].forEach(id => {
             const el = document.getElementById(id);
@@ -6414,6 +6963,11 @@ function addChargeToDCModal(mode) {
             const el = document.getElementById(id);
             if (el) el.value = '';
         });
+    }
+
+    // ---- 6. Reset the charge name dropdown to first option ----
+    if (chargeSelect.options.length > 0) {
+        chargeSelect.selectedIndex = 0;
     }
 }
 
@@ -6520,48 +7074,79 @@ function saveNewDefaultCharge(mode) {
 }
 
 function saveEditDefaultCharge(mode, idx) {
+    const polEl = document.getElementById('modal-dc-pol-edit');
+    const commodityEl = document.getElementById('modal-dc-commodity-edit');
+    if (!polEl || !commodityEl) {
+        alert('❌ Edit modal not loaded properly. Please close and reopen the modal, then try again.');
+        return;
+    }
+    const pol = polEl.value.trim();
+    if (!pol) return alert('POL is required.');
+    const commodity = commodityEl.value;
+
     let arr;
     if (mode === 'sea') arr = db.defaultSeaCharges;
     else if (mode === 'air') arr = db.defaultAirCharges;
     else arr = db.defaultLclCharges;
-
     if (!arr || idx < 0 || idx >= arr.length) {
         alert('Record not found.');
         return;
     }
-    const rec = arr[idx];
 
-    const pol = document.getElementById('modal-dc-pol-edit').value.trim();
-    const commodity = document.getElementById('modal-dc-commodity-edit').value.trim();
-    if (!pol) return alert('POL is required.');
-
-    const dupCheck = arr.some((r, i) => i !== idx && r.pol === pol && r.commodity === commodity);
-    if (dupCheck) return alert('Duplicate entry!');
-
+    const isSea = (mode === 'sea');
     const charges = {};
-    document.querySelectorAll('#modal-dc-charges-list [data-charge-key]').forEach(row => {
+    const rows = document.querySelectorAll('#modal-dc-charges-list [data-charge-key]');
+    if (rows.length === 0) {
+        return alert('Please add at least one charge with a value.');
+    }
+
+    rows.forEach(row => {
         const baseKey = row.getAttribute('data-charge-key');
-        const amt20 = parseFloat(row.querySelector('.modal-chg-amt20').value) || 0;
-        const buy20 = parseFloat(row.querySelector('.modal-chg-buy20').value) || 0;
-        const amt40 = parseFloat(row.querySelector('.modal-chg-amt40').value) || 0;
-        const buy40 = parseFloat(row.querySelector('.modal-chg-buy40').value) || 0;
-        const cur = row.querySelector('.modal-chg-cur').value;
-        if (amt20 > 0 || buy20 > 0) {
-            charges[baseKey + '_20'] = { amount: amt20, buyAmount: buy20, currency: cur };
-        }
-        if (amt40 > 0 || buy40 > 0) {
-            charges[baseKey + '_40'] = { amount: amt40, buyAmount: buy40, currency: cur };
+        if (isSea) {
+            const amt20 = row.querySelector('.modal-chg-amt20');
+            const buy20 = row.querySelector('.modal-chg-buy20');
+            const amt40 = row.querySelector('.modal-chg-amt40');
+            const buy40 = row.querySelector('.modal-chg-buy40');
+            const cur = row.querySelector('.modal-chg-cur');
+            if (!amt20 || !buy20 || !amt40 || !buy40 || !cur) return;
+            const a20 = parseFloat(amt20.value) || 0;
+            const b20 = parseFloat(buy20.value) || 0;
+            const a40 = parseFloat(amt40.value) || 0;
+            const b40 = parseFloat(buy40.value) || 0;
+            const c = cur.value;
+            if (a20 > 0 || b20 > 0) {
+                charges[baseKey + '_20'] = { amount: a20, buyAmount: b20, currency: c };
+            }
+            if (a40 > 0 || b40 > 0) {
+                charges[baseKey + '_40'] = { amount: a40, buyAmount: b40, currency: c };
+            }
+        } else {
+            const sell = row.querySelector('.modal-chg-single-sell');
+            const buy = row.querySelector('.modal-chg-single-buy');
+            const cur = row.querySelector('.modal-chg-cur');
+            if (!sell || !buy || !cur) return;
+            const s = parseFloat(sell.value) || 0;
+            const b = parseFloat(buy.value) || 0;
+            const c = cur.value;
+            if (s > 0 || b > 0) {
+                charges[baseKey] = { amount: s, buyAmount: b, currency: c };
+            }
         }
     });
 
-    rec.pol = pol;
-    rec.commodity = commodity;
-    rec.charges = charges;
-    rec.updatedAt = new Date().toISOString();
+    if (Object.keys(charges).length === 0) {
+        return alert('Please add at least one charge with a value.');
+    }
+
+    arr[idx].pol = pol;
+    arr[idx].commodity = commodity;
+    arr[idx].charges = charges;
+    arr[idx].updatedAt = new Date().toISOString();
+
     saveDB();
     closeModal('previewModal');
     renderDefaultChargesMaster(mode);
-    alert('✅ Default charge updated.');
+    alert('✅ Default charge updated successfully!');
     autoBackup();
 }
 
@@ -7782,6 +8367,10 @@ function init() {
 	if (!localStorage.getItem('sea_default_migrated')) {
     migrateDefaultSeaCharges();
 	}
+	
+	['sea', 'air', 'lcl'].forEach(mode => {buildChargesGrid(mode);
+    setValidityDefault(mode); });
+
 	
     ['sea', 'air', 'lcl'].forEach(mode => { buildChargesGrid(mode);
         setValidityDefault(mode); });
@@ -9928,12 +10517,26 @@ function buildCompactEmailHTML(data, mode) {
     let grandTotal = 0;
     const chargesWithINR = {};
 
-    // Calculate charges
     Object.entries(data.charges || {}).forEach(([charge, c]) => {
-        let unitSellAmt = c.amount;
-        let unitBuyAmt = c.buyAmount || 0;
-        let totalSellAmt = unitSellAmt;
-        let totalBuyAmt = unitBuyAmt;
+        const manualSellAmt = c.amount;
+        const manualBuyAmt = c.buyAmount || 0;
+        let totalSellAmt = manualSellAmt;
+        let totalBuyAmt = manualBuyAmt;
+        let minApplied = false;
+
+        // ---- Special logic for PALLETISATION (AIR only) ----
+        if (mode === 'air' && charge === 'PALLETISATION') {
+            const pallets = data.pallets || 0;
+            if (pallets > 0) {
+                const plies = pallets * 2;
+                const palletCharge = pallets * 1875;
+                const plyCharge = plies * 600;
+                totalSellAmt = Math.max(palletCharge, plyCharge);
+                totalBuyAmt = Math.max(totalBuyAmt, totalSellAmt);
+            }
+        }
+
+        // ---- Apply basis multipliers ----
         if (mode === 'air' || mode === 'lcl') {
             const basis = c.basis || 'Normal';
             if (basis === 'Per KGS') {
@@ -9945,8 +10548,26 @@ function buildCompactEmailHTML(data, mode) {
             } else if (basis === 'Per KGS × 3') {
                 totalSellAmt *= (data.weight || 0) * 3;
                 totalBuyAmt *= (data.weight || 0) * 3;
+            } else if (basis === 'Per KGS × 4') {
+                totalSellAmt *= (data.weight || 0) * 4;
+                totalBuyAmt *= (data.weight || 0) * 4;
             }
         }
+
+        // ---- AIR minimum threshold - EXCLUDING PALLETISATION ----
+        if (mode === 'air' && charge !== 'PALLETISATION') {
+            const basis = c.basis || 'Normal';
+            if ((basis === 'Per KGS' || basis === 'Per KGS × 4') && AIR_MIN_THRESHOLDS && AIR_MIN_THRESHOLDS[charge]) {
+                const minVal = AIR_MIN_THRESHOLDS[charge];
+                if (totalSellAmt < minVal) {
+                    minApplied = true;
+                    totalSellAmt = minVal;
+                    totalBuyAmt = Math.max(totalBuyAmt, minVal);
+                }
+            }
+        }
+
+        // ---- LCL FREIGHT/THC per CBM ----
         if (mode === 'lcl' && (charge === 'FREIGHT' || charge === 'THC')) {
             const volume = data.volume || 0;
             if (volume > 0) {
@@ -9957,19 +10578,22 @@ function buildCompactEmailHTML(data, mode) {
                 }
             }
         }
+
         const sellINR = toINR(totalSellAmt, c.currency);
         const buyINR = toINR(totalBuyAmt, c.buyCurrency || c.currency);
         chargesWithINR[charge] = {
-            unitSellAmt,
-            totalSellAmt,
+            unitSellAmt: manualSellAmt,
+            totalSellAmt: totalSellAmt,
             currency: c.currency,
             sellINR,
             buyINR,
-            basis: c.basis || 'Normal'
+            basis: c.basis || 'Normal',
+            minApplied: minApplied
         };
         grandTotal += sellINR;
     });
 
+    // ----- HTML generation (same as before) -----
     const fontStack = "'Aptos', 'Segoe UI', Arial, sans-serif";
     const dataSize = '10px';
     const headingSize = '12px';
@@ -9981,6 +10605,7 @@ function buildCompactEmailHTML(data, mode) {
     const tableWidth = '15cm';
     const maxTableWidth = '17cm';
 
+
     let html = `<div style="max-width:${maxTableWidth};min-width:${tableWidth};width:auto;margin:0 auto;font-family:${fontStack};background:#ffffff;padding:4px;box-sizing:border-box;color:#1a1a1a;font-size:${dataSize};">
         <p style="margin:0 0 4px 0;font-size:${titleSize};line-height:1.4;">Dear Sir/Madam,</p>
         <br>
@@ -9988,7 +10613,6 @@ function buildCompactEmailHTML(data, mode) {
         <div style="font-size:${titleSize};font-weight:800;color:#1e3a8a;">${modeLabel} QUOTATION / Quote: ${data.quoteNumber || 'DRAFT'}</div>
         <br>
 
-        <!-- Customer Details Table -->
         <table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
             <colgroup>
                 <col style="width:${custColWidths.label1};"><col style="width:${custColWidths.value1};"><col style="width:${custColWidths.label2};"><col style="width:${custColWidths.value2};">
@@ -10007,7 +10631,8 @@ function buildCompactEmailHTML(data, mode) {
         </table>
         <br>`;
 
-    // ---- Helper to build a group table with subtotal as tfoot ----
+
+    // ---- Helper to build a group table ----
     function buildGroupTableHTML(groupLabel, categoryNames, srStart) {
         const groupCharges = [];
         categoryNames.forEach(cat => {
@@ -10028,12 +10653,12 @@ function buildCompactEmailHTML(data, mode) {
             <thead>
                 <tr><th colspan="6" style="border:1px solid #1e3a8a;padding:${thPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;">${groupLabel}</th></tr>
                 <tr>
-                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Sr. No</th>
-                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Charge Type</th>
-                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Currency</th>
-                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Sell Amount</th>
-                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">Basis</th>
-                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};line-height:1.4;vertical-align:middle;">INR Equivalent</th>
+                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};">Sr. No</th>
+                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};">Charge Type</th>
+                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};">Currency</th>
+                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};">Sell Amount</th>
+                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};">Basis</th>
+                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};">INR Equivalent</th>
                 </tr>
             </thead>
             <tbody>`;
@@ -10045,7 +10670,20 @@ function buildCompactEmailHTML(data, mode) {
             subtotal += c.sellINR;
             const isFreight = charge.toUpperCase() === 'FREIGHT' || charge.toUpperCase() === 'AIR FREIGHT';
             const rowStyle = isFreight ? 'background:#fee2e2;font-weight:700;color:#dc2626;' : '';
-            const basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
+
+            let basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
+            if (mode === 'air' && AIR_MIN_THRESHOLDS && AIR_MIN_THRESHOLDS[charge]) {
+                if (c.minApplied) {
+                    basisDisplay = 'Minimum';
+                } else {
+                    if (charge === 'GATE PASS') {
+                        basisDisplay = 'At Actual';
+                    } else {
+                        basisDisplay = 'Per KGS';
+                    }
+                }
+            }
+
             html += `<tr style="${rowStyle}">
                 <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${sr++}</td>
                 <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;font-size:${dataSize};line-height:1.4;vertical-align:middle;">${charge.toUpperCase()}</td>
@@ -10056,7 +10694,6 @@ function buildCompactEmailHTML(data, mode) {
             </tr>`;
         });
 
-        // ---- SUBTOTAL ROW ----
         html += `</tbody>
             <tfoot>
                 <tr style="font-weight:700;background:#e6f7e6;">
@@ -10079,19 +10716,16 @@ function buildCompactEmailHTML(data, mode) {
     let chargeHtml = '';
 
     if (mode === 'air') {
-        // Combine both groups into one table for Air
         const combinedCats = group1Cats.concat(group2Cats);
         const combinedTable = buildGroupTableHTML("AIR FREIGHT CHARGES", combinedCats, srStart);
         chargeHtml = combinedTable.html;
     } else {
-        // Sea / LCL: two separate tables
         let table1 = buildGroupTableHTML(group1Label, group1Cats, srStart);
         srStart = table1.nextSr;
         let table2 = buildGroupTableHTML(group2Label, group2Cats, srStart);
         chargeHtml = (table1.html || '') + (table2.html || '');
     }
 
-    // ---- GRAND TOTAL – margin-top:0 ----
     if (chargeHtml) {
         chargeHtml += `<table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
             <colgroup>
@@ -10108,7 +10742,6 @@ function buildCompactEmailHTML(data, mode) {
 
     html += chargeHtml;
 
-    // ---- REMARKS SECTION – mode‑specific ----
     let remarks;
     if (mode === 'air') {
         remarks = [
@@ -10129,7 +10762,6 @@ function buildCompactEmailHTML(data, mode) {
             "15. Reduction in weight by more than 15% would lead to  revision in ad Noc rates."
         ];
     } else {
-        // sea or lcl
         remarks = [
             "1.      Rates are valid as per vessel sailing.",
             "2.      Rates are subject to ACD, SEAL, GRI, PSS, Toll + Local Charges.",
@@ -10160,6 +10792,9 @@ function buildCompactEmailHTML(data, mode) {
     html += `</div>`;
     return html;
 }
+
+
+
 // =============================================================
 // 1. previewDsrShipment - Main modal caller
 // =============================================================
@@ -11661,29 +12296,24 @@ function loadBackupPath() {
 
     if (inputEl) inputEl.value = path;
 
-    // Try to restore folder handle from IndexedDB (only works in secure contexts)
     if (window.location.protocol !== 'file:' && typeof getFolderHandle === 'function') {
         getFolderHandle().then(handle => {
             backupFolderHandle = handle;
             if (displayEl) {
-                let displayText = path ? `📁 ${path}` : 'No folder selected';
-                if (handle) displayText += ' (handle available)';
-                displayEl.textContent = displayText;
+                displayEl.textContent = handle
+                    ? `📁 ${path || 'Selected folder'} (auto-write enabled)`
+                    : path ? `📁 ${path} (path saved)` : 'No folder selected';
             }
             if (handle && !autoBackupInterval) startAutoBackup();
-        }).catch(err => {
-            console.warn('Could not retrieve folder handle:', err);
+        }).catch(() => {
             if (displayEl) {
-                displayEl.textContent = path ? `📁 ${path}` : 'No folder selected';
+                displayEl.textContent = path ? `📁 ${path} (path saved)` : 'No folder selected';
             }
-            if (!autoBackupInterval) startAutoBackup();
         });
     } else {
-        // file: protocol – just show the saved path, no handle
         if (displayEl) {
-            displayEl.textContent = path ? `📁 ${path}` : 'No folder selected';
+            displayEl.textContent = path ? `📁 ${path} (path saved)` : 'No folder selected';
         }
-        if (!autoBackupInterval) startAutoBackup();
     }
 }
 
@@ -11992,18 +12622,21 @@ function bulkExportCarrierCharges() {
 
 // ===== 1. selectBackupFolder – stores ONLY the handle, does NOT change the saved path =====
 async function selectBackupFolder() {
-    // Check if we are in a secure context and the API is available
-    const isSecure = window.isSecureContext && location.protocol === 'https:';
-    const hasAPI = typeof window.showDirectoryPicker === 'function';
-
-    if (!isSecure || !hasAPI) {
+    if (window.location.protocol === 'file:') {
         alert(
-            'Your browser cannot select a folder because you are using the "file://" protocol.\n' +
-            'Please type the full folder path manually (e.g., D:\\SHAHID ERP\\Backup) and click "Save Path".\n\n' +
-            'Auto‑backup will still work via download fallback.'
+            '🔒 You are on "file://" – folder selection is blocked.\n\n' +
+            '👉 To enable real folder writing (no downloads):\n' +
+            '   1. Open a terminal in this folder.\n' +
+            '   2. Run: python -m http.server 8000\n' +
+            '   3. Open http://localhost:8000 in your browser.\n\n' +
+            'Then click "Browse Folder" again.\n\n' +
+            'For now, use "Export to JSON" or "Export to SQLite" for manual backups.'
         );
-        // Focus the input field so the user can type the path
-        document.getElementById('backup-folder-path-input')?.focus();
+        return;
+    }
+
+    if (typeof window.showDirectoryPicker !== 'function') {
+        alert('Your browser does not support the Folder Picker API. Please use Chrome, Edge, or Opera.');
         return;
     }
 
@@ -12011,23 +12644,17 @@ async function selectBackupFolder() {
         const folder = await window.showDirectoryPicker();
         const permission = await folder.requestPermission({ mode: 'readwrite' });
         if (permission !== 'granted') {
-            alert('Permission denied. Cannot use this folder.');
+            alert('Permission denied.');
             return;
         }
         backupFolderHandle = folder;
         await storeFolderHandle(folder);
 
-        // Preserve the user's typed path – do NOT overwrite it
         const displayEl = document.getElementById('backup-folder-path');
-        const savedPath = db.backupFolderPath || '';
         if (displayEl) {
-            if (savedPath) {
-                displayEl.textContent = `📁 ${savedPath} (handle available)`;
-            } else {
-                displayEl.textContent = `📁 ${folder.name} (handle available)`;
-            }
+            displayEl.textContent = `📁 ${folder.name} (auto-write enabled)`;
         }
-        alert('Folder handle stored! Auto backup will use this folder.\nYour full path (if any) remains unchanged.');
+        alert('✅ Folder selected! Auto‑backup will now write directly to this folder – no downloads!');
         if (!autoBackupInterval) {
             startAutoBackup();
         }
@@ -12041,13 +12668,12 @@ async function selectBackupFolder() {
 
 
 
-
 // ===== 2. saveBackupPath – stores the typed path exactly as entered =====
 function saveBackupPath() {
     const inputEl = document.getElementById('backup-folder-path-input');
     const path = inputEl ? inputEl.value.trim() : '';
     if (!path) {
-        alert('Please enter a folder path (e.g., D:\\SHAHID ERP\\Backup) and click Save Path.');
+        alert('Please enter a folder path.');
         return;
     }
     db.backupFolderPath = path;
@@ -12055,12 +12681,12 @@ function saveBackupPath() {
 
     const displayEl = document.getElementById('backup-folder-path');
     if (displayEl) {
-        let displayText = `📁 ${path}`;
-        if (backupFolderHandle) displayText += ' (handle available)';
-        displayEl.textContent = displayText;
+        displayEl.textContent = `📁 ${path} (path saved)`;
     }
-    alert('✅ Backup path saved!');
-    if (!autoBackupInterval) startAutoBackup();
+    alert('✅ Path saved. On http://localhost, this folder will be used for auto-backup.');
+    if (window.location.protocol !== 'file:' && !autoBackupInterval) {
+        startAutoBackup();
+    }
 }
 
 // ===== 3. loadBackupPath – restores the saved path and the handle =====
@@ -12069,30 +12695,29 @@ function loadBackupPath() {
     const inputEl = document.getElementById('backup-folder-path-input');
     const displayEl = document.getElementById('backup-folder-path');
 
-    if (inputEl) inputEl.value = path;   // Populate input with saved full path
+    if (inputEl) inputEl.value = path;
 
-    // Load handle from IndexedDB
-    if (typeof getFolderHandle === 'function') {
+    // Only try to restore handle if NOT on file://
+    if (window.location.protocol !== 'file:' && typeof getFolderHandle === 'function') {
         getFolderHandle().then(handle => {
             backupFolderHandle = handle;
             if (displayEl) {
-                let displayText = path ? `📁 ${path}` : 'No folder selected';
-                if (handle) displayText += ' (handle available)';
-                displayEl.textContent = displayText;
+                displayEl.textContent = handle
+                    ? `📁 ${path || 'Selected folder'} (auto-write enabled)`
+                    : path ? `📁 ${path} (path saved)` : 'No folder selected';
             }
-            if (handle && typeof startAutoBackup === 'function') {
-                startAutoBackup();
-            }
-        }).catch(err => {
-            console.warn('Could not retrieve folder handle:', err);
+            if (handle && !autoBackupInterval) startAutoBackup();
+        }).catch(() => {
             if (displayEl) {
-                displayEl.textContent = path ? `📁 ${path}` : 'No folder selected';
+                displayEl.textContent = path ? `📁 ${path} (path saved)` : 'No folder selected';
             }
         });
     } else {
+        // On file:// – just show the path
         if (displayEl) {
-            displayEl.textContent = path ? `📁 ${path}` : 'No folder selected';
+            displayEl.textContent = path ? `📁 ${path} (path saved)` : 'No folder selected';
         }
+        // Do NOT start auto-backup on file://
     }
 }
 
@@ -12106,12 +12731,11 @@ async function autoBackupToFolder() {
         if (!backupFolderHandle) {
             throw new Error('No folder handle available');
         }
-        // Verify permission
         const permission = await backupFolderHandle.requestPermission({ mode: 'readwrite' });
         if (permission !== 'granted') {
-            throw new Error('Permission to folder was revoked');
+            throw new Error('Permission revoked');
         }
-        // Create backup data
+
         const backupData = {
             timestamp: new Date().toISOString(),
             data: db
@@ -12119,21 +12743,25 @@ async function autoBackupToFolder() {
         const json = JSON.stringify(backupData, null, 2);
         const blob = new Blob([json], { type: 'application/json' });
         const fileName = `Gateway_EXIM_AutoBackup_${new Date().toISOString().split('T')[0]}.json`;
-        // Save file
+
         const fileHandle = await backupFolderHandle.getFileHandle(fileName, { create: true });
         const writable = await fileHandle.createWritable();
         await writable.write(blob);
         await writable.close();
-        // Update last backup time
+
         db.lastBackup = new Date().toISOString();
         saveDB();
+
         const statusEl = document.getElementById('backup-status');
-        statusEl.textContent = `✅ Last backup: ${new Date().toLocaleString('en-IN')} (in ${db.backupFolderPath || 'selected folder'})`;
+        statusEl.textContent = `✅ Last backup: ${new Date().toLocaleString('en-IN')} (written to folder)`;
         statusEl.className = 'backup-status success';
-        console.log('Auto backup saved to folder:', fileName);
+        console.log('✅ Auto-backup written to folder:', fileName);
     } catch (e) {
-        console.error('Folder backup failed, falling back to download:', e);
-        fallbackBackupDownload();
+        console.error('Folder backup failed:', e);
+        const statusEl = document.getElementById('backup-status');
+        statusEl.textContent = `❌ Backup failed: ${e.message}`;
+        statusEl.className = 'backup-status error';
+        // 🔴 NO DOWNLOAD FALLBACK – just show error
     }
 }
 
