@@ -1,3 +1,4 @@
+
 // ==================== DATA DEFINITIONS ====================
 const AIR_MIN_THRESHOLDS = {
     'CARTAGE': 450,
@@ -374,7 +375,8 @@ const defaultDB = JSON.parse(JSON.stringify(EMBEDDED_BACKUP));
 let plannerCurrentDate = new Date();
 let plannerSelectedDate = new Date();
 let plannerEditingNote = null;
-
+let currentRateRequestFormat = 'seaWithShipper';
+let _previewRRData = null;
 
 
 // ---------- Helper Functions ----------
@@ -1185,7 +1187,7 @@ let currentEmailData = null;
 let chargesOrder = { sea: null, air: null, lcl: null };
 let searchTimeout = null;
 let pendingTabSwitch = null;
-let hasUnsavedChanges = { sea: false, air: false, lcl: false };
+let hasUnsavedChanges = { sea: false, air: false, lcl: false, rr: false };
 let rateSheetFilter = 'all';
 let rateSheetPage = 1;
 let rateSheetPerPage = 20;
@@ -1197,7 +1199,6 @@ let masterShowMode = 'visible';
 let masterSort = 'alpha-asc';
 let backupFolderHandle = null;
 let autoBackupInterval = null;
-let SQL = null;
 let currentLocalContainer = null;
 let sqliteLoadAttempts = 0;
 const MAX_SQLITE_ATTEMPTS = 10;
@@ -1257,7 +1258,7 @@ document.querySelectorAll('.tab-btn-vertical').forEach(btn => {
     btn.addEventListener('click', function(e) {
         const targetTab = this.dataset.tab;
         const currentTab = document.querySelector('.tab-panel.active')?.id;
-        if (['sea', 'air', 'lcl'].includes(currentTab) && hasUnsavedChanges[currentTab] && currentTab !== targetTab) {
+        if (['sea', 'air', 'lcl', 'raterequest'].includes(currentTab) && hasUnsavedChanges[currentTab] && currentTab !== targetTab) {
             e.preventDefault();
             e.stopPropagation();
             pendingTabSwitch = targetTab;
@@ -1286,6 +1287,12 @@ function switchToTab(targetTab) {
     if (targetTab === 'followup') renderFollowups();
     if (targetTab === 'dashboard') renderDashboard();
     if (targetTab === 'database') renderDatabase();
+    
+    if (targetTab === 'raterequest') {
+        populateRateRequestDropdowns();
+        switchRateRequestFormat('seaWithShipper');
+    }
+     
     if (targetTab === 'measurement') {
         showMeasurementMenu();
         refreshMeasurementDefaults();
@@ -1309,10 +1316,9 @@ function switchToTab(targetTab) {
         if (validFromInput && !validFromInput.value) {
             validFromInput.valueAsDate = new Date();
         }
-			if (targetTab === 'planner') {
-		// Initialize planner
-		initPlanner();
-		}
+        if (targetTab === 'planner') {
+            initPlanner();
+        }
     }
 
     if (['sea', 'air', 'lcl'].includes(targetTab)) {
@@ -1335,8 +1341,22 @@ function closeModal(id) { document.getElementById(id).classList.remove('active')
 document.getElementById('tabSwitchSaveBtn').addEventListener('click', function() {
     if (pendingTabSwitch) {
         const currentTab = document.querySelector('.tab-panel.active')?.id;
-        if (currentTab && ['sea', 'air', 'lcl'].includes(currentTab)) saveRecord(currentTab, 'drafts');
-        hasUnsavedChanges = { sea: false, air: false, lcl: false };
+        if (currentTab === 'raterequest') {
+            const visibleFormat = document.querySelector('#raterequest .form-section[id^="rr-format-"]:not([style*="display:none"])');
+            if (visibleFormat) {
+                const format = visibleFormat.id.replace('rr-format-', '');
+                const data = getRateRequestData(format);
+                if (data.pol && data.pod) {
+                    saveRateRequestDraft();
+                } else {
+                    alert('Please select POL and POD before saving.');
+                    return;
+                }
+            }
+        } else if (['sea', 'air', 'lcl'].includes(currentTab)) {
+            saveRecord(currentTab, 'drafts');
+        }
+        hasUnsavedChanges = { sea: false, air: false, lcl: false, rr: false };
         closeModal('tabSwitchModal');
         switchToTab(pendingTabSwitch);
         pendingTabSwitch = null;
@@ -1346,13 +1366,26 @@ document.getElementById('tabSwitchSaveBtn').addEventListener('click', function()
 document.getElementById('tabSwitchDiscardBtn').addEventListener('click', function() {
     if (pendingTabSwitch) {
         const currentTab = document.querySelector('.tab-panel.active')?.id;
-        if (currentTab && ['sea', 'air', 'lcl'].includes(currentTab)) clearForm(currentTab);
-        hasUnsavedChanges = { sea: false, air: false, lcl: false };
+        if (currentTab === 'raterequest') {
+            clearRateRequestFormForCurrent();
+        } else if (['sea', 'air', 'lcl'].includes(currentTab)) {
+            clearForm(currentTab);
+        }
+        hasUnsavedChanges = { sea: false, air: false, lcl: false, rr: false };
         closeModal('tabSwitchModal');
         switchToTab(pendingTabSwitch);
         pendingTabSwitch = null;
     }
 });
+
+// Helper to clear the current RR format
+function clearRateRequestFormForCurrent() {
+    const visibleFormat = document.querySelector('#raterequest .form-section[id^="rr-format-"]:not([style*="display:none"])');
+    if (visibleFormat) {
+        const format = visibleFormat.id.replace('rr-format-', '');
+        clearRateRequestForm(format);
+    }
+}
 
 function markUnsaved(mode) { hasUnsavedChanges[mode] = true; }
 
@@ -2190,8 +2223,10 @@ function onCarrierPolChangeInternal(mode) {
 
 function onOwnCfsToggle(mode) {
     if (mode === 'sea') {
-        // Re‑fetch charges based on new checkbox state
-        onCarrierPolChangeInternal('sea');
+        // Clear the charges order so we rebuild from scratch
+        chargesOrder[mode] = null;
+        // Rebuild charges with the new checkbox state
+        onCarrierPolChangeInternal(mode, true); // pass a reset flag
     }
 }
 
@@ -2515,6 +2550,49 @@ function setValidityDefault(mode) {
 
 function editRecord(target, mode, idx) {
     const rec = db[target][mode][idx];
+    if (!rec) {
+        alert('Record not found.');
+        return;
+    }
+
+    // --- RR (Rate Request) handling ---
+    if (mode === 'rr') {
+    switchToTab('raterequest');
+    // Determine the format from saved data
+    let format = 'seaWithShipper';
+    if (rec.clearance !== undefined) format = 'air';
+    else if (rec.shipper && !rec.forwarder) format = 'seaWithShipper';
+    else if (!rec.shipper && rec.forwarder) format = 'seaWithoutShipper';
+    else if (rec.shipper && rec.forwarder) format = 'seaWithShipper';
+    
+    switchRateRequestFormat(format);  // updates currentRateRequestFormat
+    const suffix = format === 'seaWithShipper' ? 'sea1' : format === 'seaWithoutShipper' ? 'sea2' : 'air';
+    const fieldMap = {
+        'sea1': ['shipper', 'forwarder', 'pol', 'pod', 'commodity', 'inventory', 'weight', 'term', 'validity', 'freeTime'],
+        'sea2': ['forwarder', 'pol', 'pod', 'commodity', 'inventory', 'weight', 'term', 'validity', 'freeTime'],
+        'air': ['shipper', 'pol', 'pod', 'clearance', 'commodity', 'weight', 'packaging', 'pallet', 'dimension', 'temp']
+    };
+    const fields = fieldMap[suffix] || [];
+    fields.forEach(key => {
+        const elId = `rr-${key}-${suffix}`;
+        const el = document.getElementById(elId);
+        if (el && rec[key] !== undefined && rec[key] !== null && rec[key] !== '') {
+            if (el.tagName === 'SELECT') {
+                const options = Array.from(el.options);
+                const match = options.find(opt => opt.value === rec[key]);
+                if (match) el.value = rec[key];
+                else el.selectedIndex = 0;
+            } else {
+                el.value = rec[key];
+            }
+        }
+    });
+    editingRecord = { target, mode, index: idx, originalQN: rec.quoteNumber };
+    hasUnsavedChanges.rr = false;
+    return;
+	}
+
+    // --- Existing edit logic for sea, air, lcl ---
     document.querySelectorAll('.tab-btn-vertical').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.querySelector(`.tab-btn-vertical[data-tab="${mode}"]`).classList.add('active');
@@ -2533,7 +2611,6 @@ function editRecord(target, mode, idx) {
     const remarksEl = document.getElementById(`${mode}-remarks`);
     if (remarksEl) remarksEl.value = rec.remarks || '';
 
-    // ---- Load Freight & Surcharges (only for SEA) ----
     if (mode === 'sea' && rec.freightSurcharges) {
         const fs = rec.freightSurcharges;
         ['20', '40'].forEach(row => {
@@ -2545,18 +2622,15 @@ function editRecord(target, mode, idx) {
         });
         calcSeaFSTotal();
     }
-
-	// ---- Load Freight & Surcharges (AIR) ----
-	if (mode === 'air' && rec.freightSurcharges) {
-		const fs = rec.freightSurcharges;
-		const keys = ['frt', 'fuel', 'carting', 'mcc', 'xray', 'other'];
-		keys.forEach(key => {
-			const el = document.getElementById(`air-fs-${key}`);
-			if (el) el.value = fs[key] || 0;
-		});
-		calcAirFSTotal();
-	}
-
+    if (mode === 'air' && rec.freightSurcharges) {
+        const fs = rec.freightSurcharges;
+        const keys = ['frt', 'fuel', 'carting', 'mcc', 'xray', 'other'];
+        keys.forEach(key => {
+            const el = document.getElementById(`air-fs-${key}`);
+            if (el) el.value = fs[key] || 0;
+        });
+        calcAirFSTotal();
+    }
 
     setTimeout(() => {
         chargesOrder[mode] = rec.chargesOrder || null;
@@ -2570,6 +2644,8 @@ function editRecord(target, mode, idx) {
     editingRecord = { target, mode, index: idx, originalQN: rec.quoteNumber };
     hasUnsavedChanges[mode] = false;
 }
+
+
 
 function duplicateQuote(target, mode, idx) {
     const rec = db[target][mode][idx];
@@ -2604,24 +2680,39 @@ function renderRecords(target) {
     const counterId = target === 'drafts' ? 'drafts-counters' : 'rates-counters';
     const countersEl = document.getElementById(counterId);
     if (countersEl) {
-        const seaC = db[target].sea.length, airC = db[target].air.length, lclC = db[target].lcl.length;
+        let seaC = 0, airC = 0, lclC = 0, rrC = 0;
+        if (target === 'drafts') {
+            seaC = (db.drafts.sea || []).length;
+            airC = (db.drafts.air || []).length;
+            lclC = (db.drafts.lcl || []).length;
+            rrC = (db.drafts.rr || []).length;
+        } else {
+            seaC = (db.rates.sea || []).length;
+            airC = (db.rates.air || []).length;
+            lclC = (db.rates.lcl || []).length;
+        }
         const prefix = target === 'drafts' ? 'Draft' : 'Quoted';
         countersEl.innerHTML = `
             <div class="counter-card sea"><div class="counter-label">🚢 ${prefix} Sea</div><div class="counter-value">${seaC}</div></div>
             <div class="counter-card air"><div class="counter-label">✈️ ${prefix} Air</div><div class="counter-value">${airC}</div></div>
             <div class="counter-card lcl"><div class="counter-label">📦 ${prefix} LCL</div><div class="counter-value">${lclC}</div></div>
-            <div class="counter-card" style="border-color:#8b5cf6;"><div class="counter-label">📊 Total</div><div class="counter-value">${seaC+airC+lclC}</div></div>
+            ${target === 'drafts' ? `<div class="counter-card" style="border-color:#ec4899;"><div class="counter-label">📩 ${prefix} RR</div><div class="counter-value">${rrC}</div></div>` : ''}
+            <div class="counter-card" style="border-color:#8b5cf6;"><div class="counter-label">📊 Total</div><div class="counter-value">${seaC + airC + lclC + (target === 'drafts' ? rrC : 0)}</div></div>
         `;
     }
     const searchText = (document.getElementById(`${target}-search-text`)?.value || '').toLowerCase();
     const searchQN = (document.getElementById(`${target}-search-qn`)?.value || '').toLowerCase();
     const searchDate = document.getElementById(`${target}-search-date`)?.value || '';
     const marginFilter = target === 'rates' ? (document.getElementById('rates-margin-filter')?.value || '') : '';
-    ['sea', 'air', 'lcl'].forEach(mode => {
+    
+    const modes = target === 'drafts' ? ['sea', 'air', 'lcl', 'rr'] : ['sea', 'air', 'lcl'];
+    
+    modes.forEach(mode => {
         const list = document.getElementById(`${target}-${mode}-list`);
-        let records = [...db[target][mode]];
+        if (!list) return;
+        let records = [...(db[target] && db[target][mode] ? db[target][mode] : [])];
         records = records.filter(r => {
-            const text = `${r.client||''} ${r.pol||''} ${r.pod||''} ${r.carrier||''}`.toLowerCase();
+            const text = `${r.client||''} ${r.pol||''} ${r.pod||''} ${r.carrier||''} ${r.shipper||''}`.toLowerCase();
             if (searchText && !text.includes(searchText)) return false;
             const qn = (r.quoteNumber || '').toLowerCase();
             if (searchQN && !qn.includes(searchQN)) return false;
@@ -2637,21 +2728,35 @@ function renderRecords(target) {
             }
             return true;
         });
-        if (records.length === 0) { list.innerHTML = '<p style="color:var(--text-light);padding:10px;">No records.</p>'; return; }
+        if (records.length === 0) {
+            list.innerHTML = '<p style="color:var(--text-light);padding:10px;">No records.</p>';
+            return;
+        }
         list.innerHTML = records.map(rec => {
             const realIdx = db[target][mode].indexOf(rec);
             const status = rec.followUpStatus || 'PENDING';
             const validity = getValidityStatus(rec.validityDate);
             const lastMod = rec.lastModified ? new Date(rec.lastModified).toLocaleString('en-IN') : new Date(rec.timestamp).toLocaleString('en-IN');
-            return `<div class="record-card highlight-${mode}">
+            const isRR = mode === 'rr';
+            const modeClass = isRR ? 'highlight-rr' : `highlight-${mode}`;
+            const displayName = isRR ? (rec.shipper || rec.client || '?') : (rec.client || '?');
+            const route = isRR ? `${rec.pol || '?'} → ${rec.pod || '?'}` : `${rec.pol || '?'} → ${rec.pod || '?'}`;
+            const carrierDisplay = isRR ? 'RR' : (rec.carrier || '?');
+            
+            let marginInfo = '';
+            if (!isRR) {
+                marginInfo = `<p class="margin-info">Margin: ${formatINR(rec.marginINR)} (${rec.marginPct.toFixed(2)}%)</p>`;
+            }
+            
+            return `<div class="record-card ${modeClass}">
                         <div class="record-info">
-                            <h4>${rec.client||'?'} (${rec.pol||'?'} → ${rec.pod||'?'}) ${validity.status !== 'none' ? `<span class="validity-badge ${validity.class}">${validity.text}</span>` : ''}</h4>
-                            <p>Carrier: ${rec.carrier||'?'} | Status: <strong>${rec.status}</strong> ${rec.lostReason ? `| Lost Reason: <strong style="color:#991b1b;">${rec.lostReason}</strong>` : ''}</p>
-                            <p>Sell: <strong>${formatINR(rec.totalSellINR)}</strong> | Buy: <strong style="color:var(--buy-red);">${formatINR(rec.totalBuyINR)}</strong></p>
-                            <p class="margin-info">Margin: ${formatINR(rec.marginINR)} (${rec.marginPct.toFixed(2)}%)</p>
+                            <h4>${displayName} (${route}) ${validity.status !== 'none' ? `<span class="validity-badge ${validity.class}">${validity.text}</span>` : ''}</h4>
+                            <p>Carrier: ${carrierDisplay} | Status: <strong>${rec.status}</strong> ${rec.lostReason ? `| Lost Reason: <strong style="color:#991b1b;">${rec.lostReason}</strong>` : ''}</p>
+                            ${!isRR ? `<p>Sell: <strong>${formatINR(rec.totalSellINR)}</strong> | Buy: <strong style="color:var(--buy-red);">${formatINR(rec.totalBuyINR)}</strong></p>` : ''}
+                            ${marginInfo}
                             <p class="quote-num">📋 ${rec.quoteNumber||'?'}</p>
                             <p class="last-modified">🕐 Last Modified: ${lastMod}</p>
-                            <div style="margin-top:6px;display:flex;align-items:center;gap:8px;">
+                            ${!isRR ? `<div style="margin-top:6px;display:flex;align-items:center;gap:8px;">
                                 <label style="font-size:0.72rem;font-weight:700;color:var(--text-light);">ACTION:</label>
                                 <select class="follow-up-select follow-up-${status.toLowerCase().replace('-','')}" onchange="setFollowUpStatus('${target}','${mode}',${realIdx},this.value)">
                                     <option value="PENDING" ${status==='PENDING'?'selected':''}>⏳ Pending</option>
@@ -2660,21 +2765,20 @@ function renderRecords(target) {
                                     <option value="WON" ${status==='WON'?'selected':''}>✅ Won</option>
                                     <option value="LOST" ${status==='LOST'?'selected':''}>❌ Lost</option>
                                 </select>
-                            </div>
+                            </div>` : ''}
                         </div>
-                        <div class="record-actions">
-                            <button class="btn btn-sm btn-preview" onclick="previewSavedRecord('${target}','${mode}',${realIdx})">👁 Preview</button>
-                            <button class="btn btn-sm btn-pdf" onclick="downloadSavedPDF('${target}','${mode}',${realIdx})">📄 PDF</button>
-                            <button class="btn btn-sm btn-email" onclick="emailSavedQuote('${target}','${mode}',${realIdx})">📧 Email</button>
-                            <button class="btn btn-sm btn-duplicate" onclick="duplicateQuote('${target}','${mode}',${realIdx})">📋 Duplicate</button>
-                            <button class="btn btn-sm btn-draft" onclick="editRecord('${target}','${mode}',${realIdx})">✏️ Edit</button>
-                            <button class="btn btn-sm btn-clear" onclick="deleteRecord('${target}','${mode}',${realIdx})">🗑️ Delete</button>
-                            ${status === 'WON' ? `<button class="btn btn-sm btn-success" onclick="convertQuoteToShipmentByIndex('${target}','${mode}',${realIdx})">➕ Add Shipment</button>` : ''}
-                        </div>
+						<div class="record-actions">
+							<button class="btn btn-sm btn-preview" onclick="previewRateRequestDraft('${target}','${mode}',${realIdx})">👁 Preview</button>
+							<button class="btn btn-sm btn-quoted" onclick="convertRRToQuote('${target}','${mode}',${realIdx})">📤 Quote</button>
+							<button class="btn btn-sm btn-duplicate" onclick="duplicateQuote('${target}','${mode}',${realIdx})">📋 Duplicate</button>
+							<button class="btn btn-sm btn-draft" onclick="editRecord('${target}','${mode}',${realIdx})">✏️ Edit</button>
+							<button class="btn btn-sm btn-clear" onclick="deleteRecord('${target}','${mode}',${realIdx})">🗑️ Delete</button>
+						</div>
                     </div>`;
         }).join('');
     });
 }
+
 // ==================== FOLLOW-UPS ====================
 function renderFollowups() {
     const list = document.getElementById('followup-list');
@@ -3619,39 +3723,12 @@ function bulkImport() {
 // ==================== BACKUP FUNCTIONS ====================
 
 function startAutoBackup() {
-    if (window.location.protocol === 'file:') {
-        const statusEl = document.getElementById('auto-backup-status');
-        if (statusEl) statusEl.textContent = '⏸️ Auto-backup disabled on file:// (use http://localhost)';
-        return;
-    }
-
-    if (autoBackupInterval) clearInterval(autoBackupInterval);
-    autoBackupInterval = setInterval(() => {
-        if (backupFolderHandle) {
-            autoBackupToFolder();
-        } else {
-            console.warn('⚠️ No folder handle – auto-backup skipped. Click "Browse Folder" to select one.');
-            const statusEl = document.getElementById('backup-status');
-            statusEl.textContent = '⏳ Waiting for folder selection...';
-            statusEl.className = 'backup-status';
-        }
-    }, 60000);
-
-    const statusEl = document.getElementById('auto-backup-status');
-    if (statusEl) statusEl.textContent = '✅ Running (every 1 min) – writing to folder';
-}
-
-
-async function autoBackup() {
-    if (window.location.protocol === 'file:') {
-        alert('Auto-backup is disabled on file://. Please use http://localhost for folder writing.');
-        return;
-    }
-    if (backupFolderHandle) {
-        await autoBackupToFolder();
-    } else {
-        alert('No folder selected. Click "Browse Folder" first.');
-    }
+  if (autoBackupInterval) clearInterval(autoBackupInterval);
+  autoBackupInterval = setInterval(async () => {
+    await autoBackup();
+  }, 60000);
+  const statusEl = document.getElementById('auto-backup-status');
+  if (statusEl) statusEl.textContent = '✅ Running (every 1 min) – writing to folder';
 }
 
 
@@ -4171,11 +4248,13 @@ function fallbackCopyText(text) {
     textarea.select();
     document.execCommand('copy');
     document.body.removeChild(textarea);
-    alert('✅ Copied as plain text (formatting may not be preserved).');
 }
 
 function sendEmail() {
-    if (!currentEmailData) return alert('No data to send.');
+    if (!currentEmailData) {
+        alert('No data to send.');
+        return;
+    }
 
     const to = document.getElementById('email-to').value.trim();
     if (!to) {
@@ -4184,32 +4263,54 @@ function sendEmail() {
     }
     const cc = document.getElementById('email-cc').value.trim();
     const subject = document.getElementById('email-subject').value.trim();
-    const htmlContent = currentEmailData.htmlContent; // already compact HTML
+    const htmlContent = currentEmailData.htmlContent;
 
-    // 1. Copy compact HTML + plain text (same as copyEmailCompact)
+    // Helper to open Outlook and copy HTML
     const copyAndOpenOutlook = () => {
+        // Build mailto link with recipient, subject, and body (plain text fallback)
         let mailtoLink = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent('HTML content is copied to your clipboard. Please paste it into the email body (use Ctrl+V or "Insert as HTML" in Outlook).')}`;
         if (cc) mailtoLink += `&cc=${encodeURIComponent(cc)}`;
         window.open(mailtoLink, '_blank');
+
+        // ✅ NEW: Auto‑save draft if this is a Rate Request
+        if (currentEmailData.mode === 'raterequest') {
+            const data = currentEmailData.data;
+            if (data && data.pol && data.pod) {
+                // The quote number should already be set in the data
+                saveRateRequestDraftWithData(data);
+                console.log('📩 Rate Request auto‑saved as draft with quote:', data.quoteNumber);
+                // Optionally show a brief notification
+                setTimeout(() => {
+                    alert('✅ Rate Request draft saved automatically with Quote No: ' + data.quoteNumber);
+                }, 500);
+            }
+        }
+
         closeModal('emailModal');
-        alert('✅ HTML copied to clipboard. A new email window will open. Paste the HTML into the body.');
     };
 
+    // --- Try Clipboard API with HTML support ---
     if (navigator.clipboard && navigator.clipboard.write) {
         const blobHTML = new Blob([htmlContent], { type: 'text/html' });
-        const blobPlain = new Blob([currentEmailData.data.client || 'Quotation'], { type: 'text/plain' });
+        const blobPlain = new Blob([currentEmailData.data?.client || 'Quotation'], { type: 'text/plain' });
         const clipboardItem = new ClipboardItem({
             'text/html': blobHTML,
             'text/plain': blobPlain
         });
         navigator.clipboard.write([clipboardItem])
-            .then(copyAndOpenOutlook)
+            .then(function() {
+                // Success: copy done, now open Outlook
+                copyAndOpenOutlook();
+            })
             .catch(function(err) {
-                console.error('Clipboard API failed:', err);
+                console.warn('Clipboard API error, falling back:', err);
+                // Fallback: copy as plain text
                 fallbackCopyText(htmlContent);
+                // Still open Outlook
                 copyAndOpenOutlook();
             });
     } else {
+        // Fallback for older browsers
         fallbackCopyText(htmlContent);
         copyAndOpenOutlook();
     }
@@ -8378,6 +8479,18 @@ function init() {
         startAutoBackup();
         document.getElementById('backup-folder-path').textContent = `📁 ${backupFolderHandle.name}`;
     }
+	
+		document.querySelector('#raterequest').addEventListener('input', function(e) {
+		if (e.target.closest('.form-section')) {
+			hasUnsavedChanges.rr = true;
+		}
+	});
+	document.querySelector('#raterequest').addEventListener('change', function(e) {
+		if (e.target.closest('.form-section')) {
+			hasUnsavedChanges.rr = true;
+		}
+	});
+	
 	document.getElementById('backup-folder-path-input').removeAttribute('readonly');
     console.log('🚢 Gateway EXIM Freight Quotation System loaded successfully.');
     console.log(
@@ -10607,9 +10720,9 @@ function buildCompactEmailHTML(data, mode) {
 
 
     let html = `<div style="max-width:${maxTableWidth};min-width:${tableWidth};width:auto;margin:0 auto;font-family:${fontStack};background:#ffffff;padding:4px;box-sizing:border-box;color:#1a1a1a;font-size:${dataSize};">
-        <p style="margin:0 0 4px 0;font-size:${titleSize};line-height:1.4;">Dear Sir/Madam,</p>
+        <p style="margin:0 0 4px 0;font-size:${titleSize};line-height:1.4;">Dear Sir / Madam,</p>
         <br>
-        <p style="margin:0 0 10px 0;font-size:${titleSize};line-height:1.4;">Good Day !</p>
+        <p style="margin:0 0 10px 0;font-size:${titleSize};line-height:1.4;">Good day !</p>
         <div style="font-size:${titleSize};font-weight:800;color:#1e3a8a;">${modeLabel} QUOTATION / Quote: ${data.quoteNumber || 'DRAFT'}</div>
         <br>
 
@@ -12296,7 +12409,7 @@ function loadBackupPath() {
 
     if (inputEl) inputEl.value = path;
 
-    if (window.location.protocol !== 'file:' && typeof getFolderHandle === 'function') {
+    if (typeof getFolderHandle === 'function') {
         getFolderHandle().then(handle => {
             backupFolderHandle = handle;
             if (displayEl) {
@@ -12622,184 +12735,112 @@ function bulkExportCarrierCharges() {
 
 // ===== 1. selectBackupFolder – stores ONLY the handle, does NOT change the saved path =====
 async function selectBackupFolder() {
-    if (window.location.protocol === 'file:') {
-        alert(
-            '🔒 You are on "file://" – folder selection is blocked.\n\n' +
-            '👉 To enable real folder writing (no downloads):\n' +
-            '   1. Open a terminal in this folder.\n' +
-            '   2. Run: python -m http.server 8000\n' +
-            '   3. Open http://localhost:8000 in your browser.\n\n' +
-            'Then click "Browse Folder" again.\n\n' +
-            'For now, use "Export to JSON" or "Export to SQLite" for manual backups.'
-        );
-        return;
-    }
-
-    if (typeof window.showDirectoryPicker !== 'function') {
-        alert('Your browser does not support the Folder Picker API. Please use Chrome, Edge, or Opera.');
-        return;
-    }
-
-    try {
-        const folder = await window.showDirectoryPicker();
-        const permission = await folder.requestPermission({ mode: 'readwrite' });
-        if (permission !== 'granted') {
-            alert('Permission denied.');
-            return;
-        }
-        backupFolderHandle = folder;
-        await storeFolderHandle(folder);
-
-        const displayEl = document.getElementById('backup-folder-path');
-        if (displayEl) {
-            displayEl.textContent = `📁 ${folder.name} (auto-write enabled)`;
-        }
-        alert('✅ Folder selected! Auto‑backup will now write directly to this folder – no downloads!');
-        if (!autoBackupInterval) {
-            startAutoBackup();
-        }
-    } catch (e) {
-        if (e.name !== 'AbortError') {
-            console.error('Folder selection error:', e);
-            alert('Folder selection failed: ' + e.message);
-        }
-    }
+  alert('Please type the folder path in the input box and click "Save Path".');
 }
 
 
 
 // ===== 2. saveBackupPath – stores the typed path exactly as entered =====
 function saveBackupPath() {
-    const inputEl = document.getElementById('backup-folder-path-input');
-    const path = inputEl ? inputEl.value.trim() : '';
-    if (!path) {
-        alert('Please enter a folder path.');
-        return;
-    }
-    db.backupFolderPath = path;
-    saveDB();
-
-    const displayEl = document.getElementById('backup-folder-path');
-    if (displayEl) {
-        displayEl.textContent = `📁 ${path} (path saved)`;
-    }
-    alert('✅ Path saved. On http://localhost, this folder will be used for auto-backup.');
-    if (window.location.protocol !== 'file:' && !autoBackupInterval) {
-        startAutoBackup();
-    }
+  const inputEl = document.getElementById('backup-folder-path-input');
+  const path = inputEl ? inputEl.value.trim() : '';
+  if (!path) {
+    alert('Please enter a folder path.');
+    return;
+  }
+  db.backupFolderPath = path;
+  saveDB();
+  const displayEl = document.getElementById('backup-folder-path');
+  if (displayEl) {
+    displayEl.textContent = `📁 ${path} (path saved)`;
+  }
+  alert('✅ Path saved. Auto-backup will write directly to this folder.');
+  // startAutoBackup() already running, no need to call again
 }
 
 // ===== 3. loadBackupPath – restores the saved path and the handle =====
 function loadBackupPath() {
-    const path = db.backupFolderPath || '';
-    const inputEl = document.getElementById('backup-folder-path-input');
-    const displayEl = document.getElementById('backup-folder-path');
-
-    if (inputEl) inputEl.value = path;
-
-    // Only try to restore handle if NOT on file://
-    if (window.location.protocol !== 'file:' && typeof getFolderHandle === 'function') {
-        getFolderHandle().then(handle => {
-            backupFolderHandle = handle;
-            if (displayEl) {
-                displayEl.textContent = handle
-                    ? `📁 ${path || 'Selected folder'} (auto-write enabled)`
-                    : path ? `📁 ${path} (path saved)` : 'No folder selected';
-            }
-            if (handle && !autoBackupInterval) startAutoBackup();
-        }).catch(() => {
-            if (displayEl) {
-                displayEl.textContent = path ? `📁 ${path} (path saved)` : 'No folder selected';
-            }
-        });
-    } else {
-        // On file:// – just show the path
-        if (displayEl) {
-            displayEl.textContent = path ? `📁 ${path} (path saved)` : 'No folder selected';
-        }
-        // Do NOT start auto-backup on file://
-    }
+  const path = db.backupFolderPath || '';
+  const inputEl = document.getElementById('backup-folder-path-input');
+  const displayEl = document.getElementById('backup-folder-path');
+  if (inputEl) inputEl.value = path;
+  if (displayEl) {
+    displayEl.textContent = path ? `📁 ${path} (path saved)` : 'No folder selected';
+  }
 }
 
 
-
-
-
-// ==== REPLACE autoBackupToFolder ====
+// ===== REPLACE autoBackupToFolder with this =====
 async function autoBackupToFolder() {
-    try {
-        if (!backupFolderHandle) {
-            throw new Error('No folder handle available');
-        }
-        const permission = await backupFolderHandle.requestPermission({ mode: 'readwrite' });
-        if (permission !== 'granted') {
-            throw new Error('Permission revoked');
-        }
+  try {
+    if (typeof window.require === 'function') {
+      const path = window.require('path');
+      const fs = window.require('fs');
+      const backupPath = db.backupFolderPath || '';
+      
+      if (!backupPath) {
+        await fallbackBackupDownload();
+        return;
+      }
 
-        const backupData = {
-            timestamp: new Date().toISOString(),
-            data: db
-        };
-        const json = JSON.stringify(backupData, null, 2);
-        const blob = new Blob([json], { type: 'application/json' });
-        const fileName = `Gateway_EXIM_AutoBackup_${new Date().toISOString().split('T')[0]}.json`;
+      const fileName = `Gateway_EXIM_AutoBackup_${new Date().toISOString().split('T')[0]}.json`;
+      const fullPath = path.join(backupPath, fileName);
+      const backupData = { timestamp: new Date().toISOString(), data: db };
 
-        const fileHandle = await backupFolderHandle.getFileHandle(fileName, { create: true });
-        const writable = await fileHandle.createWritable();
-        await writable.write(blob);
-        await writable.close();
+      const dir = path.dirname(fullPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(fullPath, JSON.stringify(backupData, null, 2), 'utf-8');
 
-        db.lastBackup = new Date().toISOString();
-        saveDB();
-
-        const statusEl = document.getElementById('backup-status');
-        statusEl.textContent = `✅ Last backup: ${new Date().toLocaleString('en-IN')} (written to folder)`;
-        statusEl.className = 'backup-status success';
-        console.log('✅ Auto-backup written to folder:', fileName);
-    } catch (e) {
-        console.error('Folder backup failed:', e);
-        const statusEl = document.getElementById('backup-status');
-        statusEl.textContent = `❌ Backup failed: ${e.message}`;
-        statusEl.className = 'backup-status error';
-        // 🔴 NO DOWNLOAD FALLBACK – just show error
+      db.lastBackup = new Date().toISOString();
+      saveDB();
+      const statusEl = document.getElementById('backup-status');
+      statusEl.textContent = `✅ Last backup: ${new Date().toLocaleString('en-IN')} (saved to ${fullPath})`;
+      statusEl.className = 'backup-status success';
+    } else {
+      await fallbackBackupDownload();
     }
+  } catch (e) {
+    console.error('Folder backup failed:', e);
+    await fallbackBackupDownload();
+  }
 }
 
 
 // ==== REPLACE fallbackBackupDownload ====
 async function fallbackBackupDownload() {
-    try {
-        const backupData = { timestamp: new Date().toISOString(), data: db };
-        const json = JSON.stringify(backupData, null, 2);
-        const blob = new Blob([json], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Gateway_EXIM_AutoBackup_${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        db.lastBackup = new Date().toISOString();
-        saveDB();
-        const statusEl = document.getElementById('backup-status');
-        statusEl.textContent = `✅ Last backup: ${new Date().toLocaleString('en-IN')} (download fallback)`;
-        statusEl.className = 'backup-status success';
-    } catch (e) {
-        console.error('Fallback download also failed:', e);
-        const statusEl = document.getElementById('backup-status');
-        statusEl.textContent = `❌ Backup failed: ${e.message}`;
-        statusEl.className = 'backup-status error';
-    }
+  try {
+    const backupData = { timestamp: new Date().toISOString(), data: db };
+    const json = JSON.stringify(backupData, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Gateway_EXIM_AutoBackup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    db.lastBackup = new Date().toISOString();
+    saveDB();
+    const statusEl = document.getElementById('backup-status');
+    statusEl.textContent = `✅ Last backup: ${new Date().toLocaleString('en-IN')} (download fallback)`;
+    statusEl.className = 'backup-status success';
+  } catch (e) {
+    console.error('Fallback download failed:', e);
+    const statusEl = document.getElementById('backup-status');
+    statusEl.textContent = `❌ Backup failed: ${e.message}`;
+    statusEl.className = 'backup-status error';
+  }
 }
 
 // ==== REPLACE autoBackup (the manual trigger) ====
 async function autoBackup() {
-    if (backupFolderHandle) {
-        await autoBackupToFolder();
-    } else {
-        await fallbackBackupDownload();
-    }
+  // DIRECTLY check path – NO backupFolderHandle check
+  if (db.backupFolderPath) {
+    await autoBackupToFolder();
+  } else {
+    await fallbackBackupDownload();
+  }
 }
 
 // ============ INDEXEDDB HELPERS (Robust) ============
@@ -12866,4 +12907,661 @@ function getFolderHandle() {
         };
         request.onerror = () => resolve(null);
     });
+}
+
+
+
+// RATES REQUEST //
+
+function populateRateRequestDropdowns() {
+    const pols = db.pol.filter(p => !(db.hiddenItems.pol || []).includes(p)).sort();
+    const pods = db.pod.filter(p => !(db.hiddenItems.pod || []).includes(p)).sort();
+    const containers = db.containers.filter(c => !(db.hiddenItems.containers || []).includes(c)).sort();
+    const defaultInv = '20 GP & 40 HC';
+    if (!containers.includes(defaultInv)) containers.unshift(defaultInv);
+
+    const formatSuffixes = ['sea1', 'sea2', 'air'];
+    formatSuffixes.forEach(suffix => {
+        // Populate POL datalist
+        const polList = document.getElementById(`rr-pol-list-${suffix}`);
+        if (polList) polList.innerHTML = pols.map(p => `<option value="${p}">`).join('');
+
+        // Populate POD datalist
+        const podList = document.getElementById(`rr-pod-list-${suffix}`);
+        if (podList) podList.innerHTML = pods.map(p => `<option value="${p}">`).join('');
+
+        // Populate INVENTORY dropdown (only for SEA formats)
+        const invEl = document.getElementById(`rr-inventory-${suffix}`);
+        if (invEl && suffix !== 'air') {
+            invEl.innerHTML = containers.map(c => `<option value="${c}" ${c === defaultInv ? 'selected' : ''}>${c}</option>`).join('');
+        }
+    });
+
+    // Set default values
+    const company = db.companyName || 'GATEWAY EXIM';
+    const fwd1 = document.getElementById('rr-forwarder-sea1');
+    const fwd2 = document.getElementById('rr-forwarder-sea2');
+    if (fwd1) fwd1.value = company;
+    if (fwd2) fwd2.value = company;
+
+    const validity1 = document.getElementById('rr-validity-sea1');
+    const validity2 = document.getElementById('rr-validity-sea2');
+    const endOfMonth = getEndOfMonthDate();
+    if (validity1) validity1.value = endOfMonth;
+    if (validity2) validity2.value = endOfMonth;
+
+    const clearance = document.getElementById('rr-clearance-air');
+    if (clearance) clearance.value = 'INQUIRY';
+}
+
+// Switch between formats
+function switchRateRequestFormat(format) {
+    currentRateRequestFormat = format;
+    document.querySelectorAll('#raterequest .form-section[id^="rr-format-"]').forEach(el => el.style.display = 'none');
+    const target = document.getElementById(`rr-format-${format}`);
+    if (target) target.style.display = 'block';
+    document.querySelectorAll('#raterequest .tab-heading .btn').forEach(btn => btn.classList.remove('active'));
+    const btns = document.querySelectorAll('#raterequest .tab-heading .btn');
+    const map = { 'seaWithShipper': 0, 'seaWithoutShipper': 1, 'air': 2 };
+    if (map[format] !== undefined && btns[map[format]]) {
+        btns[map[format]].classList.add('active');
+    }
+    populateRateRequestDropdowns();
+}
+
+
+function getRateRequestData(format) {
+    const getVal = (id) => {
+        const el = document.getElementById(id);
+        const val = el ? el.value : '';
+        console.log(`📌 getVal(${id}) = "${val}"`);
+        return val;
+    };
+    const getSel = (id) => {
+        const el = document.getElementById(id);
+        const val = el ? el.value : '';
+        console.log(`📌 getSel(${id}) = "${val}"`);
+        return val;
+    };
+
+    let data = { format: format };
+
+    if (format === 'seaWithShipper') {
+        data.shipper = getVal('rr-shipper');
+        data.forwarder = getVal('rr-forwarder-sea1');
+        data.pol = getVal('rr-pol-sea1');
+        data.pod = getVal('rr-pod-sea1');
+        data.commodity = getSel('rr-commodity-sea1');
+        data.inventory = getSel('rr-inventory-sea1');
+        data.weight = getVal('rr-weight-sea1');
+        data.term = getSel('rr-term-sea1');
+        data.validity = getVal('rr-validity-sea1');
+        data.freeTime = getSel('rr-freeTime-sea1');
+    } else if (format === 'seaWithoutShipper') {
+        data.forwarder = getVal('rr-forwarder-sea2');
+        data.pol = getVal('rr-pol-sea2');
+        data.pod = getVal('rr-pod-sea2');
+        data.commodity = getSel('rr-commodity-sea2');
+        data.inventory = getSel('rr-inventory-sea2');
+        data.weight = getVal('rr-weight-sea2');
+        data.term = getSel('rr-term-sea2');
+        data.validity = getVal('rr-validity-sea2');
+        data.freeTime = getSel('rr-freeTime-sea2');
+    } else if (format === 'air') {
+        data.shipper = getVal('rr-shipper-air');
+        data.pol = getVal('rr-pol-air');
+        data.pod = getVal('rr-pod-air');
+        data.clearance = getVal('rr-clearance-air');
+        data.commodity = getSel('rr-commodity-air');
+        data.weight = getVal('rr-weight-air');
+        data.packaging = getVal('rr-packaging-air');
+        data.pallet = getSel('rr-pallet-air');
+        data.dimension = getVal('rr-dimension-air');
+        data.temp = getSel('rr-temp-air');
+    }
+    return data;
+}
+
+function buildRateRequestEmail(data) {
+    const format = data.format;
+    const company = db.companyName || 'GATEWAY EXIM';
+    let html = `<div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:20px;background:#ffffff;color:#1a1a1a;">
+        <h2 style="color:#1e3a8a;border-bottom:2px solid #1e3a8a;padding-bottom:8px;">📩 Rate Request</h2>
+        <table style="width:100%;border-collapse:collapse;font-size:14px;">`;
+
+    if (format === 'seaWithShipper') {
+        html += `
+            <tr><td style="padding:6px 8px;font-weight:bold;">SHIPPER</td><td style="padding:6px 8px;">${data.shipper || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">FORWARDER</td><td style="padding:6px 8px;">${data.forwarder || company}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">POL</td><td style="padding:6px 8px;">${data.pol || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">POD</td><td style="padding:6px 8px;">${data.pod || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">COMMODITY</td><td style="padding:6px 8px;">${data.commodity || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">INVENTORY</td><td style="padding:6px 8px;">${data.inventory || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">GROSS WEIGHT</td><td style="padding:6px 8px;">${data.weight ? data.weight + ' Kgs' : '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">FREIGHT TERM</td><td style="padding:6px 8px;">${data.term || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">VALIDITY</td><td style="padding:6px 8px;">${data.validity || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">DEST. FREE TIME</td><td style="padding:6px 8px;">${data.freeTime || '-'}</td></tr>
+        `;
+    } else if (format === 'seaWithoutShipper') {
+        html += `
+            <tr><td style="padding:6px 8px;font-weight:bold;">FORWARDER</td><td style="padding:6px 8px;">${data.forwarder || company}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">POL</td><td style="padding:6px 8px;">${data.pol || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">POD</td><td style="padding:6px 8px;">${data.pod || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">COMMODITY</td><td style="padding:6px 8px;">${data.commodity || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">INVENTORY</td><td style="padding:6px 8px;">${data.inventory || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">GROSS WEIGHT</td><td style="padding:6px 8px;">${data.weight ? data.weight + ' Kgs' : '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">FREIGHT TERM</td><td style="padding:6px 8px;">${data.term || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">VALIDITY</td><td style="padding:6px 8px;">${data.validity || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">DEST. FREE TIME</td><td style="padding:6px 8px;">${data.freeTime || '-'}</td></tr>
+        `;
+    } else if (format === 'air') {   // ✅ FIXED: was 'general'
+        html += `
+            <tr><td style="padding:6px 8px;font-weight:bold;">SHIPPER</td><td style="padding:6px 8px;">${data.shipper || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">POL</td><td style="padding:6px 8px;">${data.pol || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">POD</td><td style="padding:6px 8px;">${data.pod || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">CLEARANCE DATE</td><td style="padding:6px 8px;">${data.clearance || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">COMMODITY</td><td style="padding:6px 8px;">${data.commodity || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">GROSS WEIGHT</td><td style="padding:6px 8px;">${data.weight ? data.weight + ' Kgs' : '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">PACKAGING</td><td style="padding:6px 8px;">${data.packaging || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">PALLETIZED OR LOOSE</td><td style="padding:6px 8px;">${data.pallet || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">DIMENSION (L x W x H)</td><td style="padding:6px 8px;">${data.dimension || '-'}</td></tr>
+            <tr><td style="padding:6px 8px;font-weight:bold;">TEMP CARGO</td><td style="padding:6px 8px;">${data.temp || '-'}</td></tr>
+        `;
+    }
+    html += `</table>
+        <p style="margin-top:16px;font-size:12px;color:#64748b;text-align:center;">Generated on ${new Date().toLocaleString('en-IN')}</p>
+    </div>`;
+    return html;
+}
+
+
+
+
+function clearRateRequestForm(format) {
+    const ids = {
+        'seaWithShipper': ['rr-shipper', 'rr-forwarder-sea1', 'rr-pol-sea1', 'rr-pod-sea1', 'rr-commodity-sea1', 'rr-inventory-sea1', 'rr-weight-sea1', 'rr-term-sea1', 'rr-validity-sea1', 'rr-freeTime-sea1'],
+        'seaWithoutShipper': ['rr-forwarder-sea2', 'rr-pol-sea2', 'rr-pod-sea2', 'rr-commodity-sea2', 'rr-inventory-sea2', 'rr-weight-sea2', 'rr-term-sea2', 'rr-validity-sea2', 'rr-freeTime-sea2'],
+        'air': ['rr-shipper-air', 'rr-pol-air', 'rr-pod-air', 'rr-clearance-air', 'rr-commodity-air', 'rr-weight-air', 'rr-packaging-air', 'rr-pallet-air', 'rr-dimension-air', 'rr-temp-air']
+    };
+    const fieldIds = ids[format] || [];
+    fieldIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            if (el.tagName === 'SELECT') el.selectedIndex = 0;
+            else if (el.type === 'number') el.value = '';
+            else if (el.type === 'text' || el.type === 'date') el.value = '';
+        }
+    });
+    // Reset defaults
+    if (format === 'seaWithShipper' || format === 'seaWithoutShipper') {
+        const suffix = format === 'seaWithShipper' ? 'sea1' : 'sea2';
+        document.getElementById(`rr-validity-${suffix}`).value = getEndOfMonthDate();
+        document.getElementById(`rr-weight-${suffix}`).value = 25500;
+        document.getElementById(`rr-forwarder-${suffix}`).value = db.companyName || 'GATEWAY EXIM';
+        document.getElementById(`rr-term-${suffix}`).value = 'PREPAID';
+        document.getElementById(`rr-freeTime-${suffix}`).value = '14 Days';
+    }
+    if (format === 'air') {
+        document.getElementById('rr-clearance-air').value = 'INQUIRY';
+        document.getElementById('rr-pallet-air').value = 'PALLETIZED';
+        document.getElementById('rr-temp-air').value = 'NORMAL';
+    }
+}
+
+
+function getEndOfMonthDate() {
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    return lastDay.toISOString().split('T')[0];
+}
+
+
+function buildRateRequestPreviewHTML(data) {
+    const format = data.format;
+    const company = db.companyName || 'GATEWAY EXIM';
+    const userName = getLoggedInUserName() || db.defaultUser || 'N/A';
+    
+    let rows = [];
+    if (format === 'seaWithShipper') {
+        rows = [
+            ['SHIPPER', data.shipper || '-'],
+            ['POL', data.pol || '-'],
+            ['FORWARDER', data.forwarder || company],
+            ['POD', data.pod || '-'],
+            ['INVENTORY', data.inventory || '-'],
+            ['COMMODITY', data.commodity || '-'],
+            ['GROSS WEIGHT', data.weight ? data.weight + ' Kgs' : '-'],
+            ['VALIDITY', data.validity || '-'],
+            ['FREIGHT TERM', data.term || '-'],
+            ['DEST. FREE TIME', data.freeTime || '-']
+        ];
+    } else if (format === 'seaWithoutShipper') {
+        rows = [
+            ['POL', data.pol || '-'],
+            ['FORWARDER', data.forwarder || company],
+            ['POD', data.pod || '-'],
+            ['INVENTORY', data.inventory || '-'],
+            ['COMMODITY', data.commodity || '-'],
+            ['GROSS WEIGHT', data.weight ? data.weight + ' Kgs' : '-'],
+            ['VALIDITY', data.validity || '-'],
+            ['FREIGHT TERM', data.term || '-'],
+            ['DEST. FREE TIME', data.freeTime || '-']
+        ];
+    } else if (format === 'air') {   // ✅ FIXED: was 'general'
+        rows = [
+            ['SHIPPER', data.shipper || '-'],
+            ['POL', data.pol || '-'],
+            ['POD', data.pod || '-'],
+            ['CLEARANCE DATE', data.clearance || '-'],
+            ['COMMODITY', data.commodity || '-'],
+            ['GROSS WEIGHT', data.weight ? data.weight + ' Kgs' : '-'],
+            ['PACKAGING', data.packaging || '-'],
+            ['PALLETIZED OR LOOSE', data.pallet || '-'],
+            ['DIMENSION (L x W x H)', data.dimension || '-'],
+            ['TEMP CARGO', data.temp || '-']
+        ];
+    }
+
+    let rowsHtml = rows.map(([label, value]) => `
+        <tr>
+            <td style="border:1px solid #d1d5db;padding:4px 7px;font-weight:700;width:30%;background:#f8fafc;">${label}</td>
+            <td style="border:1px solid #d1d5db;padding:4px 7px;width:70%;">${value}</td>
+        </tr>
+    `).join('');
+
+    let html = `
+    <div style="background:#ffffff;color:#1a1a1a;font-family:'Segoe UI',Arial,sans-serif;max-width:100%;margin:0 auto;padding:10px;box-sizing:border-box;">
+        <div style="border-bottom:2px solid #1e3a8a;padding-bottom:6px;margin-bottom:8px;">
+            <div style="font-size:0.9rem;font-weight:700;color:#1e3a8a;">${company}</div>
+            <div style="font-size:0.65rem;color:#64748b;">${db.companyAddress || ''}</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+            <div style="text-align:left;">
+                <div style="font-size:1.2rem;color:#1e3a8a;font-weight:800;letter-spacing:1px;">📩 RATE REQUEST</div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-family:'Courier New',monospace;color:#d97706;font-weight:700;font-size:0.85rem;background:#fffbeb;padding:4px 10px;border-radius:4px;">${new Date().toLocaleDateString('en-IN')}</div>
+            </div>
+        </div>
+        <p style="font-size:0.85rem;color:#1a1a1a;margin:4px 0 10px 0;">Please assist to quote the rates as per below.</p>
+        <table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
+            <thead>
+                <tr><th colspan="2" style="background:#1e3a8a;color:white;padding:4px 7px;font-size:0.78rem;text-align:center;">Rate Request Details</th></tr>
+            </thead>
+            <tbody>
+                ${rowsHtml}
+            </tbody>
+        </table>
+    </div>`;
+    return html;
+}
+
+
+
+function buildRateRequestCompactEmailHTML(data) {
+    const format = data.format;
+    const company = db.companyName || 'GATEWAY EXIM';
+    
+    // Build rows based on format
+    let rows = [];
+    if (format === 'seaWithShipper') {
+        rows = [
+            ['SHIPPER', data.shipper || '-'],
+            ['POL', data.pol || '-'],
+            ['FORWARDER', data.forwarder || company],
+            ['POD', data.pod || '-'],
+            ['INVENTORY', data.inventory || '-'],
+            ['COMMODITY', data.commodity || '-'],
+            ['GROSS WEIGHT', data.weight ? data.weight + ' Kgs' : '-'],
+            ['VALIDITY', data.validity || '-'],
+            ['FREIGHT TERM', data.term || '-'],
+            ['DEST. FREE TIME', data.freeTime || '-']
+        ];
+    } else if (format === 'seaWithoutShipper') {
+        rows = [
+            ['POL', data.pol || '-'],
+            ['FORWARDER', data.forwarder || company],
+            ['POD', data.pod || '-'],
+            ['INVENTORY', data.inventory || '-'],
+            ['COMMODITY', data.commodity || '-'],
+            ['GROSS WEIGHT', data.weight ? data.weight + ' Kgs' : '-'],
+            ['VALIDITY', data.validity || '-'],
+            ['FREIGHT TERM', data.term || '-'],
+            ['DEST. FREE TIME', data.freeTime || '-']
+        ];
+    } else if (format === 'air') {
+        rows = [
+            ['SHIPPER', data.shipper || '-'],
+            ['POL', data.pol || '-'],
+            ['POD', data.pod || '-'],
+            ['CLEARANCE DATE', data.clearance || '-'],
+            ['COMMODITY', data.commodity || '-'],
+            ['GROSS WEIGHT', data.weight ? data.weight + ' Kgs' : '-'],
+            ['PACKAGING', data.packaging || '-'],
+            ['PALLETIZED OR LOOSE', data.pallet || '-'],
+            ['DIMENSION (L x W x H)', data.dimension || '-'],
+            ['TEMP CARGO', data.temp || '-']
+        ];
+    }
+
+    let rowsHtml = rows.map(([label, value]) => `
+        <tr>
+            <td style="border:1px solid #d1d5db;padding:4px 8px;font-weight:700;width:30%;background:#f8fafc;">${label}</td>
+            <td style="border:1px solid #d1d5db;padding:4px 8px;width:70%;">${value}</td>
+        </tr>
+    `).join('');
+
+    // Build full HTML
+    let html = `<div style="font-family:'Aptos','Segoe UI',Arial,sans-serif;max-width:17cm;min-width:13cm;width:auto;margin:0 auto;background:#ffffff;padding:4px;box-sizing:border-box;color:#1a1a1a;font-size:10px;">
+        <p style="margin:0 0 4px 0;font-size:13px;line-height:1.4;">Dear Sir/Madam,</p>
+        <br>
+        <p style="margin:0 0 10px 0;font-size:13px;line-height:1.4;">Good Day !</p>
+        <p style="font-size:12px;color:#1a1a1a;margin:-4px 0 10px 0;">Please assist to quote the rates as per below.</p>
+        <div style="font-size:13px;font-weight:800;color:#1e3a8a;">RATE REQUEST</div>`;
+
+
+    html += `<br>
+        <table style="width:15cm;min-width:15cm;max-width:100%;border-collapse:collapse;margin-top:0;font-size:10px;">
+            <thead>
+                <tr><th colspan="2" style="border:1px solid #1e3a8a;padding:4px 8px;text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:12px;line-height:1.4;vertical-align:middle;">Rate Request Details</th></tr>
+            </thead>
+            <tbody>
+                ${rowsHtml}
+            </tbody>
+        </table>
+    </div>`;
+    return html;
+}
+
+
+
+function previewRateRequest() {
+    const format = currentRateRequestFormat;
+    const data = getRateRequestData(format);
+    if (!data.pol || !data.pod) {
+        alert('Please select both POL and POD.');
+        return;
+    }
+    // ✅ Store for copy function
+    _previewRRData = data;
+
+    const html = buildRateRequestPreviewHTML(data);
+    document.getElementById('modal-title').textContent = 'Rate Request Preview';
+    document.getElementById('previewBody').innerHTML = `
+        <div style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-info" onclick="copyRateRequestTables()">📋 Copy Tables (Compact)</button>
+        </div>
+        ${html}
+    `;
+    document.getElementById('previewBody').style.background = 'white';
+    openModal('previewModal');
+}
+
+
+function copyRateRequestTables() {
+    // ✅ Use stored data if available, else fetch from form
+    let data = _previewRRData;
+    if (!data) {
+        const format = currentRateRequestFormat;
+        data = getRateRequestData(format);
+        console.log('📊 No stored preview data, fetched from form:', data);
+    } else {
+        console.log('📊 Using stored preview data:', data);
+    }
+
+    if (!data.pol || !data.pod) {
+        alert('⚠️ Please select both POL and POD before copying.');
+        return;
+    }
+
+    const compactHtml = buildRateRequestCompactEmailHTML(data);
+    console.log('📄 HTML built, length:', compactHtml.length);
+
+    if (navigator.clipboard && navigator.clipboard.write) {
+        const blobHTML = new Blob([compactHtml], { type: 'text/html' });
+        const blobPlain = new Blob([`Rate Request - ${data.pol} to ${data.pod}`], { type: 'text/plain' });
+        const clipboardItem = new ClipboardItem({
+            'text/html': blobHTML,
+            'text/plain': blobPlain
+        });
+        navigator.clipboard.write([clipboardItem])
+            .then(() => {
+                alert('✅ Tables copied with formatting!');
+            })
+            .catch(function(err) {
+                console.warn('Clipboard API error:', err);
+                fallbackCopyText(compactHtml);
+                alert('⚠️ Copied as plain text (formatting may be lost).');
+            });
+    } else {
+        fallbackCopyText(compactHtml);
+        alert('✅ Copied as plain text.');
+    }
+}
+
+
+function populateDrumTypesDropdown() {
+    const sel = document.getElementById('rr-drum-type');
+    if (!sel) return;
+    const drums = db.drumTypes || [];
+    sel.innerHTML = '<option value="">Select Drum Type</option>' +
+        drums.map(d => `<option value="${d.id}">${d.name} (${d.length}×${d.width}×${d.height} cm, ${d.weightPerDrum} kg)</option>`).join('');
+}
+
+
+function onDrumTypeChange() {
+    const sel = document.getElementById('rr-drum-type');
+    if (!sel) return;
+    const id = sel.value;
+    if (!id) return;
+    const drum = (db.drumTypes || []).find(d => d.id === id);
+    if (!drum) return;
+    const lEl = document.getElementById('rr-drum-l');
+    const wEl = document.getElementById('rr-drum-w');
+    const hEl = document.getElementById('rr-drum-h');
+    const wtEl = document.getElementById('rr-drum-weight');
+    if (lEl) lEl.value = drum.length || '';
+    if (wEl) wEl.value = drum.width || '';
+    if (hEl) hEl.value = drum.height || '';
+    if (wtEl) wtEl.value = drum.weightPerDrum || '';
+    calculateDrumTotals();
+}
+
+
+function calculateDrumTotals() {
+    const qtyEl = document.getElementById('rr-drum-qty');
+    const wtEl = document.getElementById('rr-drum-weight');
+    const totalEl = document.getElementById('rr-drum-total');
+    if (!qtyEl || !wtEl || !totalEl) return;
+    const qty = parseFloat(qtyEl.value) || 0;
+    const wt = parseFloat(wtEl.value) || 0;
+    const total = qty * wt;
+    totalEl.value = total > 0 ? total.toFixed(2) + ' Kgs' : '0.00 Kgs';
+}
+
+function useDrumWeight() {
+    const totalEl = document.getElementById('rr-drum-total');
+    const gwEl = document.getElementById('rr-gross-weight');
+    if (!gwEl || !totalEl) return;
+    const totalVal = parseFloat(totalEl.value) || 0;
+    if (totalVal > 0) {
+        gwEl.value = totalVal.toFixed(2);
+    } else {
+        alert('Please enter Quantity and Weight per Drum to calculate total.');
+    }
+}
+
+
+
+function sendRateRequestEmail() {
+    const format = currentRateRequestFormat;
+    const data = getRateRequestData(format);
+    if (!data.pol || !data.pod) {
+        alert('Please select both POL and POD.');
+        return;
+    }
+
+    // Generate a unique quote number (using the same logic as the helper)
+    const now = new Date();
+    const base = `RQ-RR-${String(now.getFullYear()).slice(-2)}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+    const all = db.drafts.rr || [];
+    let seq = 1;
+    let qn = base;
+    while (all.some(r => r.quoteNumber === qn)) { seq++; qn = `${base}-${String(seq).padStart(2,'0')}`; }
+    data.quoteNumber = qn;
+
+    // Build email HTML with the quote number
+    const htmlContent = buildRateRequestCompactEmailHTML(data);
+    currentEmailData = { data: data, mode: 'raterequest', htmlContent: htmlContent };
+
+    // Subject with quote number
+    const subject = `RATE REQUEST //  ${qn} //  ${data.pol} TO ${data.pod} ${data.commodity ? '('+data.commodity+')' : ''}`;
+    document.getElementById('email-subject').value = subject;
+    document.getElementById('email-html-preview').innerHTML = htmlContent;
+    openModal('emailModal');
+}
+
+
+
+function saveRateRequestDraft() {
+    const format = currentRateRequestFormat;
+    const data = getRateRequestData(format);
+    if (!data.pol || !data.pod) {
+        alert('Please select both POL and POD.');
+        return;
+    }
+    const qn = saveRateRequestDraftWithData(data);
+    alert(`Rate Request saved as Draft!\nQuote Number: ${qn}`);
+}
+
+
+function saveRateRequestDraftWithData(data) {
+    // If no quote number, generate one
+    if (!data.quoteNumber) {
+        const now = new Date();
+        const base = `RQ-RR-${String(now.getFullYear()).slice(-2)}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+        const all = db.drafts.rr || [];
+        let seq = 1;
+        let qn = base;
+        while (all.some(r => r.quoteNumber === qn)) { seq++; qn = `${base}-${String(seq).padStart(2,'0')}`; }
+        data.quoteNumber = qn;
+    }
+    data.timestamp = new Date().toISOString();
+    data.lastModified = new Date().toISOString();
+    data.mode = 'rr';
+    data.status = 'DRAFT';
+    data.followUpStatus = 'PENDING';
+
+    if (!db.drafts.rr) db.drafts.rr = [];
+    db.drafts.rr.push(data);
+    saveDB();
+    return data.quoteNumber;
+}
+
+function previewRateRequestDraft(target, mode, idx) {
+    const rec = db[target][mode][idx];
+    if (!rec) {
+        alert('Record not found.');
+        return;
+    }
+    let format = 'seaWithShipper';
+    if (rec.clearance !== undefined) format = 'air';
+    else if (rec.shipper && !rec.forwarder) format = 'seaWithShipper';
+    else if (!rec.shipper && rec.forwarder) format = 'seaWithoutShipper';
+    else if (rec.shipper && rec.forwarder) format = 'seaWithShipper';
+    
+    currentRateRequestFormat = format;
+    // ✅ Store for copy function
+    _previewRRData = rec;
+
+    const html = buildRateRequestPreviewHTML(rec);
+    document.getElementById('modal-title').textContent = 'Rate Request Preview';
+    document.getElementById('previewBody').innerHTML = `
+        <div style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-info" onclick="copyRateRequestTables()">📋 Copy Tables (Compact)</button>
+        </div>
+        ${html}
+    `;
+    document.getElementById('previewBody').style.background = 'white';
+    openModal('previewModal');
+}
+
+
+
+function convertRRToQuote(target, mode, idx) {
+    // Get the RR draft data
+    const rrData = db[target][mode][idx];
+    if (!rrData) {
+        alert('Rate Request not found.');
+        return;
+    }
+
+    // Determine which mode (SEA, AIR, LCL) this RR belongs to
+    let targetMode = 'sea'; // default
+    if (rrData.format === 'air' || rrData.clearance !== undefined) {
+        targetMode = 'air';
+    } else if (rrData.format === 'seaWithShipper' || rrData.format === 'seaWithoutShipper') {
+        targetMode = 'sea';
+    } else {
+        // Fallback: check if specific fields exist
+        if (rrData.clearance !== undefined) targetMode = 'air';
+        else if (rrData.shipper !== undefined) targetMode = 'sea';
+        else targetMode = 'sea';
+    }
+
+    // Switch to the appropriate tab
+    switchToTab(targetMode);
+
+    // Map RR fields to quotation fields
+    const fieldMap = {
+        'client': rrData.shipper || rrData.forwarder || '',
+        'pol': rrData.pol || '',
+        'pod': rrData.pod || '',
+        'commodity': rrData.commodity || '',
+        'weight': rrData.weight || '',
+        'carrier': '', // RR doesn't have carrier – leave empty for user to fill
+        'incoterm': rrData.term || '',
+        'transit': '', // RR doesn't have transit time – user will fill
+        'validityDate': rrData.validity || '',
+    };
+
+    // If SEA, also set container
+    if (targetMode === 'sea') {
+        fieldMap.container = rrData.inventory || '';
+    }
+
+    // If AIR, also set pallets and volume (if available)
+    if (targetMode === 'air') {
+        fieldMap.pallets = '';
+        fieldMap.volume = '';
+    }
+
+    // Populate the form fields
+    Object.keys(fieldMap).forEach(key => {
+        const el = document.getElementById(`${targetMode}-${key}`);
+        if (el && fieldMap[key] !== undefined && fieldMap[key] !== null) {
+            el.value = fieldMap[key];
+        }
+    });
+
+    // Set the quote number from the RR draft
+    const qnBox = document.getElementById(`${targetMode}-qn-box`);
+    const qnValue = document.getElementById(`${targetMode}-qn-value`);
+    if (qnBox && qnValue && rrData.quoteNumber) {
+        qnValue.textContent = rrData.quoteNumber;
+        qnBox.classList.add('show');
+    }
+
+    // Confirm conversion and remove RR draft
+    if (confirm(`Convert RR draft "${rrData.quoteNumber}" to ${targetMode.toUpperCase()} quotation? The RR draft will be removed.`)) {
+        db[target][mode].splice(idx, 1);
+        saveDB();
+        renderRecords('drafts');
+        alert(`✅ RR draft converted to ${targetMode.toUpperCase()} quotation.\nQuote Number: ${rrData.quoteNumber}\n\nPlease fill freight rates and charges, then click QUOTE to finalize.`);
+    }
+}
+
+function convertRRToQuoteFromPreview(target, mode, idx) {
+    closeModal('previewModal');
+    convertRRToQuote(target, mode, idx);
 }
