@@ -1,4 +1,4 @@
-		<!DOCTYPE html>
+	<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
@@ -8,8 +8,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js">
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js">
-    </script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js">
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js">
     </script>
@@ -47,6 +45,7 @@
                     <button class="tab-btn-vertical" data-tab="sea" type="button">🚢 SEA Quote</button>
                     <button class="tab-btn-vertical" data-tab="air" type="button">✈️ AIR Quote</button>
                     <button class="tab-btn-vertical" data-tab="lcl" type="button">📦 LCL Quote</button>
+					<button class="tab-btn-vertical" data-tab="raterequest" type="button">📩 Rate Request</button>
                 </div>
             </div>
             <!-- QUOTE & RATE SHEET -->
@@ -466,6 +465,158 @@
                 </div>
             </div>
 
+			<!-- ===== RATE REQUEST ===== -->
+			<div class="tab-panel" id="raterequest">
+				<div class="tab-heading">
+					<h2>📩 Rate Request</h2>
+					<div style="display:flex; gap:8px; flex-wrap:wrap;">
+						<button class="btn btn-quoted" onclick="switchRateRequestFormat('seaWithShipper')">🚢 SEA </button>
+						<button class="btn btn-quoted" onclick="switchRateRequestFormat('seaWithoutShipper')">🚢 SEA 2</button>
+						<button class="btn btn-quoted" onclick="switchRateRequestFormat('air')">✈️ AIR</button>
+					</div>
+				</div>
+
+				<!-- ===== FORMAT 1: SEA with Shipper ===== -->
+				<div class="form-section" id="rr-format-seaWithShipper">
+					<h3>🚢 SEA Rate Request (with Shipper)</h3>
+					<div class="form-grid-3col">
+						<div class="form-group"><label>SHIPPER</label><input type="text" id="rr-shipper" placeholder="Enter Shipper Name" /></div>
+						<div class="form-group"><label>FORWARDER</label><input type="text" id="rr-forwarder-sea1" readonly style="background:#f1f5f9;font-weight:bold;" /></div>
+						<div class="form-group">
+							<label>POL *</label>
+							<input type="text" id="rr-pol-sea1" list="rr-pol-list-sea1" placeholder="Type POL..." autocomplete="off" />
+							<datalist id="rr-pol-list-sea1"></datalist>
+						</div>
+						<div class="form-group">
+							<label>POD *</label>
+							<input type="text" id="rr-pod-sea1" list="rr-pod-list-sea1" placeholder="Type POD..." autocomplete="off" />
+							<datalist id="rr-pod-list-sea1"></datalist>
+						</div>
+						<div class="form-group"><label>COMMODITY</label>
+							<select id="rr-commodity-sea1" style="width:100%;">
+								<option value="NON HAZ">NON HAZ</option>
+								<option value="HAZ">HAZ</option>
+							</select>
+						</div>
+						<div class="form-group"><label>INVENTORY</label>
+							<select id="rr-inventory-sea1" style="width:100%;"></select>
+						</div>
+						<div class="form-group"><label>GROSS WEIGHT (Kgs)</label><input type="number" id="rr-weight-sea1" value="25500" /></div>
+						<div class="form-group"><label>FREIGHT TERM</label>
+							<select id="rr-term-sea1" style="width:100%;">
+								<option value="PREPAID">PREPAID</option>
+								<option value="COLLECT">COLLECT</option>
+							</select>
+						</div>
+						<div class="form-group"><label>VALIDITY</label><input type="date" id="rr-validity-sea1" /></div>
+						<div class="form-group" style="grid-column:span 1;"><label>DEST. FREE TIME</label>
+							<select id="rr-freeTime-sea1" style="width:100%;">
+								<option value="14 Days">14 Days</option>
+								<option value="21 Days">21 Days</option>
+							</select>
+						</div>
+					</div>
+					<div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+						<button class="btn btn-email" onclick="sendRateRequestEmail()">📧 Send Email</button>
+						<button class="btn btn-preview" onclick="previewRateRequest()">👁 Preview</button>
+						<button class="btn btn-save" onclick="saveRateRequestDraft()">💾 Save as Draft</button>
+						<button class="btn btn-clear" onclick="clearRateRequestForm('seaWithShipper')">🗑️ Clear</button>
+					</div>
+				</div>
+
+				<!-- ===== FORMAT 2: SEA without Shipper ===== -->
+				<div class="form-section" id="rr-format-seaWithoutShipper" style="display:none;">
+					<h3>🚢 SEA Rate Request (without Shipper)</h3>
+					<div class="form-grid-3col">
+						<div class="form-group"><label>FORWARDER</label><input type="text" id="rr-forwarder-sea2" readonly style="background:#f1f5f9;font-weight:bold;" /></div>
+						<div class="form-group">
+							<label>POL *</label>
+							<input type="text" id="rr-pol-sea2" list="rr-pol-list-sea2" placeholder="Type POL..." autocomplete="off" />
+							<datalist id="rr-pol-list-sea2"></datalist>
+						</div>
+						<div class="form-group">
+							<label>POD *</label>
+							<input type="text" id="rr-pod-sea2" list="rr-pod-list-sea2" placeholder="Type POD..." autocomplete="off" />
+							<datalist id="rr-pod-list-sea2"></datalist>
+						</div>
+						<div class="form-group"><label>COMMODITY</label>
+							<select id="rr-commodity-sea2" style="width:100%;">
+								<option value="NON HAZ">NON HAZ</option>
+								<option value="HAZ">HAZ</option>
+							</select>
+						</div>
+						<div class="form-group"><label>INVENTORY</label>
+							<select id="rr-inventory-sea2" style="width:100%;"></select>
+						</div>
+						<div class="form-group"><label>GROSS WEIGHT (Kgs)</label><input type="number" id="rr-weight-sea2" value="25500" /></div>
+						<div class="form-group"><label>FREIGHT TERM</label>
+							<select id="rr-term-sea2" style="width:100%;">
+								<option value="PREPAID">PREPAID</option>
+								<option value="COLLECT">COLLECT</option>
+							</select>
+						</div>
+						<div class="form-group"><label>VALIDITY</label><input type="date" id="rr-validity-sea2" /></div>
+						<div class="form-group" style="grid-column:span 1;"><label>DEST. FREE TIME</label>
+							<select id="rr-freeTime-sea2" style="width:100%;">
+								<option value="14 Days">14 Days</option>
+								<option value="21 Days">21 Days</option>
+							</select>
+						</div>
+					</div>
+					<div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+						<button class="btn btn-email" onclick="sendRateRequestEmail('seaWithoutShipper')">📧 Send Email</button>
+						<button class="btn btn-preview" onclick="previewRateRequest()">👁 Preview</button>
+						<button class="btn btn-save" onclick="saveRateRequestDraft()">💾 Save as Draft</button>
+						<button class="btn btn-clear" onclick="clearRateRequestForm('seaWithoutShipper')">🗑️ Clear</button>
+					</div>
+				</div>
+
+				<!-- ===== FORMAT 3: AIR ===== -->
+				<div class="form-section" id="rr-format-air" style="display:none;">
+					<h3>✈️ AIR Rate Request</h3>
+					<div class="form-grid-3col">
+						<div class="form-group"><label>SHIPPER</label><input type="text" id="rr-shipper-air" placeholder="Enter Shipper Name" /></div>
+						<div class="form-group">
+							<label>POL *</label>
+							<input type="text" id="rr-pol-air" list="rr-pol-list-air" placeholder="Type POL..." autocomplete="off" />
+							<datalist id="rr-pol-list-air"></datalist>
+						</div>
+						<div class="form-group">
+							<label>POD *</label>
+							<input type="text" id="rr-pod-air" list="rr-pod-list-air" placeholder="Type POD..." autocomplete="off" />
+							<datalist id="rr-pod-list-air"></datalist>
+						</div>
+						<div class="form-group"><label>CLEARANCE DATE</label><input type="text" id="rr-clearance-air" value="INQUIRY" placeholder="Date or INQUIRY" /></div>
+						<div class="form-group"><label>COMMODITY</label>
+							<select id="rr-commodity-air" style="width:100%;">
+								<option value="NON HAZ">NON HAZ</option>
+								<option value="HAZ">HAZ</option>
+							</select>
+						</div>
+						<div class="form-group"><label>GROSS WEIGHT (Kgs)</label><input type="number" id="rr-weight-air" placeholder="Enter weight" /></div>
+						<div class="form-group"><label>PACKAGING</label><input type="text" id="rr-packaging-air" placeholder="e.g., Cartons" /></div>
+						<div class="form-group"><label>PALLETIZED OR LOOSE</label>
+							<select id="rr-pallet-air" style="width:100%;">
+								<option value="PALLETIZED">PALLETIZED</option>
+								<option value="LOOSE">LOOSE</option>
+							</select>
+						</div>
+						<div class="form-group"><label>DIMENSION (L x W x H)</label><input type="text" id="rr-dimension-air" placeholder="e.g., 120 x 80 x 100 cm" /></div>
+						<div class="form-group"><label>TEMP CARGO</label>
+							<select id="rr-temp-air" style="width:100%;">
+								<option value="NORMAL">NORMAL</option>
+								<option value="2 to 8 °C">2 to 8 °C</option>
+							</select>
+						</div>
+					</div>
+					<div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+						<button class="btn btn-email" onclick="sendRateRequestEmail('air')">📧 Send Email</button>
+						<button class="btn btn-preview" onclick="previewRateRequest()">👁 Preview</button>
+						<button class="btn btn-save" onclick="saveRateRequestDraft()">💾 Save as Draft</button>
+						<button class="btn btn-clear" onclick="clearRateRequestForm('air')">🗑️ Clear</button>
+					</div>
+				</div>
+			</div>
             <!-- ===== DRAFTS ===== -->
             <div class="tab-panel" id="drafts">
                 <div class="tab-heading"><h2>📝 Draft Quotations</h2></div>
@@ -482,6 +633,8 @@
                 <div id="drafts-air-list"></div>
                 <div class="section-heading highlight-lcl">📦 LCL DRAFTS</div>
                 <div id="drafts-lcl-list"></div>
+			    <div class="section-heading highlight-rr" style="border-left-color:#ec4899;">📩 RR DRAFTS</div>
+			    <div id="drafts-rr-list"></div>
             </div>
 
             <!-- ===== RATES QUOTED ===== -->
