@@ -840,10 +840,10 @@ header h1 {
     color: var(--text-light);
 }
 .record-info .quote-num {
-    font-family: 'Courier New', monospace;
-    color: var(--accent);
+    font-size: 0.85rem;
+    color: #dc2626;            /* bright red */
     font-weight: 700;
-    font-size: 0.72rem;
+    margin-top: 2px;
 }
 .record-info .margin-info {
     color: #7c3aed;
