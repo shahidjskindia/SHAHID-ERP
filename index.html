@@ -17,6 +17,8 @@
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js">
     </script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js">
+    </script>
 </head>
 <body>
     <header>
@@ -42,10 +44,10 @@
                     <span>📝 NEW QUOTE</span><span class="arrow" id="arrow-newQuote">▼</span>
                 </div>
                 <div class="nav-category-items" id="cat-newQuote">
+					<button class="tab-btn-vertical" data-tab="raterequest" type="button">📩 Rate Request</button>
                     <button class="tab-btn-vertical" data-tab="sea" type="button">🚢 SEA Quote</button>
                     <button class="tab-btn-vertical" data-tab="air" type="button">✈️ AIR Quote</button>
                     <button class="tab-btn-vertical" data-tab="lcl" type="button">📦 LCL Quote</button>
-					<button class="tab-btn-vertical" data-tab="raterequest" type="button">📩 Rate Request</button>
                 </div>
             </div>
             <!-- QUOTE & RATE SHEET -->
@@ -54,6 +56,7 @@
                     <span>💾 QUOTE & RATE SHEET</span><span class="arrow" id="arrow-quoteSheet">▼</span>
                 </div>
                 <div class="nav-category-items" id="cat-quoteSheet">
+                    <button class="tab-btn-vertical" data-tab="rrdrafts" type="button">📩 RR Drafts</button>				
                     <button class="tab-btn-vertical" data-tab="drafts" type="button">📝 Drafts</button>
                     <button class="tab-btn-vertical" data-tab="rates" type="button">💰 Rates Quoted</button>
                     <button class="tab-btn-vertical" data-tab="ratesheet" type="button">📋 Rate Sheet</button>
@@ -617,6 +620,8 @@
 					</div>
 				</div>
 			</div>
+		
+			
             <!-- ===== DRAFTS ===== -->
             <div class="tab-panel" id="drafts">
                 <div class="tab-heading"><h2>📝 Draft Quotations</h2></div>
@@ -633,8 +638,6 @@
                 <div id="drafts-air-list"></div>
                 <div class="section-heading highlight-lcl">📦 LCL DRAFTS</div>
                 <div id="drafts-lcl-list"></div>
-			    <div class="section-heading highlight-rr" style="border-left-color:#ec4899;">📩 RR DRAFTS</div>
-			    <div id="drafts-rr-list"></div>
             </div>
 
             <!-- ===== RATES QUOTED ===== -->
@@ -715,6 +718,19 @@
                 </div>
                 <div class="pagination" id="ratesheet-pagination"></div>
             </div>
+
+			<!-- ===== RR DRAFTS ===== -->
+				<div class="tab-panel" id="rrdrafts">
+					<div class="tab-heading"><h2>📩 Rate Request Drafts</h2></div>
+					<div class="counters" id="rrdrafts-counters"></div>
+					<div class="filter-row">
+						<input type="text" id="rrdrafts-search-text" class="search-box" placeholder="🔍 Shipper / POL / POD" style="flex:2;margin:0;" oninput="debouncedSearch('rrdrafts')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+						<input type="text" id="rrdrafts-search-qn" class="search-box" placeholder="🔍 Quote No." style="flex:1;margin:0;" oninput="debouncedSearch('rrdrafts')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+						<input type="date" id="rrdrafts-search-date" class="search-box" style="flex:1;margin:0;" onchange="renderRRDrafts()" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+						<button class="btn btn-clear" type="button" onclick="clearRRDraftsFilters()" style="height:36px;">Clear</button>
+					</div>
+					<div id="rrdrafts-list"></div>
+				</div>
 
 			<!-- ===== DSR (ENHANCED) ===== -->
 			<div class="tab-panel" id="dsr">
@@ -1836,6 +1852,37 @@
                         <p style="font-size:0.78rem;color:var(--text-light);margin-top:8px;">Current Company: <strong id="current-company-name">Not Set</strong></p>
                     </div>
                 </div>
+				
+						<!-- Default CC Emails per Mode -->
+				<div class="db-section">
+					<div class="db-header">📧 Default CC Emails</div>
+					<div class="db-body">
+						<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+							<div class="form-group">
+								<label>🚢 SEA</label>
+								<input type="text" id="default-cc-sea" placeholder="CC for SEA emails" style="width:100%;" />
+								<p style="font-size:0.65rem;color:var(--text-light);margin:2px 0 0;">Current: <strong id="current-cc-sea">Not Set</strong></p>
+							</div>
+							<div class="form-group">
+								<label>✈️ AIR</label>
+								<input type="text" id="default-cc-air" placeholder="CC for AIR emails" style="width:100%;" />
+								<p style="font-size:0.65rem;color:var(--text-light);margin:2px 0 0;">Current: <strong id="current-cc-air">Not Set</strong></p>
+							</div>
+							<div class="form-group">
+								<label>📦 LCL</label>
+								<input type="text" id="default-cc-lcl" placeholder="CC for LCL emails" style="width:100%;" />
+								<p style="font-size:0.65rem;color:var(--text-light);margin:2px 0 0;">Current: <strong id="current-cc-lcl">Not Set</strong></p>
+							</div>
+						</div>
+						<div style="margin-top:8px;">
+							<button class="btn btn-quoted" onclick="saveDefaultCC()">💾 Save All</button>
+						</div>
+						<p style="font-size:0.7rem;color:var(--text-light);margin-top:4px;">
+							Separate multiple emails with commas: <code>user1@example.com, user2@example.com</code>
+						</p>
+					</div>
+				</div>		
+				
                 <!-- Default User -->
                 <div class="db-section">
                     <div class="db-header">👤 Default User (Salesperson)</div>
@@ -1887,6 +1934,7 @@
                         <table class="master-table" id="exchange-table"></table>
                     </div>
                 </div>
+						
                 <!-- Master Data Management -->
                 <div class="db-section">
                     <div class="db-header">📋 Master Data Management</div>
