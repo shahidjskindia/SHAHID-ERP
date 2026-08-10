@@ -4329,17 +4329,19 @@ function sendEmail() {
 
     // Helper to open Outlook and copy HTML
     const copyAndOpenOutlook = () => {
-        // Build mailto link with recipient, subject, and NO body (so default signature appears)
-        let mailtoLink = `mailto:${to}?subject=${encodeURIComponent(subject)}`;
+        // Build mailto link with recipient, subject, and body (plain text fallback)
+        let mailtoLink = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent('Thank you')}`;
         if (cc) mailtoLink += `&cc=${encodeURIComponent(cc)}`;
         window.open(mailtoLink, '_blank');
 
-        // Auto-save draft if Rate Request
+        // ✅ NEW: Auto‑save draft if this is a Rate Request
         if (currentEmailData.mode === 'raterequest') {
             const data = currentEmailData.data;
             if (data && data.pol && data.pod) {
+                // The quote number should already be set in the data
                 saveRateRequestDraftWithData(data);
                 console.log('📩 Rate Request auto‑saved as draft with quote:', data.quoteNumber);
+                // Optionally show a brief notification
                 setTimeout(() => {
                     alert('✅ Rate Request draft saved automatically with Quote No: ' + data.quoteNumber);
                 }, 500);
@@ -4359,11 +4361,14 @@ function sendEmail() {
         });
         navigator.clipboard.write([clipboardItem])
             .then(function() {
+                // Success: copy done, now open Outlook
                 copyAndOpenOutlook();
             })
             .catch(function(err) {
                 console.warn('Clipboard API error, falling back:', err);
+                // Fallback: copy as plain text
                 fallbackCopyText(htmlContent);
+                // Still open Outlook
                 copyAndOpenOutlook();
             });
     } else {
@@ -4845,16 +4850,12 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
 	const detailRows = [
 		['Client', toUpper(data.client), 'Status', toUpper(data.status)],
 		['POL', toUpper(data.pol), 'POD', toUpper(data.pod)],
-		['Commodity', toUpper(data.commodity), 'Carrier', toUpper(data.carrier)],
+		['Commodity', toUpper(data.commodity), (mode === 'sea' ? 'Container' : 'Volume (CBM)'), mode === 'sea' ? toUpper(data.container) : (data.volume || '-')],
 		['Weight (KGS)', data.weight || '-', 'Incoterm', toUpper(data.incoterm)],
-		[
-			(mode === 'sea' ? 'Container' : 'Volume (CBM)'),
-			mode === 'sea' ? toUpper(data.container) : (data.volume || '-'),
-			'Transit Time',
-			transitDisplay
-		],
+		['Carrier', toUpper(data.carrier), 'Transit Time', transitDisplay],
 		['Quote Date', data.autoDate || '-', 'Validity Date', validityDisplay]
 	];
+
 
 	let detailHtml = `<table style="width:100%;border-collapse:collapse;font-size:${baseFont};">
 		<thead>
@@ -10928,14 +10929,9 @@ function buildCompactEmailHTML(data, mode) {
 	const detailRows = [
 		['Client', toUpper(data.client), 'Status', toUpper(data.status)],
 		['POL', toUpper(data.pol), 'POD', toUpper(data.pod)],
-		['Commodity', toUpper(data.commodity), 'Carrier', toUpper(data.carrier)],
+		['Commodity', toUpper(data.commodity), (mode === 'sea' ? 'Container' : 'Volume (CBM)'), mode === 'sea' ? toUpper(data.container) : (data.volume || '-')],
 		['Weight (KGS)', data.weight || '-', 'Incoterm', toUpper(data.incoterm)],
-		[
-			(mode === 'sea' ? 'Container' : 'Volume (CBM)'),
-			mode === 'sea' ? toUpper(data.container) : (data.volume || '-'),
-			'Transit Time',
-			transitDisplay
-		],
+		['Carrier', toUpper(data.carrier), 'Transit Time', transitDisplay],
 		['Quote Date', data.autoDate || '-', 'Validity Date', validityDisplay]
 	];
 
@@ -13885,7 +13881,7 @@ function sendRateRequestEmail() {
 
     // Generate quote number
     const now = new Date();
-    const base = `RQ-RR-${String(now.getFullYear()).slice(-2)}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+    const base = `RR-${String(now.getFullYear()).slice(-2)}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
     const all = db.drafts.rr || [];
     let seq = 1;
     let qn = base;
@@ -13897,7 +13893,7 @@ function sendRateRequestEmail() {
 
     // Subject with mode
     const modeLabel = data.mode === 'AIR' ? 'AIR' : 'SEA';
-    const subject = `${modeLabel} RATE REQUEST // ${qn} // ${data.pol} TO ${data.pod} ${data.commodity ? '('+data.commodity+')' : ''}`;
+    const subject = `${modeLabel} RATE REQUEST // ${qn} // ${data.pol} TO ${data.pod} // ${data.commodity}`;
     document.getElementById('email-subject').value = subject;
     document.getElementById('email-html-preview').innerHTML = htmlContent;
     document.getElementById('email-cc').value = defaultCC;
