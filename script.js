@@ -3290,7 +3290,34 @@ function getFilteredRateSheet() {
 }
 function renderRateSheet() {
     const tbody = document.getElementById('ratesheet-body');
-    if (!tbody) return;
+    const table = document.getElementById('ratesheet-table');
+    const container = document.getElementById('ratesheet-table')?.parentElement;
+    if (!tbody || !container) return;
+
+    // --- Ensure action bar exists (only once) ---
+    let actionBar = document.querySelector('.ratesheet-action-bar');
+    if (!actionBar) {
+        actionBar = document.createElement('div');
+        actionBar.className = 'ratesheet-action-bar';
+        actionBar.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; margin:10px 0; align-items:center;';
+        actionBar.innerHTML = `
+            <span style="font-weight:600; font-size:0.8rem; color:var(--text-light); margin-right:8px;">Actions:</span>
+            <button class="btn btn-sm btn-preview" onclick="ratesheetBulkAction('preview')">👁 Preview</button>
+            <button class="btn btn-sm btn-preview" onclick="ratesheetBulkAction('edit')">✏️ Edit</button>
+            <button class="btn btn-sm btn-duplicate" onclick="ratesheetBulkAction('duplicate')">📋 Duplicate</button>
+            <button class="btn btn-sm btn-success" onclick="ratesheetBulkAction('renew')">🔄 Renew</button>
+            <button class="btn btn-sm btn-clear" onclick="ratesheetBulkAction('delete')">🗑️ Delete</button>
+            <span style="margin-left:auto; font-size:0.75rem; color:var(--text-light);" id="ratesheet-selected-count">0 selected</span>
+        `;
+        const wrapper = container.closest('.table-wrap');
+        if (wrapper) {
+            wrapper.parentNode.insertBefore(actionBar, wrapper);
+        } else {
+            container.parentNode.insertBefore(actionBar, container);
+        }
+    }
+
+    // Get filtered data
     const filtered = getFilteredRateSheet();
     const perPage = rateSheetPerPage;
     const totalPages = Math.ceil(filtered.length / perPage) || 1;
@@ -3298,43 +3325,87 @@ function renderRateSheet() {
     if (rateSheetPage < 1) rateSheetPage = 1;
     const start = (rateSheetPage - 1) * perPage;
     const pageData = filtered.slice(start, start + perPage);
-    tbody.innerHTML = pageData.map((r, idx) => {
-        const realIdx = db.rateSheet.indexOf(r);
-        const expiry = getExpiryStatus(r.validTo);
-        const rowClass = expiry.status === 'active' ? 'row-active' : expiry.status === 'expiring' ? 'row-expiring' : 'row-expired';
-        let statusClass, statusText;
-        if (expiry.status === 'expired') { statusClass = 'status-expired'; statusText = 'Expired'; }
-        else if (expiry.status === 'expiring') { statusClass = 'status-expiring'; statusText = `Expiring (${expiry.days}d)`; }
-        else { statusClass = 'status-active'; statusText = 'Active'; }
-        return `<tr class="${rowClass}">
-            <td style="font-weight:bold;">${r.carrierName || '-'}</td>
-            <td style="font-weight:bold;">${r.freightType || '-'}</td>
-            <td style="font-weight:bold;">${r.pol || '-'}</td>
-            <td style="font-weight:bold;">${r.pod || '-'}</td>
-            <td style="font-weight:bold;">${r.containerType || '-'}</td>
-            <td style="font-weight:bold;">${Number(r.freightAmount || 0).toLocaleString('en-IN')}</td>
-            <td style="font-weight:bold;">${r.currency || 'INR'}</td>
-            <td style="font-weight:bold;">${r.transitTime || '-'}</td>
-            <td style="font-weight:bold;">${r.commodity || '-'}</td>
-            <td style="font-weight:bold;">${r.validFrom || '-'}</td>
-            <td style="font-weight:bold;">${r.validTo || '-'}</td>
-            <td style="font-weight:bold;">${expiry.days !== null ? expiry.days + ' days' : '-'}</td>
-            <td style="font-weight:bold;"><span class="status-badge ${statusClass}">${statusText}</span></td>
-            <td style="font-weight:bold;">
-                <button class="btn btn-sm btn-preview" onclick="previewRateSheet(${realIdx})">👁</button>
-                <button class="btn btn-sm btn-preview" onclick="editRateSheet(${realIdx})">✏️</button>
-                <button class="btn btn-sm btn-duplicate" onclick="duplicateRateSheet(${realIdx})">📋</button>
-                <button class="btn btn-sm btn-success" onclick="renewRateSheet(${realIdx})">🔄</button>
-                <button class="btn btn-sm btn-clear" onclick="deleteRateSheet(${realIdx})">×</button>
-            </td>
-        </tr>`;
-    }).join('');
-    const pagination = document.getElementById('ratesheet-pagination');
-    if (filtered.length === 0) { pagination.innerHTML = '<p style="color:var(--text-light);padding:10px;text-align:center;">No rates found</p>'; return; }
+
+    // --- COMPLETELY CLEAR THE TABLE ---
+    // Remove the old table and create a new one to avoid duplicate headers
+    const parent = table.parentNode;
+    const newTable = document.createElement('table');
+    newTable.id = 'ratesheet-table';
+    newTable.className = 'master-table';
+    
+    // Build the complete table (thead + tbody) in one go
+    let html = `<thead>
+        <tr>
+            <th style="width:30px;"><input type="checkbox" id="ratesheet-select-all" onchange="toggleAllRatesheetCheckboxes()" /></th>
+            <th>Carrier</th>
+            <th>Type</th>
+            <th>POL</th>
+            <th>POD</th>
+            <th>Container</th>
+            <th>Amount</th>
+            <th>Currency</th>
+            <th>Transit</th>
+            <th>Commodity</th>
+            <th>Valid From</th>
+            <th>Valid To</th>
+            <th>Days Left</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>`;
+
+    if (pageData.length === 0) {
+        html += `<tr><td colspan="14" style="text-align:center;padding:20px;color:var(--text-light);">No rates found</td></tr>`;
+    } else {
+        pageData.forEach((r) => {
+            const realIdx = db.rateSheet.indexOf(r);
+            const expiry = getExpiryStatus(r.validTo);
+            const rowClass = expiry.status === 'active' ? 'row-active' : expiry.status === 'expiring' ? 'row-expiring' : 'row-expired';
+            let statusClass, statusText;
+            if (expiry.status === 'expired') { statusClass = 'status-expired'; statusText = 'Expired'; }
+            else if (expiry.status === 'expiring') { statusClass = 'status-expiring'; statusText = `Expiring (${expiry.days}d)`; }
+            else { statusClass = 'status-active'; statusText = 'Active'; }
+
+            html += `<tr class="${rowClass}" data-idx="${realIdx}">
+                <td style="text-align:center;"><input type="checkbox" class="ratesheet-row-checkbox" data-idx="${realIdx}" onchange="updateRatesheetSelectedCount()" /></td>
+                <td style="font-weight:bold;">${r.carrierName || '-'}</td>
+                <td style="font-weight:bold;">${r.freightType || '-'}</td>
+                <td style="font-weight:bold;">${r.pol || '-'}</td>
+                <td style="font-weight:bold;">${r.pod || '-'}</td>
+                <td style="font-weight:bold;">${r.containerType || '-'}</td>
+                <td style="font-weight:bold;">${Number(r.freightAmount || 0).toLocaleString('en-IN')}</td>
+                <td style="font-weight:bold;">${r.currency || 'INR'}</td>
+                <td style="font-weight:bold;">${r.transitTime || '-'}</td>
+                <td style="font-weight:bold;">${r.commodity || '-'}</td>
+                <td style="font-weight:bold;">${r.validFrom || '-'}</td>
+                <td style="font-weight:bold;">${r.validTo || '-'}</td>
+                <td style="font-weight:bold;">${expiry.days !== null ? expiry.days + ' days' : '-'}</td>
+                <td style="font-weight:bold;"><span class="status-badge ${statusClass}">${statusText}</span></td>
+            </tr>`;
+        });
+    }
+
+    html += `</tbody>`;
+    newTable.innerHTML = html;
+    
+    // Replace the old table with the new one
+    parent.replaceChild(newTable, table);
+
+    // --- Update the tbody reference ---
+    const newTbody = document.getElementById('ratesheet-body');
+    const newPagination = document.getElementById('ratesheet-pagination');
+
+    // Pagination
+    if (filtered.length === 0) {
+        if (newPagination) newPagination.innerHTML = '<p style="color:var(--text-light);padding:10px;text-align:center;">No rates found</p>';
+        return;
+    }
     let pagHtml = `<button class="page-btn" onclick="changeRateSheetPage(${rateSheetPage - 1})" ${rateSheetPage === 1 ? 'disabled' : ''}>‹ Prev</button>`;
     pagHtml += `<span class="page-info">Page ${rateSheetPage} of ${totalPages} (${filtered.length} records)</span>`;
     pagHtml += `<button class="page-btn" onclick="changeRateSheetPage(${rateSheetPage + 1})" ${rateSheetPage === totalPages ? 'disabled' : ''}>Next ›</button>`;
-    pagination.innerHTML = pagHtml;
+    if (newPagination) newPagination.innerHTML = pagHtml;
+
+    updateRatesheetSelectedCount();
 }
 
 
@@ -14572,61 +14643,19 @@ let ratesSortColumn = 'timestamp';
 let ratesSortOrder = 'desc'; // 'asc' or 'desc'
 
 function renderEnhancedRates() {
-    const ratesPanel = document.getElementById('rates');
-    if (!ratesPanel) return;
-
-    // --- Ensure container exists ---
-    let container = document.getElementById('rates-list-container');
-    let actionBar = document.querySelector('.rates-action-bar');
-    let paginationEl = document.getElementById('rates-pagination');
-
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'rates-list-container';
-        const filterRow = ratesPanel.querySelector('.filter-row');
-        if (filterRow) filterRow.after(container);
-        else ratesPanel.appendChild(container);
-    }
-
-    if (!actionBar) {
-        actionBar = document.createElement('div');
-        actionBar.className = 'rates-action-bar';
-        actionBar.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; margin:8px 0; align-items:center;';
-        actionBar.innerHTML = `
-            <span style="font-weight:600; font-size:0.8rem; color:var(--text-light); margin-right:8px;">Actions:</span>
-            <button class="btn btn-sm btn-preview" onclick="ratesBulkAction('preview')">👁 Preview</button>
-            <button class="btn btn-sm btn-pdf" onclick="ratesBulkAction('pdf')">📄 PDF</button>
-            <button class="btn btn-sm btn-email" onclick="ratesBulkAction('email')">📧 Email</button>
-            <button class="btn btn-sm btn-duplicate" onclick="ratesBulkAction('duplicate')">📋 Duplicate</button>
-            <button class="btn btn-sm btn-draft" onclick="ratesBulkAction('edit')">✏️ Edit</button>
-            <button class="btn btn-sm btn-clear" onclick="ratesBulkAction('delete')">🗑️ Delete</button>
-            <span style="margin-left:auto; font-size:0.75rem; color:var(--text-light);" id="rates-selected-count">0 selected</span>
-        `;
-        const filterRow = ratesPanel.querySelector('.filter-row');
-        if (filterRow) filterRow.after(actionBar);
-        else ratesPanel.insertBefore(actionBar, container);
-    }
-
-    if (!paginationEl) {
-        paginationEl = document.createElement('div');
-        paginationEl.id = 'rates-pagination';
-        paginationEl.className = 'pagination';
-        container.after(paginationEl);
-    }
-
-    // Remove old list containers
-    ['rates-sea-list', 'rates-air-list', 'rates-lcl-list'].forEach(id => {
-        const old = document.getElementById(id);
-        if (old) old.remove();
-    });
+    const container = document.getElementById('rates-list-container');
+    const paginationEl = document.getElementById('rates-pagination');
+    if (!container) return;
 
     // --- Get filter values ---
     const searchText = (document.getElementById('rates-search-text')?.value || '').toLowerCase();
+    const searchQN = (document.getElementById('rates-search-qn')?.value || '').toLowerCase();
+    const searchDate = document.getElementById('rates-search-date')?.value || ''; // ✅ NEW
     const statusFilter = document.getElementById('rates-status-filter')?.value || '';
     const modeFilter = document.getElementById('rates-mode-filter')?.value || '';
     const userFilter = document.getElementById('rates-user-filter')?.value || '';
 
-    // --- Collect all quotes ---
+    // --- Collect all quotes from SEA, AIR, LCL ---
     let allQuotes = [];
     ['sea', 'air', 'lcl'].forEach(mode => {
         (db.rates[mode] || []).forEach((quote, idx) => {
@@ -14639,7 +14668,7 @@ function renderEnhancedRates() {
         });
     });
 
-    // --- Populate User Filter ---
+    // --- Populate User Filter dropdown dynamically ---
     const userSelect = document.getElementById('rates-user-filter');
     if (userSelect) {
         const users = [...new Set(allQuotes.map(q => q.sales || q.createdBy || db.defaultUser || 'Unknown'))].filter(Boolean);
@@ -14650,12 +14679,23 @@ function renderEnhancedRates() {
 
     // --- Apply filters ---
     let filtered = allQuotes.filter(q => {
+        // Search by text
         if (searchText) {
             const searchable = `${q.quoteNumber||''} ${q.client||''} ${q.pol||''} ${q.pod||''}`.toLowerCase();
             if (!searchable.includes(searchText)) return false;
         }
+        // Search by Quote Number
+        if (searchQN && !(q.quoteNumber||'').toLowerCase().includes(searchQN)) return false;
+        // ✅ Search by Date
+        if (searchDate) {
+            const d = new Date(q.timestamp).toISOString().split('T')[0];
+            if (d !== searchDate) return false;
+        }
+        // Status
         if (statusFilter && (q.followUpStatus || 'PENDING') !== statusFilter) return false;
+        // Mode
         if (modeFilter && q._modeLabel !== modeFilter) return false;
+        // User
         if (userFilter && (q.sales || q.createdBy || db.defaultUser) !== userFilter) return false;
         return true;
     });
@@ -14698,7 +14738,7 @@ function renderEnhancedRates() {
         return;
     }
 
-    // --- Build table ---
+    // --- Build HTML for each quote row ---
     let html = `
     <div class="rates-table-wrapper">
         <table class="rates-enhanced-table" id="rates-table">
@@ -14721,11 +14761,9 @@ function renderEnhancedRates() {
     pageData.forEach((q, index) => {
         const status = q.followUpStatus || 'PENDING';
         const statusClass = `follow-up-${status.toLowerCase().replace('-','')}`;
+        const validityDate = q.validityDate ? new Date(q.validityDate) : null;
         const today = new Date();
         today.setHours(0,0,0,0);
-        const validityDate = q.validityDate ? new Date(q.validityDate) : null;
-        
-        // --- VALIDITY DISPLAY WITH RED DAYS ---
         let validityDisplay = '-';
         if (validityDate) {
             const diff = Math.ceil((validityDate - today) / (1000 * 60 * 60 * 24));
@@ -14904,6 +14942,8 @@ function changeRatesPage(page) {
 
 function clearRatesFilters() {
     document.getElementById('rates-search-text').value = '';
+    document.getElementById('rates-search-qn').value = '';
+    document.getElementById('rates-search-date').value = ''; // ✅ NEW
     document.getElementById('rates-status-filter').value = '';
     document.getElementById('rates-mode-filter').value = '';
     document.getElementById('rates-user-filter').value = '';
@@ -15389,19 +15429,16 @@ function getOneDriveDirectUrl(shareLink) {
 
 let autoSyncInterval = null;
 let autoSyncEnabled = false;
+let syncIntervalMinutes = 5;
 
 /**
  * Google Drive share link se File ID extract karein
  */
 function extractGoogleDriveFileId(url) {
-    // Format: https://drive.google.com/file/d/FILE_ID/view
     const match = url.match(/\/d\/([^/]+)/);
     if (match) return match[1];
-    
-    // Format: https://drive.google.com/open?id=FILE_ID
     const idMatch = url.match(/[?&]id=([^&]+)/);
     if (idMatch) return idMatch[1];
-    
     return null;
 }
 
@@ -15409,34 +15446,68 @@ function extractGoogleDriveFileId(url) {
  * URL ko direct fetchable URL mein convert karein
  */
 function getDirectFetchUrl(url, apiKey) {
-    // ---------- Google Drive ----------
     if (url.includes('drive.google.com') || url.includes('drive.usercontent.google.com')) {
         const fileId = extractGoogleDriveFileId(url);
         if (!fileId) return null;
         if (!apiKey) return null;
         return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${apiKey}`;
     }
-    
-    // ---------- Dropbox ----------
     if (url.includes('dropbox.com')) {
-        // dl=0 → raw=1
         return url.replace(/[?&]dl=0/, '&raw=1').replace(/[?&]dl=1/, '&raw=1');
     }
-    
-    // ---------- OneDrive ----------
     if (url.includes('1drv.ms')) {
         return url.replace('1drv.ms', '1drv.ws');
     }
-    
-    // ---------- GitHub Gist (already raw) ----------
     if (url.includes('gist.githubusercontent.com')) {
         return url;
     }
-    
-    // ---------- Default: as is ----------
     return url;
 }
 
+// ===== SAVE SETTINGS =====
+function saveJsonSyncSettings() {
+    const url = document.getElementById('json-url-input').value.trim();
+    const apiKey = document.getElementById('google-api-key-input').value.trim();
+    const interval = parseInt(document.getElementById('sync-interval-input').value) || 5;
+    
+    if (!url) {
+        alert('Please enter a JSON URL.');
+        return;
+    }
+    
+    db.jsonSyncUrl = url;
+    db.googleApiKey = apiKey;
+    db.syncInterval = interval;
+    saveDB();
+    
+    const msgEl = document.getElementById('sync-message');
+    msgEl.textContent = `✅ Settings saved! URL: ${url.substring(0, 50)}... | Interval: ${interval} min`;
+    msgEl.style.color = 'var(--success)';
+    
+    // Update interval if auto-sync is running
+    if (autoSyncEnabled) {
+        clearInterval(autoSyncInterval);
+        startAutoSync(interval);
+    }
+}
+
+// ===== LOAD SAVED SETTINGS =====
+function loadJsonSyncUrl() {
+    const savedUrl = db.jsonSyncUrl || '';
+    const savedKey = db.googleApiKey || '';
+    const savedInterval = db.syncInterval || 5;
+    const urlInput = document.getElementById('json-url-input');
+    const keyInput = document.getElementById('google-api-key-input');
+    const intervalInput = document.getElementById('sync-interval-input');
+    
+    if (urlInput) urlInput.value = savedUrl;
+    if (keyInput) keyInput.value = savedKey;
+    if (intervalInput) intervalInput.value = savedInterval;
+    
+    syncIntervalMinutes = savedInterval;
+}
+
+// ===== FETCH & MERGE =====
 function fetchAndMergeJSON() {
     const urlInput = document.getElementById('json-url-input');
     let url = urlInput.value.trim();
@@ -15452,7 +15523,6 @@ function fetchAndMergeJSON() {
     msgEl.textContent = '⏳ Fetching JSON...';
     msgEl.style.color = 'var(--text-light)';
 
-    // Convert to direct fetch URL
     let fetchUrl = getDirectFetchUrl(url, apiKey);
     if (!fetchUrl) {
         msgEl.textContent = '❌ Could not extract File ID from Google Drive link.';
@@ -15466,10 +15536,13 @@ function fetchAndMergeJSON() {
         .then(response => {
             if (!response.ok) {
                 if (response.status === 403) {
-                    throw new Error('API Key invalid or Drive API not enabled. Check your API key.');
+                    if (response.type === 'opaque' || response.type === 'error') {
+                        throw new Error('CORS error: Add your domain to API key restrictions.');
+                    }
+                    throw new Error('API Key invalid or Drive API not enabled.');
                 }
                 if (response.status === 404) {
-                    throw new Error('File not found. Check if File ID is correct and file is public.');
+                    throw new Error('File not found. Check File ID and public sharing.');
                 }
                 throw new Error('HTTP ' + response.status);
             }
@@ -15482,10 +15555,6 @@ function fetchAndMergeJSON() {
             }
             const summary = mergeDatabase(importedDb);
             saveDB();
-            // Save URL and API key for persistence
-            db.jsonSyncUrl = url;
-            db.googleApiKey = apiKey;
-            saveDB();
             msgEl.textContent = `✅ Merge successful! ${summary}`;
             msgEl.style.color = 'var(--success)';
             refreshCurrentTab();
@@ -15497,93 +15566,66 @@ function fetchAndMergeJSON() {
         });
 }
 
+// ===== START AUTO-SYNC =====
+function startAutoSync(intervalMinutes) {
+    const intervalMs = intervalMinutes * 60 * 1000;
+    if (autoSyncInterval) clearInterval(autoSyncInterval);
+    autoSyncInterval = setInterval(fetchAndMergeJSON, intervalMs);
+    autoSyncEnabled = true;
+    
+    const toggleBtn = document.getElementById('auto-sync-toggle');
+    const syncNowBtn = document.getElementById('sync-now-btn');
+    const statusEl = document.getElementById('auto-sync-status');
+    
+    if (toggleBtn) toggleBtn.textContent = '⏰ Auto-Sync On';
+    if (syncNowBtn) syncNowBtn.style.display = 'inline-block';
+    if (statusEl) statusEl.textContent = `Running (every ${intervalMinutes} min)`;
+}
+
+// ===== TOGGLE AUTO-SYNC =====
 function toggleAutoSync() {
     const url = document.getElementById('json-url-input').value.trim();
     if (!url) {
         alert('Please enter a JSON URL first.');
         return;
     }
+    
     const toggleBtn = document.getElementById('auto-sync-toggle');
+    const syncNowBtn = document.getElementById('sync-now-btn');
+    const statusEl = document.getElementById('auto-sync-status');
+    
     if (autoSyncEnabled) {
+        // Turn OFF
         clearInterval(autoSyncInterval);
         autoSyncEnabled = false;
-        toggleBtn.textContent = '⏰ Auto-Sync Off';
-        document.getElementById('auto-sync-status').textContent = 'Stopped';
+        if (toggleBtn) toggleBtn.textContent = '⏰ Auto-Sync Off';
+        if (syncNowBtn) syncNowBtn.style.display = 'none';
+        if (statusEl) statusEl.textContent = 'Stopped';
         return;
     }
-    autoSyncInterval = setInterval(fetchAndMergeJSON, 5 * 60 * 1000);
-    autoSyncEnabled = true;
-    toggleBtn.textContent = '⏰ Auto-Sync On';
-    document.getElementById('auto-sync-status').textContent = 'Running (every 5 min)';
+    
+    // Turn ON
+    const interval = parseInt(document.getElementById('sync-interval-input').value) || 5;
+    syncIntervalMinutes = interval;
+    startAutoSync(interval);
+    
+    // Immediate first sync
     fetchAndMergeJSON();
 }
 
-function loadJsonSyncUrl() {
-    const savedUrl = db.jsonSyncUrl || '';
-    const savedKey = db.googleApiKey || '';
-    const urlInput = document.getElementById('json-url-input');
-    const keyInput = document.getElementById('google-api-key-input');
-    if (urlInput) urlInput.value = savedUrl;
-    if (keyInput) keyInput.value = savedKey;
-}
-
-function refreshCurrentTab() {
-    const activePanel = document.querySelector('.tab-panel.active');
-    if (!activePanel) return;
-    const tabId = activePanel.id;
-    if (tabId === 'rates') renderRecords('rates');
-    else if (tabId === 'drafts') renderRecords('drafts');
-    else if (tabId === 'rrdrafts') renderRecords('rrdrafts');
-    else if (tabId === 'ratesheet') { renderRateSheet(); updateExpiryDashboard(); }
-    else if (tabId === 'dsr') renderShipments();
-    else if (tabId === 'bldraft') renderBLDrafts();
-    else if (tabId === 'database') renderDatabase();
-}
-
-function toggleAutoSync() {
-    const url = document.getElementById('json-url-input').value.trim();
-    if (!url) {
-        alert('Please enter a JSON URL first.');
+// ===== SYNC NOW (Manual) =====
+function syncNow() {
+    if (!autoSyncEnabled) {
+        alert('Auto-sync is OFF. Please turn it ON first, or use "Fetch & Merge" for one-time sync.');
         return;
     }
-    const toggleBtn = document.getElementById('auto-sync-toggle');
-    if (autoSyncEnabled) {
-        clearInterval(autoSyncInterval);
-        autoSyncEnabled = false;
-        toggleBtn.textContent = '⏰ Auto-Sync Off';
-        document.getElementById('auto-sync-status').textContent = 'Stopped';
-        return;
-    }
-    // Enable auto-sync (every 5 minutes)
-    autoSyncInterval = setInterval(fetchAndMergeJSON, 5 * 60 * 1000);
-    autoSyncEnabled = true;
-    toggleBtn.textContent = '⏰ Auto-Sync On';
-    document.getElementById('auto-sync-status').textContent = 'Running (every 5 min)';
-    // Do an immediate first fetch
+    const msgEl = document.getElementById('sync-message');
+    msgEl.textContent = '⏳ Manual sync triggered...';
+    msgEl.style.color = 'var(--text-light)';
     fetchAndMergeJSON();
 }
 
-function loadJsonSyncUrl() {
-    const savedUrl = db.jsonSyncUrl || '';
-    const input = document.getElementById('json-url-input');
-    if (input) input.value = savedUrl;
-}
-
-// Helper to refresh current tab after merge
-function refreshCurrentTab() {
-    const activePanel = document.querySelector('.tab-panel.active');
-    if (!activePanel) return;
-    const tabId = activePanel.id;
-    if (tabId === 'rates') renderRecords('rates');
-    else if (tabId === 'drafts') renderRecords('drafts');
-    else if (tabId === 'rrdrafts') renderRecords('rrdrafts');
-    else if (tabId === 'ratesheet') { renderRateSheet(); updateExpiryDashboard(); }
-    else if (tabId === 'dsr') renderShipments();
-    else if (tabId === 'bldraft') renderBLDrafts();
-    else if (tabId === 'database') renderDatabase();
-}
-
-
+// ===== TEST URL =====
 function testJsonUrl() {
     const url = document.getElementById('json-url-input').value.trim();
     const apiKey = document.getElementById('google-api-key-input').value.trim();
@@ -15617,4 +15659,109 @@ function testJsonUrl() {
             msgEl.style.color = 'var(--danger)';
             console.error('❌ Test failed:', err);
         });
+}
+
+// ===== REFRESH CURRENT TAB =====
+function refreshCurrentTab() {
+    const activePanel = document.querySelector('.tab-panel.active');
+    if (!activePanel) return;
+    const tabId = activePanel.id;
+    if (tabId === 'rates') renderRecords('rates');
+    else if (tabId === 'drafts') renderRecords('drafts');
+    else if (tabId === 'rrdrafts') renderRecords('rrdrafts');
+    else if (tabId === 'ratesheet') { renderRateSheet(); updateExpiryDashboard(); }
+    else if (tabId === 'dsr') renderShipments();
+    else if (tabId === 'bldraft') renderBLDrafts();
+    else if (tabId === 'database') renderDatabase();
+}
+
+
+
+// ==================== RATE SHEET BULK ACTIONS ====================
+
+function toggleAllRatesheetCheckboxes() {
+    const checked = document.getElementById('ratesheet-select-all').checked;
+    document.querySelectorAll('.ratesheet-row-checkbox').forEach(cb => cb.checked = checked);
+    updateRatesheetSelectedCount();
+}
+
+function updateRatesheetSelectedCount() {
+    const checked = document.querySelectorAll('.ratesheet-row-checkbox:checked').length;
+    const el = document.getElementById('ratesheet-selected-count');
+    if (el) el.textContent = checked + ' selected';
+}
+
+function getSelectedRateSheetIndices() {
+    const indices = [];
+    document.querySelectorAll('.ratesheet-row-checkbox:checked').forEach(cb => {
+        const idx = parseInt(cb.dataset.idx);
+        if (!isNaN(idx)) indices.push(idx);
+    });
+    return indices;
+}
+
+function ratesheetBulkAction(action) {
+    const indices = getSelectedRateSheetIndices();
+    if (indices.length === 0) {
+        alert('Please select at least one rate.');
+        return;
+    }
+
+    switch (action) {
+        case 'preview':
+            const firstIdx = indices[0];
+            previewRateSheet(firstIdx);
+            break;
+
+        case 'edit':
+            // Only one at a time – open the first selected
+            const editIdx = indices[0];
+            if (indices.length > 1) {
+                if (!confirm(`You selected ${indices.length} rates. Only the first one will be edited. Continue?`)) return;
+            }
+            editRateSheet(editIdx);
+            break;
+
+        case 'duplicate':
+            if (!confirm(`Duplicate ${indices.length} selected rate(s)?`)) return;
+            // Duplicate in reverse order to avoid index shifting if we want to keep original order
+            indices.slice().reverse().forEach(idx => {
+                duplicateRateSheet(idx);
+            });
+            // Re-render after all
+            renderRateSheet();
+            updateRatesheetSelectedCount();
+            break;
+
+        case 'renew':
+            if (!confirm(`Renew ${indices.length} selected rate(s)?`)) return;
+            indices.forEach(idx => {
+                renewRateSheet(idx);
+            });
+            // The renew function opens a modal for each – we need to handle it differently.
+            // We'll open the first one and after it's done, continue.
+            // For simplicity, we'll just open the first one and let user do rest manually.
+            if (indices.length > 1) {
+                alert(`Renew opened for the first selected rate (${indices.length} total). Please renew each one manually.`);
+            }
+            renewRateSheet(indices[0]);
+            break;
+
+        case 'delete':
+            if (!confirm(`Delete ${indices.length} selected rate(s)? This cannot be undone.`)) return;
+            // Delete in reverse order to avoid index shifting
+            indices.slice().sort((a, b) => b - a).forEach(idx => {
+                if (idx < db.rateSheet.length) {
+                    db.rateSheet.splice(idx, 1);
+                }
+            });
+            saveDB();
+            renderRateSheet();
+            updateExpiryDashboard();
+            updateRatesheetSelectedCount();
+            break;
+
+        default:
+            alert('Unknown action');
+    }
 }
