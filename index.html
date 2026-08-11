@@ -21,8 +21,13 @@
     </script>
 </head>
 <body>
-    <header>
-        <div class="header-left"><h1>🚢 Freight Forwarding Quotation System</h1></div>
+	<header>
+		<div class="header-left" style="display:flex; align-items:center; gap:10px;">
+			<button class="nav-toggle-btn" id="navToggleBtn" onclick="toggleNav()" title="Toggle Menu">
+				☰
+			</button>
+			<h1>🚢 Freight Forwarding Quotation System</h1>
+		</div>
 		<div class="header-actions">
 			<div class="global-search-wrapper">
 				<input type="text" id="global-search" class="global-search-input"
@@ -243,7 +248,7 @@
                     <button class="btn btn-quoted" type="button" onclick="saveRecord('sea','rates','QUOTED')">📤 QUOTE</button>
                     <button class="btn btn-pdf" type="button" onclick="downloadPDF('sea')">📄 PDF</button>
                     <button class="btn btn-preview" type="button" onclick="previewQuote('sea')">👁 PREVIEW</button>
-                    <button class="btn btn-duplicate" type="button" onclick="copyQuoteData('sea')">📋 COPY</button>
+                    <button class="btn btn-email" type="button" onclick="emailQuote('sea')">📧 Email</button>
                 </div>
             </div>
 
@@ -377,7 +382,7 @@
                     <button class="btn btn-quoted" type="button" onclick="saveRecord('air','rates','QUOTED')">📤 QUOTE</button>
                     <button class="btn btn-pdf" type="button" onclick="downloadPDF('air')">📄 PDF</button>
                     <button class="btn btn-preview" type="button" onclick="previewQuote('air')">👁 PREVIEW</button>
-                    <button class="btn btn-duplicate" type="button" onclick="copyQuoteData('air')">📋 COPY</button>
+                    <button class="btn btn-email" type="button" onclick="emailQuote('air')">📧 Email</button>
                 </div>
             </div>
 
@@ -464,7 +469,7 @@
                     <button class="btn btn-quoted" type="button" onclick="saveRecord('lcl','rates','QUOTED')">📤 QUOTE</button>
                     <button class="btn btn-pdf" type="button" onclick="downloadPDF('lcl')">📄 PDF</button>
                     <button class="btn btn-preview" type="button" onclick="previewQuote('lcl')">👁 PREVIEW</button>
-                    <button class="btn btn-duplicate" type="button" onclick="copyQuoteData('lcl')">📋 COPY</button>
+                    <button class="btn btn-email" type="button" onclick="emailQuote('lcl')">📧 Email</button>
                 </div>
             </div>
 
@@ -517,7 +522,11 @@
 								<option value="14 Days">14 Days</option>
 								<option value="21 Days">21 Days</option>
 							</select>
-						</div>
+						</div>						
+						<div class="form-group" style="grid-column:1/-1; margin-top:8px;">
+							<label>Remarks</label>
+							<textarea id="rr-remarks-sea1" rows="2" placeholder="Any additional remarks..."></textarea>
+						</div>				
 					</div>
 					<div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
 						<button class="btn btn-email" onclick="sendRateRequestEmail()">📧 Send Email</button>
@@ -565,6 +574,10 @@
 								<option value="21 Days">21 Days</option>
 							</select>
 						</div>
+						<div class="form-group" style="grid-column:1/-1; margin-top:8px;">
+							<label>Remarks</label>
+							<textarea id="rr-remarks-sea2" rows="2" placeholder="Any additional remarks..."></textarea>
+						</div>
 					</div>
 					<div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
 						<button class="btn btn-email" onclick="sendRateRequestEmail('seaWithoutShipper')">📧 Send Email</button>
@@ -611,6 +624,10 @@
 								<option value="2 to 8 °C">2 to 8 °C</option>
 							</select>
 						</div>
+						<div class="form-group" style="grid-column:1/-1; margin-top:8px;">
+							<label>Remarks</label>
+							<textarea id="rr-remarks-air" rows="2" placeholder="Any additional remarks..."></textarea>
+						</div>						
 					</div>
 					<div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
 						<button class="btn btn-email" onclick="sendRateRequestEmail('air')">📧 Send Email</button>
@@ -640,30 +657,49 @@
                 <div id="drafts-lcl-list"></div>
             </div>
 
-            <!-- ===== RATES QUOTED ===== -->
-            <div class="tab-panel" id="rates">
-                <div class="tab-heading"><h2>💰 Rate Quotes</h2></div>
-                <div class="counters" id="rates-counters"></div>
-                <div class="filter-row">
-                    <input type="text" id="rates-search-text" class="search-box" placeholder="🔍 Client / POL / POD" style="flex:2;margin:0;" oninput="debouncedSearch('rates')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
-                    <input type="text" id="rates-search-qn" class="search-box" placeholder="🔍 Quote No." style="flex:1;margin:0;" oninput="debouncedSearch('rates')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
-                    <input type="date" id="rates-search-date" class="search-box" style="flex:1;margin:0;" onchange="renderRecords('rates')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
-                    <select id="rates-margin-filter" onchange="renderRecords('rates')" style="flex:1;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
-                        <option value="">All Margins</option>
-                        <option value="positive">Positive</option>
-                        <option value="negative">Negative</option>
-                        <option value="high">High (>15%)</option>
-                        <option value="low">Low (<5%)</option>
-                    </select>
-                    <button class="btn btn-clear" type="button" onclick="clearFilters('rates')" style="height:36px;">Clear</button>
-                </div>
-                <div class="section-heading highlight-sea">🚢 SEA RATES</div>
-                <div id="rates-sea-list"></div>
-                <div class="section-heading highlight-air">✈️ AIR RATES</div>
-                <div id="rates-air-list"></div>
-                <div class="section-heading highlight-lcl">📦 LCL RATES</div>
-                <div id="rates-lcl-list"></div>
-            </div>
+			<!-- ===== RATES QUOTED ===== -->
+			<div class="tab-panel" id="rates">
+				<div class="tab-heading"><h2>💰 Rate Quotes</h2></div>
+				<div class="counters" id="rates-counters"></div>
+				<div class="filter-row">
+					<input type="text" id="rates-search-text" class="search-box" placeholder="🔍 Search by Quote, Customer, Route..." style="flex:2;margin:0;" oninput="debouncedSearch('rates')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+					<select id="rates-status-filter" onchange="renderRecords('rates')" style="flex:1;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+						<option value="">All Status</option>
+						<option value="PENDING">Pending</option>
+						<option value="SENT">Sent</option>
+						<option value="FOLLOW-UP">Follow-up</option>
+						<option value="WON">Won</option>
+						<option value="LOST">Lost</option>
+					</select>
+					<select id="rates-mode-filter" onchange="renderRecords('rates')" style="flex:1;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+						<option value="">All Services</option>
+						<option value="SEA">🚢 SEA</option>
+						<option value="AIR">✈️ AIR</option>
+						<option value="LCL">📦 LCL</option>
+					</select>
+					<select id="rates-user-filter" onchange="renderRecords('rates')" style="flex:1;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+						<option value="">All Users</option>
+					</select>
+					<button class="btn btn-clear" type="button" onclick="clearRatesFilters()" style="height:36px;">Reset</button>
+				</div>
+
+				<!-- Action buttons above table -->
+				<div class="rates-action-bar" style="display:flex; gap:6px; flex-wrap:wrap; margin:8px 0; align-items:center;">
+					<span style="font-weight:600; font-size:0.8rem; color:var(--text-light); margin-right:8px;">Actions:</span>
+					<button class="btn btn-sm btn-preview" onclick="ratesBulkAction('preview')">👁 Preview</button>
+					<button class="btn btn-sm btn-pdf" onclick="ratesBulkAction('pdf')">📄 PDF</button>
+					<button class="btn btn-sm btn-email" onclick="ratesBulkAction('email')">📧 Email</button>
+					<button class="btn btn-sm btn-duplicate" onclick="ratesBulkAction('duplicate')">📋 Duplicate</button>
+					<button class="btn btn-sm btn-draft" onclick="ratesBulkAction('edit')">✏️ Edit</button>
+					<button class="btn btn-sm btn-clear" onclick="ratesBulkAction('delete')">🗑️ Delete</button>
+					<span style="margin-left:auto; font-size:0.75rem; color:var(--text-light);" id="rates-selected-count">0 selected</span>
+				</div>
+
+				<div id="rates-list-container">
+					<!-- Enhanced list will be inserted here -->
+				</div>
+				<div id="rates-pagination" class="pagination"></div>
+			</div>
 
             <!-- ===== RATE SHEET ===== -->
             <div class="tab-panel" id="ratesheet">
