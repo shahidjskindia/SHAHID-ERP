@@ -15366,34 +15366,11 @@ document.addEventListener('DOMContentLoaded', function() {
  * Supports both personal OneDrive and business/SharePoint links
  */
 function getOneDriveDirectUrl(shareLink) {
-    // If it's already a direct API URL, return as is
-    if (shareLink.includes('api.onedrive.com') || shareLink.includes('graph.microsoft.com')) {
-        return shareLink;
+    // Try .ws trick as the simplest conversion
+    if (shareLink.includes('1drv.ms')) {
+        return shareLink.replace('1drv.ms', '1drv.ws');
     }
-
-    // For personal OneDrive links (onedrive.live.com or 1drv.ms)
-    // Encode the URL as base64 and add the "u!" prefix
-    try {
-        // Remove any extra parameters after the link
-        let cleanUrl = shareLink.split('?')[0];
-        
-        // For 1drv.ms short links, we need the full URL
-        // But the API works with the shortened link as well
-        const encodedUrl = btoa(cleanUrl)
-            .replace(/\+/g, '-')
-            .replace(/\//g, '_')
-            .replace(/=+$/, '');
-        
-        return `https://api.onedrive.com/v1.0/shares/u!${encodedUrl}/root/content`;
-    } catch (e) {
-        console.warn('Failed to encode OneDrive link, trying alternative method:', e);
-        // Alternative: try adding ?download=1 parameter
-        if (shareLink.includes('?')) {
-            return shareLink + '&download=1';
-        } else {
-            return shareLink + '?download=1';
-        }
-    }
+    return shareLink;
 }
 
 // ===== JSON URL SYNC =====
@@ -15412,54 +15389,61 @@ function fetchAndMergeJSON() {
     msgEl.textContent = '⏳ Fetching JSON...';
     msgEl.style.color = 'var(--text-light)';
 
-    // Auto-detect OneDrive link and convert to direct download URL
-    let fetchUrl = url;
-    if (url.includes('1drv.ms') || url.includes('onedrive.live.com') || url.includes('sharepoint.com')) {
-        fetchUrl = getOneDriveDirectUrl(url);
-        console.log('🔗 Converted OneDrive link to:', fetchUrl);
-        msgEl.textContent = '⏳ Converting OneDrive link...';
+    // ----- Convert OneDrive link to potential direct URLs -----
+    let candidates = [];
+    if (url.includes('1drv.ms') || url.includes('onedrive.live.com')) {
+        // 1. Replace with .ws
+        candidates.push(url.replace('1drv.ms', '1drv.ws'));
+        // 2. API method (try with download=1)
+        candidates.push(url + '&download=1');
+        // 3. CORS proxy
+        candidates.push('https://api.allorigins.win/raw?url=' + encodeURIComponent(url));
+        // 4. Alternate proxy
+        candidates.push('https://corsproxy.io/?' + encodeURIComponent(url));
+    } else {
+        // For non-OneDrive URLs, just use as is
+        candidates.push(url);
     }
 
-    fetch(fetchUrl)
-        .then(response => {
-            if (!response.ok) {
-                // If the API returns HTML (login page), try the ?download=1 method
-                if (response.status === 401 || response.status === 403) {
-                    const altUrl = url.includes('?') ? url + '&download=1' : url + '?download=1';
-                    console.log('🔄 Retrying with ?download=1:', altUrl);
-                    return fetch(altUrl);
-                }
-                throw new Error('HTTP ' + response.status);
-            }
-            return response;
-        })
-        .then(response => {
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            return response.json();
-        })
-        .then(data => {
-            // Check if it's the full backup format (with timestamp/data) or raw data
-            const importedDb = data.data || data;
-            if (!importedDb || typeof importedDb !== 'object') {
-                throw new Error('Invalid JSON format.');
-            }
-            
-            const summary = mergeDatabase(importedDb);
-            saveDB();
-            
-            // Store the URL for persistence
-            db.jsonSyncUrl = url;
-            saveDB();
-            
-            msgEl.textContent = `✅ Merge successful! ${summary}`;
-            msgEl.style.color = 'var(--success)';
-            refreshCurrentTab();
-        })
-        .catch(err => {
-            msgEl.textContent = `❌ Error: ${err.message}`;
+    // Try each candidate until one works
+    let currentIndex = 0;
+
+    function tryNextCandidate() {
+        if (currentIndex >= candidates.length) {
+            msgEl.textContent = `❌ All fetch methods failed. Please use a GitHub raw URL or Dropbox direct link.`;
             msgEl.style.color = 'var(--danger)';
-            console.error('Fetch error:', err);
-        });
+            return;
+        }
+
+        const fetchUrl = candidates[currentIndex];
+        console.log(`🔍 Trying candidate ${currentIndex + 1}/${candidates.length}:`, fetchUrl);
+
+        fetch(fetchUrl, { cache: 'no-cache' })
+            .then(response => {
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+                return response.json();
+            })
+            .then(data => {
+                const importedDb = data.data || data;
+                if (!importedDb || typeof importedDb !== 'object') {
+                    throw new Error('Invalid JSON format.');
+                }
+                const summary = mergeDatabase(importedDb);
+                saveDB();
+                db.jsonSyncUrl = url;
+                saveDB();
+                msgEl.textContent = `✅ Merge successful! ${summary} (via ${fetchUrl})`;
+                msgEl.style.color = 'var(--success)';
+                refreshCurrentTab();
+            })
+            .catch(err => {
+                console.warn(`❌ Candidate ${currentIndex + 1} failed:`, err.message);
+                currentIndex++;
+                tryNextCandidate();
+            });
+    }
+
+    tryNextCandidate();
 }
 
 function toggleAutoSync() {
