@@ -9053,6 +9053,7 @@ function init() {
     switchToTab(lastTab);
     populateDropdowns();
     renderDatabase();
+    loadJsonSyncUrl();  // <-- Add this line	
 	loadBackupPath();
     if (lastTab === 'drafts') renderRecords('drafts');
     if (lastTab === 'rates') renderRecords('rates');
@@ -15356,3 +15357,150 @@ document.addEventListener('DOMContentLoaded', function() {
         document.querySelector('.app-wrapper').classList.add('nav-collapsed');
     }
 });
+
+
+// ==================== ONEDRIVE JSON AUTO-SYNC ====================
+
+/**
+ * Converts a OneDrive sharing link to a direct download URL
+ * Supports both personal OneDrive and business/SharePoint links
+ */
+function getOneDriveDirectUrl(shareLink) {
+    // If it's already a direct API URL, return as is
+    if (shareLink.includes('api.onedrive.com') || shareLink.includes('graph.microsoft.com')) {
+        return shareLink;
+    }
+
+    // For personal OneDrive links (onedrive.live.com or 1drv.ms)
+    // Encode the URL as base64 and add the "u!" prefix
+    try {
+        // Remove any extra parameters after the link
+        let cleanUrl = shareLink.split('?')[0];
+        
+        // For 1drv.ms short links, we need the full URL
+        // But the API works with the shortened link as well
+        const encodedUrl = btoa(cleanUrl)
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/, '');
+        
+        return `https://api.onedrive.com/v1.0/shares/u!${encodedUrl}/root/content`;
+    } catch (e) {
+        console.warn('Failed to encode OneDrive link, trying alternative method:', e);
+        // Alternative: try adding ?download=1 parameter
+        if (shareLink.includes('?')) {
+            return shareLink + '&download=1';
+        } else {
+            return shareLink + '?download=1';
+        }
+    }
+}
+
+// ===== JSON URL SYNC =====
+let autoSyncInterval = null;
+let autoSyncEnabled = false;
+
+function fetchAndMergeJSON() {
+    const urlInput = document.getElementById('json-url-input');
+    let url = urlInput.value.trim();
+    if (!url) {
+        alert('Please enter a valid URL.');
+        return;
+    }
+
+    const msgEl = document.getElementById('sync-message');
+    msgEl.textContent = '⏳ Fetching JSON...';
+    msgEl.style.color = 'var(--text-light)';
+
+    // Auto-detect OneDrive link and convert to direct download URL
+    let fetchUrl = url;
+    if (url.includes('1drv.ms') || url.includes('onedrive.live.com') || url.includes('sharepoint.com')) {
+        fetchUrl = getOneDriveDirectUrl(url);
+        console.log('🔗 Converted OneDrive link to:', fetchUrl);
+        msgEl.textContent = '⏳ Converting OneDrive link...';
+    }
+
+    fetch(fetchUrl)
+        .then(response => {
+            if (!response.ok) {
+                // If the API returns HTML (login page), try the ?download=1 method
+                if (response.status === 401 || response.status === 403) {
+                    const altUrl = url.includes('?') ? url + '&download=1' : url + '?download=1';
+                    console.log('🔄 Retrying with ?download=1:', altUrl);
+                    return fetch(altUrl);
+                }
+                throw new Error('HTTP ' + response.status);
+            }
+            return response;
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            return response.json();
+        })
+        .then(data => {
+            // Check if it's the full backup format (with timestamp/data) or raw data
+            const importedDb = data.data || data;
+            if (!importedDb || typeof importedDb !== 'object') {
+                throw new Error('Invalid JSON format.');
+            }
+            
+            const summary = mergeDatabase(importedDb);
+            saveDB();
+            
+            // Store the URL for persistence
+            db.jsonSyncUrl = url;
+            saveDB();
+            
+            msgEl.textContent = `✅ Merge successful! ${summary}`;
+            msgEl.style.color = 'var(--success)';
+            refreshCurrentTab();
+        })
+        .catch(err => {
+            msgEl.textContent = `❌ Error: ${err.message}`;
+            msgEl.style.color = 'var(--danger)';
+            console.error('Fetch error:', err);
+        });
+}
+
+function toggleAutoSync() {
+    const url = document.getElementById('json-url-input').value.trim();
+    if (!url) {
+        alert('Please enter a JSON URL first.');
+        return;
+    }
+    const toggleBtn = document.getElementById('auto-sync-toggle');
+    if (autoSyncEnabled) {
+        clearInterval(autoSyncInterval);
+        autoSyncEnabled = false;
+        toggleBtn.textContent = '⏰ Auto-Sync Off';
+        document.getElementById('auto-sync-status').textContent = 'Stopped';
+        return;
+    }
+    // Enable auto-sync (every 5 minutes)
+    autoSyncInterval = setInterval(fetchAndMergeJSON, 5 * 60 * 1000);
+    autoSyncEnabled = true;
+    toggleBtn.textContent = '⏰ Auto-Sync On';
+    document.getElementById('auto-sync-status').textContent = 'Running (every 5 min)';
+    // Do an immediate first fetch
+    fetchAndMergeJSON();
+}
+
+function loadJsonSyncUrl() {
+    const savedUrl = db.jsonSyncUrl || '';
+    const input = document.getElementById('json-url-input');
+    if (input) input.value = savedUrl;
+}
+
+// Helper to refresh current tab after merge
+function refreshCurrentTab() {
+    const activePanel = document.querySelector('.tab-panel.active');
+    if (!activePanel) return;
+    const tabId = activePanel.id;
+    if (tabId === 'rates') renderRecords('rates');
+    else if (tabId === 'drafts') renderRecords('drafts');
+    else if (tabId === 'rrdrafts') renderRecords('rrdrafts');
+    else if (tabId === 'ratesheet') { renderRateSheet(); updateExpiryDashboard(); }
+    else if (tabId === 'dsr') renderShipments();
+    else if (tabId === 'bldraft') renderBLDrafts();
+    else if (tabId === 'database') renderDatabase();
+}
