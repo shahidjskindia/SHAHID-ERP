@@ -20,20 +20,20 @@ const airChargePlaceholders = {
 
 
 const defaultCharges = {
-    sea: ["FREIGHT", "THC", "SEAL", "MUC", "DOCS", "SWITCH BL", "ETS", "HAZ DOCS", "AMS", "CFS", "CLEARANCE", "VGM",
+    sea: ["FREIGHT", "THC", "SEAL", "MUC", "DOCS", "SEAWAY BL", "ETS", "HAZ DOCS", "AMS", "CFS", "CLEARANCE", "VGM",
         "TOLL", "LASHING & CHOKING", "HAZ STICKER", "TRANSPORTATION", "LOLO", "ON WHEEL", "OTHER LOCALS"
     ],
     air: ["AIR FREIGHT", "CARTAGE", "MCC", "XRAY", "GATE PASS", "ASI GMAX", "CUSTOM CLEARANCE", "TERMINAL TRANSFER",
         "AWB FEES", "TEDI", "AMS", "PALLETISATION", "PLY", "LOADING & UNLOADING", "DG FEES", "DG AGENT FEE",
         "REPACKING", "TRANSPORATION", "ADD.SURCHARGE"
     ],
-    lcl: ["FREIGHT", "THC", "MUC", "DOCS", "SWITCH BL", "HAZ DOCS", "AMS", "CLEARANCE", "VGM"]
+    lcl: ["FREIGHT", "THC", "MUC", "DOCS", "SEAWAY BL", "HAZ DOCS", "AMS", "CLEARANCE", "VGM"]
 };
 
 const chargeCategories = {
     sea: {
         "Freight": ["FREIGHT"],
-        "Carrier Charges": ["THC", "SEAL", "MUC", "DOCS", "SWITCH BL", "ETS", "HAZ DOCS", "AMS"],
+        "Carrier Charges": ["THC", "SEAL", "MUC", "DOCS", "SEAWAY BL", "ETS", "HAZ DOCS", "AMS"],
         "CFS / Transport Charges": ["CFS", "CLEARANCE", "VGM", "TOLL", "LASHING & CHOKING", "HAZ STICKER",
             "ON WHEEL", "TRANSPORTATION", "LOLO", "OTHER LOCALS"
         ]
@@ -48,7 +48,7 @@ const chargeCategories = {
     },
     lcl: {
         "Freight": ["FREIGHT"],
-        "Origin Charges": ["THC", "MUC", "DOCS", "SWITCH BL", "HAZ DOCS", "AMS", "CLEARANCE", "VGM"]
+        "Origin Charges": ["THC", "MUC", "DOCS", "SEAWAY BL", "HAZ DOCS", "AMS", "CLEARANCE", "VGM"]
     }
 };
 
@@ -182,7 +182,7 @@ const EMBEDDED_BACKUP = {
   ],
   "defaultAirCharges": [
     {"pol":"MUMBAI, IN","commodity":"NON HAZ","charges":{"CARTAGE":{"amount":1,"currency":"INR"},"MCC":{"amount":1,"currency":"INR"},"XRAY":{"amount":3.14,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":3500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"}}},
-    {"pol":"MUMBAI, IN","commodity":"HAZ","charges":{"CARTAGE":{"amount":1,"currency":"INR"},"MCC":{"amount":1,"currency":"INR"},"XRAY":{"amount":3,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":2500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"},"DG FEES":{"amount":10000,"currency":"INR"},"DG AGENT FEE":{"amount":3500,"currency":"INR"}},"createdAt":"2026-07-30T16:23:38.785Z","updatedAt":"2026-07-30T16:23:38.785Z"},
+    {"pol":"MUMBAI, IN","commodity":"HAZ","charges":{"CARTAGE":{"amount":1,"currency":"INR"},"MCC":{"amount":1,"currency":"INR"},"XRAY":{"amount":3.14,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":3500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"},"DG FEES":{"amount":10000,"currency":"INR"},"DG AGENT FEE":{"amount":3500,"currency":"INR"}},"createdAt":"2026-07-30T16:23:38.785Z","updatedAt":"2026-07-30T16:23:38.785Z"},
     {"pol":"AHMEDABAD, IN","commodity":"NON HAZ","charges":{"CARTAGE":{"amount":850,"currency":"INR"},"MCC":{"amount":850,"currency":"INR"},"XRAY":{"amount":850,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":2500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"}},"createdAt":"2026-07-30T16:26:44.137Z","updatedAt":"2026-07-30T16:26:44.137Z"},
     {"pol":"AHMEDABAD, IN","commodity":"HAZ","charges":{"CARTAGE":{"amount":850,"currency":"INR"},"MCC":{"amount":850,"currency":"INR"},"XRAY":{"amount":850,"currency":"INR"},"CUSTOM CLEARANCE":{"amount":2500,"currency":"INR"},"AWB FEES":{"amount":800,"currency":"INR"},"LOADING & UNLOADING":{"amount":800,"currency":"INR"},"ASI GMAX":{"amount":281,"currency":"INR"},"AMS":{"amount":1750,"currency":"INR"},"TEDI":{"amount":225,"currency":"INR"},"DG FEES":{"amount":10000,"currency":"INR"},"DG AGENT FEE":{"amount":3500,"currency":"INR"}},"createdAt":"2026-07-30T16:27:00.870Z","updatedAt":"2026-07-30T16:27:00.870Z"}
   ],
@@ -219,17 +219,17 @@ const EMBEDDED_BACKUP = {
     {"mode":"sea","carrier":"CMA","pol":"HAZIRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":14455,"currency":"INR","buyAmount":14455,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"CMA","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":14255,"currency":"INR","buyAmount":14255,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":38,"currency":"USD","buyAmount":38,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":3300,"currency":"INR","buyAmount":3300,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"CMA","pol":"HAZIRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":21675,"currency":"INR","buyAmount":21675,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"MSC","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":9070,"currency":"INR","buyAmount":9070,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"},"ETS":{"amount":2800,"currency":"INR","buyAmount":2800,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MSC","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":9070,"currency":"INR","buyAmount":9070,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"},"ETS":{"amount":2800,"currency":"INR","buyAmount":2800,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"MSC","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":15000,"currency":"INR","buyAmount":15000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"MSC","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":11500,"currency":"INR","buyAmount":11500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":9,"currency":"USD","buyAmount":9,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"},"ETS":{"amount":2800,"currency":"INR","buyAmount":2800,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MSC","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":11500,"currency":"INR","buyAmount":11500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":9,"currency":"USD","buyAmount":9,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"},"ETS":{"amount":2800,"currency":"INR","buyAmount":2800,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"MSC","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":16700,"currency":"INR","buyAmount":16700,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"MSC","pol":"MUNDRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":11590,"currency":"INR","buyAmount":11590,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":9,"currency":"USD","buyAmount":9,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"},"ETS":{"amount":2800,"currency":"INR","buyAmount":2800,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MSC","pol":"MUNDRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":11590,"currency":"INR","buyAmount":11590,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":9,"currency":"USD","buyAmount":9,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"},"ETS":{"amount":2800,"currency":"INR","buyAmount":2800,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"MSC","pol":"MUNDRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":15690,"currency":"INR","buyAmount":15690,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"MSC","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":15690,"currency":"INR","buyAmount":15690,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":9,"currency":"USD","buyAmount":9,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"},"ETS":{"amount":2800,"currency":"INR","buyAmount":2800,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MSC","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":15690,"currency":"INR","buyAmount":15690,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":9,"currency":"USD","buyAmount":9,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"},"ETS":{"amount":2800,"currency":"INR","buyAmount":2800,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"MSC","pol":"MUNDRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":17790,"currency":"INR","buyAmount":17790,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"MSC","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":9400,"currency":"INR","buyAmount":9400,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"},"ETS":{"amount":2800,"currency":"INR","buyAmount":2800,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MSC","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":9400,"currency":"INR","buyAmount":9400,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"},"ETS":{"amount":2800,"currency":"INR","buyAmount":2800,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"MSC","pol":"HAZIRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":13850,"currency":"INR","buyAmount":13850,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"MSC","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":12000,"currency":"INR","buyAmount":12000,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":9,"currency":"USD","buyAmount":9,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"},"ETS":{"amount":2800,"currency":"INR","buyAmount":2800,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"MSC","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":12000,"currency":"INR","buyAmount":12000,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":9,"currency":"USD","buyAmount":9,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"},"ETS":{"amount":2800,"currency":"INR","buyAmount":2800,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":30,"currency":"USD","buyAmount":30,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"MSC","pol":"HAZIRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":17500,"currency":"INR","buyAmount":17500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"ZIM","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":11575,"currency":"INR","buyAmount":11575,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":1050,"currency":"INR","buyAmount":1050,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5500,"currency":"INR","buyAmount":5500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":1250,"currency":"INR","buyAmount":1250,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"ZIM","pol":"HAZIRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":17100,"currency":"INR","buyAmount":17100,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
@@ -243,22 +243,22 @@ const EMBEDDED_BACKUP = {
     {"mode":"sea","carrier":"ZIM","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":18775,"currency":"INR","buyAmount":18775,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"ZIM","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":16125,"currency":"INR","buyAmount":16125,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":1050,"currency":"INR","buyAmount":1050,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5500,"currency":"INR","buyAmount":5500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":1250,"currency":"INR","buyAmount":1250,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"ZIM","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":26100,"currency":"INR","buyAmount":26100,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"ESL","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4300,"currency":"INR","buyAmount":4300,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1600,"currency":"INR","buyAmount":1600,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"ESL","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4300,"currency":"INR","buyAmount":4300,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1600,"currency":"INR","buyAmount":1600,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"ESL","pol":"MUNDRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4300,"currency":"INR","buyAmount":4300,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1600,"currency":"INR","buyAmount":1600,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"ESL","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4300,"currency":"INR","buyAmount":4300,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1600,"currency":"INR","buyAmount":1600,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"ESL","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4300,"currency":"INR","buyAmount":4300,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1600,"currency":"INR","buyAmount":1600,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"ESL","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4300,"currency":"INR","buyAmount":4300,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1600,"currency":"INR","buyAmount":1600,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ESL","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4300,"currency":"INR","buyAmount":4300,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":1600,"currency":"INR","buyAmount":1600,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ESL","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4300,"currency":"INR","buyAmount":4300,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":1600,"currency":"INR","buyAmount":1600,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ESL","pol":"MUNDRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4300,"currency":"INR","buyAmount":4300,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":1600,"currency":"INR","buyAmount":1600,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ESL","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4300,"currency":"INR","buyAmount":4300,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":1600,"currency":"INR","buyAmount":1600,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ESL","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4300,"currency":"INR","buyAmount":4300,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":1600,"currency":"INR","buyAmount":1600,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ESL","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4300,"currency":"INR","buyAmount":4300,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":1600,"currency":"INR","buyAmount":1600,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"EVERGREEN","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":12400,"currency":"INR","buyAmount":12400,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":700,"currency":"INR","buyAmount":700,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"EVERGREEN","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":11500,"currency":"INR","buyAmount":11500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"EVERGREEN","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":700,"currency":"INR","buyAmount":700,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5000,"currency":"INR","buyAmount":5000,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1000,"currency":"INR","buyAmount":1000,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":14,"currency":"USD","buyAmount":14,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"ONE","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4200,"currency":"INR","buyAmount":4200,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"ONE","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4200,"currency":"INR","buyAmount":4200,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"EVERGREEN","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":700,"currency":"INR","buyAmount":700,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5000,"currency":"INR","buyAmount":5000,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":1000,"currency":"INR","buyAmount":1000,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":14,"currency":"USD","buyAmount":14,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ONE","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4200,"currency":"INR","buyAmount":4200,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ONE","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4200,"currency":"INR","buyAmount":4200,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"ONE","pol":"MUNDRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":16225,"currency":"INR","buyAmount":16225,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"ONE","pol":"MUNDRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4200,"currency":"INR","buyAmount":4200,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"ONE","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4200,"currency":"INR","buyAmount":4200,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"ONE","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4200,"currency":"INR","buyAmount":4200,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"ONE","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4200,"currency":"INR","buyAmount":4200,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ONE","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4200,"currency":"INR","buyAmount":4200,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ONE","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4200,"currency":"INR","buyAmount":4200,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ONE","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4200,"currency":"INR","buyAmount":4200,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"MAERSK","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":11,"currency":"USD","buyAmount":11,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":20,"currency":"USD","buyAmount":20,"buyCurrency":"USD","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"MAERSK","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":11,"currency":"USD","buyAmount":11,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":40,"currency":"USD","buyAmount":40,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"MAERSK","pol":"MUNDRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":15700,"currency":"INR","buyAmount":15700,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
@@ -267,14 +267,14 @@ const EMBEDDED_BACKUP = {
     {"mode":"sea","carrier":"MAERSK","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":11,"currency":"USD","buyAmount":11,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":20,"currency":"USD","buyAmount":20,"buyCurrency":"USD","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"MAERSK","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":15515,"currency":"INR","buyAmount":15515,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":11,"currency":"USD","buyAmount":11,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5100,"currency":"INR","buyAmount":5100,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":40,"currency":"USD","buyAmount":40,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"MAERSK","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":21200,"currency":"INR","buyAmount":21200,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"ALADINEXP","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4000,"currency":"INR","buyAmount":4000,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1200,"currency":"INR","buyAmount":1200,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"ALADINEXP","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4000,"currency":"INR","buyAmount":4000,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1200,"currency":"INR","buyAmount":1200,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"ALADINEXP","pol":"MUNDRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4000,"currency":"INR","buyAmount":4000,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1200,"currency":"INR","buyAmount":1200,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"ALADINEXP","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":24500,"currency":"INR","buyAmount":24500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4000,"currency":"INR","buyAmount":4000,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1200,"currency":"INR","buyAmount":1200,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ALADINEXP","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4000,"currency":"INR","buyAmount":4000,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":1200,"currency":"INR","buyAmount":1200,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ALADINEXP","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4000,"currency":"INR","buyAmount":4000,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":1200,"currency":"INR","buyAmount":1200,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ALADINEXP","pol":"MUNDRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4000,"currency":"INR","buyAmount":4000,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":1200,"currency":"INR","buyAmount":1200,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ALADINEXP","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":24500,"currency":"INR","buyAmount":24500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4000,"currency":"INR","buyAmount":4000,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":1200,"currency":"INR","buyAmount":1200,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"ALADINEXP","pol":"MUNDRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":38500,"currency":"INR","buyAmount":38500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"ALADINEXP","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":10222,"currency":"INR","buyAmount":10222,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4000,"currency":"INR","buyAmount":4000,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1200,"currency":"INR","buyAmount":1200,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ALADINEXP","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":10222,"currency":"INR","buyAmount":10222,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4000,"currency":"INR","buyAmount":4000,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":1200,"currency":"INR","buyAmount":1200,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"ALADINEXP","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":16608,"currency":"INR","buyAmount":16608,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"ALADINEXP","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":15000,"currency":"INR","buyAmount":15000,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4000,"currency":"INR","buyAmount":4000,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":1200,"currency":"INR","buyAmount":1200,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"ALADINEXP","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":15000,"currency":"INR","buyAmount":15000,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4000,"currency":"INR","buyAmount":4000,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":1200,"currency":"INR","buyAmount":1200,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"ALADINEXP","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":22470,"currency":"INR","buyAmount":22470,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"HMM","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":9250,"currency":"INR","buyAmount":9250,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5000,"currency":"INR","buyAmount":5000,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"HMM","pol":"HAZIRA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":14200,"currency":"INR","buyAmount":14200,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
@@ -296,14 +296,14 @@ const EMBEDDED_BACKUP = {
     {"mode":"sea","carrier":"ECON","pol":"MUNDRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":400,"currency":"INR","buyAmount":400,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"ECON","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":12500,"currency":"INR","buyAmount":12500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":400,"currency":"INR","buyAmount":400,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"ECON","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":400,"currency":"INR","buyAmount":400,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":15,"currency":"USD","buyAmount":15,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"},"AMS":{"amount":35,"currency":"USD","buyAmount":35,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"NVOCC","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":13500,"currency":"INR","buyAmount":13500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":3500,"currency":"INR","buyAmount":3500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"NVOCC","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":13500,"currency":"INR","buyAmount":13500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":3500,"currency":"INR","buyAmount":3500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"NVOCC","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":18500,"currency":"INR","buyAmount":18500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"NVOCC","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":18500,"currency":"INR","buyAmount":18500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":3500,"currency":"INR","buyAmount":3500,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"NVOCC","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":18500,"currency":"INR","buyAmount":18500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":3500,"currency":"INR","buyAmount":3500,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"EVERGREEN","pol":"HAZIRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":25500,"currency":"INR","buyAmount":25500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"EVERGREEN","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":700,"currency":"INR","buyAmount":700,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5000,"currency":"INR","buyAmount":5000,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":3500,"currency":"INR","buyAmount":3500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"WANHAI","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":11300,"currency":"INR","buyAmount":11300,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":400,"currency":"INR","buyAmount":400,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"WANHAI","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":11300,"currency":"INR","buyAmount":11300,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":400,"currency":"INR","buyAmount":400,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"WANHAI","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":18300,"currency":"INR","buyAmount":18300,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"WANHAI","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":13100,"currency":"INR","buyAmount":13100,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":400,"currency":"INR","buyAmount":400,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"WANHAI","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":13100,"currency":"INR","buyAmount":13100,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":400,"currency":"INR","buyAmount":400,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"WANHAI","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":21100,"currency":"INR","buyAmount":21100,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"COSCO","pol":"HAZIRA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":18000,"currency":"INR","buyAmount":18000,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":5,"currency":"USD","buyAmount":5,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5500,"currency":"INR","buyAmount":5500,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"COSCO","pol":"HAZIRA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":27000,"currency":"INR","buyAmount":27000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
@@ -317,16 +317,16 @@ const EMBEDDED_BACKUP = {
     {"mode":"sea","carrier":"COSCO","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":21250,"currency":"INR","buyAmount":21250,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"COSCO","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":10000,"currency":"INR","buyAmount":10000,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":5,"currency":"USD","buyAmount":5,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5500,"currency":"INR","buyAmount":5500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"COSCO","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":15900,"currency":"INR","buyAmount":15900,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"SEAPOL","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":15500,"currency":"INR","buyAmount":15500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":3000,"currency":"INR","buyAmount":3000,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"SEAPOL","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":15500,"currency":"INR","buyAmount":15500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":3000,"currency":"INR","buyAmount":3000,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"SEAPOL","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":22500,"currency":"INR","buyAmount":22500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"KMTC","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":11400,"currency":"INR","buyAmount":11400,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"KMTC","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":17900,"currency":"INR","buyAmount":17900,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"KMTC","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":14500,"currency":"INR","buyAmount":14500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":8,"currency":"USD","buyAmount":8,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"HAZDOCS":{"amount":3000,"currency":"INR","buyAmount":3000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"KMTC","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":22500,"currency":"INR","buyAmount":22500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"MAXICON","pol":"HAZIRA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":13500,"currency":"INR","buyAmount":13500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":750,"currency":"INR","buyAmount":750,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":5000,"currency":"INR","buyAmount":5000,"buyCurrency":"INR","basis":"Normal"},"ETS":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"RADIANT","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":13000,"currency":"INR","buyAmount":13000,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":750,"currency":"INR","buyAmount":750,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":3000,"currency":"INR","buyAmount":3000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"RADIANT","pol":"NHAVA SHEVA, IN","container":"20 GP","commodity":"NON HAZ","charges":{"THC":{"amount":13000,"currency":"INR","buyAmount":13000,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":750,"currency":"INR","buyAmount":750,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":3000,"currency":"INR","buyAmount":3000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"RADIANT","pol":"NHAVA SHEVA, IN","container":"40 HC","commodity":"NON HAZ","charges":{"THC":{"amount":19500,"currency":"INR","buyAmount":19500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
-    {"mode":"sea","carrier":"RADIANT","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":18500,"currency":"INR","buyAmount":18500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":750,"currency":"INR","buyAmount":750,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SWITCHBL":{"amount":3000,"currency":"INR","buyAmount":3000,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
+    {"mode":"sea","carrier":"RADIANT","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"THC":{"amount":18500,"currency":"INR","buyAmount":18500,"buyCurrency":"INR","basis":"Normal"},"SEAL":{"amount":750,"currency":"INR","buyAmount":750,"buyCurrency":"INR","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"SEAWAY":{"amount":3000,"currency":"INR","buyAmount":3000,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":2500,"currency":"INR","buyAmount":2500,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"RADIANT","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":28000,"currency":"INR","buyAmount":28000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"SINOKOR","pol":"NHAVASHEVA, IN","container":"40 HC","commodity":"HAZ","charges":{"THC":{"amount":15779,"currency":"INR","buyAmount":15779,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
     {"mode":"sea","carrier":"SINOKOR","pol":"NHAVASHEVA, IN","container":"20 GP","commodity":"HAZ","charges":{"SEAL":{"amount":10,"currency":"USD","buyAmount":10,"buyCurrency":"USD","basis":"Normal"},"MUC":{"amount":170,"currency":"INR","buyAmount":170,"buyCurrency":"INR","basis":"Normal"},"DOCS":{"amount":4500,"currency":"INR","buyAmount":4500,"buyCurrency":"INR","basis":"Normal"},"HAZDOCS":{"amount":3000,"currency":"INR","buyAmount":3000,"buyCurrency":"INR","basis":"Normal"}},"updated":"2026-07-30T16:17:43.350Z"},
@@ -1291,6 +1291,14 @@ document.querySelectorAll('.tab-btn-vertical').forEach(btn => {
 });
 
 function switchToTab(targetTab) {
+    // --- Auto-hide side menu when switching tabs ---
+    const wrapper = document.querySelector('.app-wrapper');
+    if (wrapper && !wrapper.classList.contains('nav-collapsed')) {
+        wrapper.classList.add('nav-collapsed');
+        localStorage.setItem('navCollapsed', 'true');
+    }
+
+    // --- Existing tab switching logic ---
     document.querySelectorAll('.tab-btn-vertical').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     const btn = document.querySelector(`.tab-btn-vertical[data-tab="${targetTab}"]`);
@@ -1300,10 +1308,10 @@ function switchToTab(targetTab) {
     db.navState.lastTab = targetTab;
     saveDB();
 
-    // ← ADD: Remove active class from all category headers
+    // --- Remove active class from all category headers ---
     document.querySelectorAll('.nav-category-header').forEach(h => h.classList.remove('active'));
 
-    // ← ADD: Find the parent category of the active tab and add 'active' class
+    // --- Add active class to the parent category ---
     if (btn) {
         const category = btn.closest('.nav-category');
         if (category) {
@@ -1312,12 +1320,13 @@ function switchToTab(targetTab) {
         }
     }
 
+    // --- Render content based on tab ---
     if (targetTab === 'drafts') renderRecords('drafts');
     if (targetTab === 'rates') renderRecords('rates');
     if (targetTab === 'ratesheet') { renderRateSheet(); updateExpiryDashboard(); }
     if (targetTab === 'dsr') renderShipments();
     if (targetTab === 'bldraft') renderBLDrafts();
-	if (targetTab === 'rrdrafts') renderRRDrafts();
+    if (targetTab === 'rrdrafts') renderRecords('rrdrafts');
     if (targetTab === 'followup') renderFollowups();
     if (targetTab === 'dashboard') renderDashboard();
     if (targetTab === 'database') renderDatabase();
@@ -2092,7 +2101,7 @@ function onCarrierPolChangeInternal(mode) {
         return;
     }
 
-    // Collect existing manual values to avoid overwriting
+    // Preserve existing manual charges (including those added by user)
     const existingValues = {};
     document.querySelectorAll(`#${mode}-charges-grid .charge-row`).forEach(row => {
         const charge = row.getAttribute('data-charge');
@@ -2113,6 +2122,7 @@ function onCarrierPolChangeInternal(mode) {
         }
     });
 
+    // ---- 1. Load default charges (only for SEA, and only if checkbox is OFF) ----
     let defaultCharges = {};
     if (mode === 'sea') {
         const ownCfs = document.getElementById('sea-own-cfs')?.checked || false;
@@ -2122,6 +2132,7 @@ function onCarrierPolChangeInternal(mode) {
             );
             if (defaultMatch) {
                 defaultCharges = { ...defaultMatch.charges };
+                // Handle container suffix (if needed)
                 let suffix = '';
                 if (container === '20 GP') suffix = '_20';
                 else if (container === '40 GP' || container === '40 HC') suffix = '_40';
@@ -2150,6 +2161,7 @@ function onCarrierPolChangeInternal(mode) {
         if (defaultMatch) defaultCharges = { ...defaultMatch.charges };
     }
 
+    // ---- 2. Load carrier‑specific charges (always) ----
     let carrierCharges = {};
     if (mode === 'sea') {
         const carrierMatch = db.carrierChargesSeaLcl.find(c =>
@@ -2177,8 +2189,8 @@ function onCarrierPolChangeInternal(mode) {
         if (carrierMatch) carrierCharges = { ...carrierMatch.charges };
     }
 
+    // ---- 3. Merge: defaults + carrier + existing manual ----
     const mergedCharges = { ...defaultCharges, ...carrierCharges };
-
     const finalCharges = {};
     Object.keys(mergedCharges).forEach(charge => {
         const existing = existingValues[charge];
@@ -2204,7 +2216,7 @@ function onCarrierPolChangeInternal(mode) {
             }
         }
     });
-
+    // Keep any manual charges that were not in merged
     Object.keys(existingValues).forEach(charge => {
         if (!finalCharges[charge]) {
             finalCharges[charge] = {
@@ -2217,15 +2229,25 @@ function onCarrierPolChangeInternal(mode) {
         }
     });
 
-    const order = chargesOrder[mode] || null;
+    // ---- 4. Build the order – REMOVE CFS category if checkbox is checked ----
+    let order = JSON.parse(JSON.stringify(chargeCategories[mode])); // start fresh
+    if (mode === 'sea') {
+        const ownCfs = document.getElementById('sea-own-cfs')?.checked || false;
+        if (ownCfs) {
+            delete order['CFS / Transport Charges'];
+        }
+    }
+    // Remove empty categories
+    Object.keys(order).forEach(cat => {
+        if (order[cat].length === 0) delete order[cat];
+    });
+
+    // ---- 5. Build the grid ----
     buildChargesGrid(mode, finalCharges, order);
 
-    // Immediately apply higher-of logic for AIR if weight > 0
+    // ---- 6. Recalculate totals and special logic ----
     if (mode === 'air') {
-        // Force PALLETISATION calculation when charges are loaded
-        setTimeout(() => {
-            recalcCharge('air', 'PALLETISATION');
-        }, 100);
+        setTimeout(() => recalcCharge('air', 'PALLETISATION'), 100);
         const weight = parseFloat(document.getElementById('air-weight')?.value) || 0;
         if (weight > 0) {
             Object.keys(finalCharges).forEach(charge => {
@@ -2236,10 +2258,6 @@ function onCarrierPolChangeInternal(mode) {
             });
         }
     }
-
-
-
-    // For LCL with Per CBM, recalc if volume > 0
     if (mode === 'lcl') {
         const volume = parseFloat(document.getElementById('lcl-volume')?.value) || 0;
         if (volume > 0) {
@@ -2251,16 +2269,12 @@ function onCarrierPolChangeInternal(mode) {
             });
         }
     }
-
     recalcTotal(mode);
 }
 
 function onOwnCfsToggle(mode) {
     if (mode === 'sea') {
-        // Clear the charges order so we rebuild from scratch
-        chargesOrder[mode] = null;
-        // Rebuild charges with the new checkbox state
-        onCarrierPolChangeInternal(mode, true); // pass a reset flag
+        onCarrierPolChangeInternal('sea');
     }
 }
 
@@ -2712,8 +2726,16 @@ function debouncedSearch(target) {
     }, 300);
 }
 
+
 // ==================== RECORDS RENDERING ====================
 function renderRecords(target) {
+    // === ENHANCED RATES VIEW ===
+    if (target === 'rates') {
+        renderEnhancedRates();
+        return;
+    }
+
+    // === DRAFTS VIEW (unchanged) ===
     const counterId = target === 'drafts' ? 'drafts-counters' : 'rates-counters';
     const countersEl = document.getElementById(counterId);
     if (countersEl) {
@@ -2724,18 +2746,17 @@ function renderRecords(target) {
             lclC = (db.drafts.lcl || []).length;
             rrC = (db.drafts.rr || []).length;
         } else {
-            seaC = (db.rates.sea || []).length;
-            airC = (db.rates.air || []).length;
-            lclC = (db.rates.lcl || []).length;
+            // For other targets, keep old counters (should not happen here)
         }
         const prefix = target === 'drafts' ? 'Draft' : 'Quoted';
-		countersEl.innerHTML = `
-			<div class="counter-card sea"><div class="counter-label">🚢 ${prefix} Sea</div><div class="counter-value">${seaC}</div></div>
-			<div class="counter-card air"><div class="counter-label">✈️ ${prefix} Air</div><div class="counter-value">${airC}</div></div>
-			<div class="counter-card lcl"><div class="counter-label">📦 ${prefix} LCL</div><div class="counter-value">${lclC}</div></div>
-			<div class="counter-card" style="border-color:#8b5cf6;"><div class="counter-label">📊 Total</div><div class="counter-value">${seaC + airC + lclC}</div></div>
-		`;
+        countersEl.innerHTML = `
+            <div class="counter-card sea"><div class="counter-label">🚢 ${prefix} Sea</div><div class="counter-value">${seaC}</div></div>
+            <div class="counter-card air"><div class="counter-label">✈️ ${prefix} Air</div><div class="counter-value">${airC}</div></div>
+            <div class="counter-card lcl"><div class="counter-label">📦 ${prefix} LCL</div><div class="counter-value">${lclC}</div></div>
+            <div class="counter-card" style="border-color:#8b5cf6;"><div class="counter-label">📊 Total</div><div class="counter-value">${seaC + airC + lclC}</div></div>
+        `;
     }
+
     const searchText = (document.getElementById(`${target}-search-text`)?.value || '').toLowerCase();
     const searchQN = (document.getElementById(`${target}-search-qn`)?.value || '').toLowerCase();
     const searchDate = document.getElementById(`${target}-search-date`)?.value || '';
@@ -2787,7 +2808,7 @@ function renderRecords(target) {
             return `<div class="record-card ${modeClass}">
                         <div class="record-info">
                             <h4>${displayName} (${route}) ${validity.status !== 'none' ? `<span class="validity-badge ${validity.class}">${validity.text}</span>` : ''}</h4>
-							<p class="quote-num">📋 ${rec.quoteNumber||'?'}</p>
+                            <p class="quote-num">📋 ${rec.quoteNumber||'?'}</p>
                             <p>Carrier: ${carrierDisplay} | Status: <strong>${rec.status}</strong> ${rec.lostReason ? `| Lost Reason: <strong style="color:#991b1b;">${rec.lostReason}</strong>` : ''}</p>
                             ${!isRR ? `<p>Sell: <strong>${formatINR(rec.totalSellINR)}</strong> | Buy: <strong style="color:var(--buy-red);">${formatINR(rec.totalBuyINR)}</strong></p>` : ''}
                             ${marginInfo}
@@ -2803,15 +2824,15 @@ function renderRecords(target) {
                                 </select>
                             </div>` : ''}
                         </div>
-						<div class="record-actions">
-							<button class="btn btn-sm btn-preview" onclick="previewSavedRecord('${target}','${mode}',${realIdx})">👁 Preview</button>
-							<button class="btn btn-sm btn-pdf" onclick="downloadSavedPDF('${target}','${mode}',${realIdx})">📄 PDF</button>
-							${!isRR ? `<button class="btn btn-sm btn-email" onclick="emailSavedQuote('${target}','${mode}',${realIdx})">📧 Email</button>` : ''}
-							<button class="btn btn-sm btn-duplicate" onclick="duplicateQuote('${target}','${mode}',${realIdx})">📋 Duplicate</button>
-							<button class="btn btn-sm btn-draft" onclick="editRecord('${target}','${mode}',${realIdx})">✏️ Edit</button>
-							<button class="btn btn-sm btn-clear" onclick="deleteRecord('${target}','${mode}',${realIdx})">🗑️ Delete</button>
-						</div>
-					</div>`;
+                        <div class="record-actions">
+                            <button class="btn btn-sm btn-preview" onclick="previewSavedRecord('${target}','${mode}',${realIdx})">👁 Preview</button>
+                            <button class="btn btn-sm btn-pdf" onclick="downloadSavedPDF('${target}','${mode}',${realIdx})">📄 PDF</button>
+                            ${!isRR ? `<button class="btn btn-sm btn-email" onclick="emailSavedQuote('${target}','${mode}',${realIdx})">📧 Email</button>` : ''}
+                            <button class="btn btn-sm btn-duplicate" onclick="duplicateQuote('${target}','${mode}',${realIdx})">📋 Duplicate</button>
+                            <button class="btn btn-sm btn-draft" onclick="editRecord('${target}','${mode}',${realIdx})">✏️ Edit</button>
+                            <button class="btn btn-sm btn-clear" onclick="deleteRecord('${target}','${mode}',${realIdx})">🗑️ Delete</button>
+                        </div>
+                    </div>`;
         }).join('');
     });
 }
@@ -3821,19 +3842,387 @@ function importData(input) {
         try {
             if (file.name.endsWith('.json')) {
                 const imported = JSON.parse(e.target.result);
-                if (confirm('This will replace all current data. Continue?')) {
-                    db = imported.data || imported;
+                const importedDb = imported.data || imported;
+                
+                // Check if the imported data is valid
+                if (!importedDb || typeof importedDb !== 'object') {
+                    alert('Invalid JSON format. Please check the file.');
+                    return;
+                }
+                
+                if (confirm('This will MERGE the imported data with your existing data.\n\n• New quotes, drafts, and RR will be added\n• Duplicates (by Quote Number) will be skipped\n• Master data (POL, POD, Carriers) will be merged\n\nContinue?')) {
+                    const summary = mergeDatabase(importedDb);
                     saveDB();
-                    alert('Data imported successfully!');
+                    alert(`✅ Data merged successfully!\n\n${summary}`);
                     location.reload();
                 }
-            } else if (file.name.endsWith('.xlsx')) {
-                alert('Excel import is complex. Please use JSON format for full backup restore.');
+            } else {
+                alert('Please select a JSON file (.json)');
             }
-        } catch (err) { alert('Error importing file: ' + err.message); }
+        } catch (err) {
+            alert('Error importing file: ' + err.message);
+        }
     };
     reader.readAsText(file);
     input.value = '';
+}
+
+
+
+function mergeDatabase(importedDb) {
+    let summary = [];
+    let added = { quotes: 0, drafts: 0, rr: 0, ratesheet: 0, shipments: 0, bldrafts: 0 };
+    let skipped = { quotes: 0, drafts: 0, rr: 0, ratesheet: 0, shipments: 0, bldrafts: 0 };
+
+    // ---- 1. MERGE QUOTES (SEA, AIR, LCL) ----
+    ['sea', 'air', 'lcl'].forEach(mode => {
+        if (!importedDb.rates || !importedDb.rates[mode]) return;
+        if (!db.rates[mode]) db.rates[mode] = [];
+        
+        importedDb.rates[mode].forEach(quote => {
+            if (!quote.quoteNumber) {
+                // If no quote number, just push it
+                db.rates[mode].push(quote);
+                added.quotes++;
+                return;
+            }
+            // Check if quote already exists by quoteNumber
+            const exists = db.rates[mode].some(existing => 
+                existing.quoteNumber === quote.quoteNumber
+            );
+            if (!exists) {
+                db.rates[mode].push(quote);
+                added.quotes++;
+            } else {
+                skipped.quotes++;
+            }
+        });
+    });
+
+    // ---- 2. MERGE DRAFTS (SEA, AIR, LCL) ----
+    ['sea', 'air', 'lcl'].forEach(mode => {
+        if (!importedDb.drafts || !importedDb.drafts[mode]) return;
+        if (!db.drafts[mode]) db.drafts[mode] = [];
+        
+        importedDb.drafts[mode].forEach(draft => {
+            if (!draft.quoteNumber) {
+                db.drafts[mode].push(draft);
+                added.drafts++;
+                return;
+            }
+            const exists = db.drafts[mode].some(existing => 
+                existing.quoteNumber === draft.quoteNumber
+            );
+            if (!exists) {
+                db.drafts[mode].push(draft);
+                added.drafts++;
+            } else {
+                skipped.drafts++;
+            }
+        });
+    });
+
+    // ---- 3. MERGE RR DRAFTS (Rate Requests) ----
+    if (importedDb.drafts && importedDb.drafts.rr) {
+        if (!db.drafts.rr) db.drafts.rr = [];
+        
+        importedDb.drafts.rr.forEach(rr => {
+            if (!rr.quoteNumber) {
+                db.drafts.rr.push(rr);
+                added.rr++;
+                return;
+            }
+            const exists = db.drafts.rr.some(existing => 
+                existing.quoteNumber === rr.quoteNumber
+            );
+            if (!exists) {
+                db.drafts.rr.push(rr);
+                added.rr++;
+            } else {
+                skipped.rr++;
+            }
+        });
+    }
+
+    // ---- 4. MERGE RATE SHEET ----
+    if (importedDb.rateSheet && importedDb.rateSheet.length > 0) {
+        if (!db.rateSheet) db.rateSheet = [];
+        
+        importedDb.rateSheet.forEach(rate => {
+            const exists = db.rateSheet.some(existing => 
+                existing.id === rate.id || 
+                (existing.carrierName === rate.carrierName && 
+                 existing.pol === rate.pol && 
+                 existing.pod === rate.pod && 
+                 existing.containerType === rate.containerType &&
+                 existing.freightAmount === rate.freightAmount)
+            );
+            if (!exists) {
+                // Ensure it has an ID
+                if (!rate.id) rate.id = 'RS-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substr(2, 4);
+                db.rateSheet.push(rate);
+                added.ratesheet++;
+            } else {
+                skipped.ratesheet++;
+            }
+        });
+    }
+
+    // ---- 5. MERGE SHIPMENTS ----
+    if (importedDb.shipments && importedDb.shipments.length > 0) {
+        if (!db.shipments) db.shipments = [];
+        
+        importedDb.shipments.forEach(ship => {
+            const exists = db.shipments.some(existing => 
+                existing.code === ship.code || 
+                (existing.jobNo === ship.jobNo && existing.mode === ship.mode)
+            );
+            if (!exists) {
+                db.shipments.push(ship);
+                added.shipments++;
+            } else {
+                skipped.shipments++;
+            }
+        });
+    }
+
+    // ---- 6. MERGE BL DRAFTS ----
+    if (importedDb.bldrafts && importedDb.bldrafts.length > 0) {
+        if (!db.bldrafts) db.bldrafts = [];
+        
+        importedDb.bldrafts.forEach(bl => {
+            const exists = db.bldrafts.some(existing => 
+                existing.blNumber === bl.blNumber
+            );
+            if (!exists) {
+                db.bldrafts.push(bl);
+                added.bldrafts++;
+            } else {
+                skipped.bldrafts++;
+            }
+        });
+    }
+
+    // ---- 7. MERGE MASTER DATA (POL, POD, CARRIERS, CONTAINERS, INCOTERMS) ----
+    const masterKeys = ['pol', 'pod', 'carriers', 'containers', 'incoterms'];
+    masterKeys.forEach(key => {
+        if (!importedDb[key] || !Array.isArray(importedDb[key])) return;
+        if (!db[key]) db[key] = [];
+        
+        importedDb[key].forEach(item => {
+            if (item && typeof item === 'string' && !db[key].includes(item)) {
+                db[key].push(item);
+            }
+        });
+    });
+
+    // ---- 8. MERGE EXCHANGE RATES ----
+    if (importedDb.exchangeRates && typeof importedDb.exchangeRates === 'object') {
+        if (!db.exchangeRates) db.exchangeRates = { INR: 1 };
+        Object.keys(importedDb.exchangeRates).forEach(currency => {
+            if (currency !== 'INR') {
+                db.exchangeRates[currency] = importedDb.exchangeRates[currency];
+            }
+        });
+    }
+
+    // ---- 9. MERGE USERS ----
+    if (importedDb.users && importedDb.users.length > 0) {
+        if (!db.users) db.users = [];
+        
+        importedDb.users.forEach(user => {
+            if (!user.id) return;
+            const exists = db.users.some(existing => existing.id === user.id);
+            if (!exists) {
+                db.users.push(user);
+            }
+        });
+    }
+
+    // ---- 10. MERGE DEFAULT CHARGES ----
+    ['defaultSeaCharges', 'defaultAirCharges', 'defaultLclCharges'].forEach(key => {
+        if (!importedDb[key] || !Array.isArray(importedDb[key])) return;
+        if (!db[key]) db[key] = [];
+        
+        importedDb[key].forEach(charge => {
+            // Check duplicate by pol + commodity
+            const exists = db[key].some(existing => 
+                existing.pol === charge.pol && 
+                existing.commodity === charge.commodity
+            );
+            if (!exists) {
+                db[key].push(charge);
+            }
+        });
+    });
+
+    // ---- 11. MERGE CARRIER CHARGES ----
+    ['carrierChargesSeaLcl', 'carrierChargesAir'].forEach(key => {
+        if (!importedDb[key] || !Array.isArray(importedDb[key])) return;
+        if (!db[key]) db[key] = [];
+        
+        importedDb[key].forEach(charge => {
+            // Check duplicate by carrier + pol + mode (for sea/lcl) or carrier + pol (for air)
+            let exists;
+            if (key === 'carrierChargesAir') {
+                exists = db[key].some(existing => 
+                    existing.carrier === charge.carrier && 
+                    existing.pol === charge.pol
+                );
+            } else {
+                exists = db[key].some(existing => 
+                    existing.mode === charge.mode &&
+                    existing.carrier === charge.carrier && 
+                    existing.pol === charge.pol
+                );
+            }
+            if (!exists) {
+                db[key].push(charge);
+            }
+        });
+    });
+
+    // ---- 12. MERGE CARGO STATUS & DOCS STATUS ----
+    ['cargoStatusMaster', 'docsStatusMaster'].forEach(key => {
+        if (!importedDb[key] || !Array.isArray(importedDb[key])) return;
+        if (!db[key]) db[key] = [];
+        
+        importedDb[key].forEach(item => {
+            if (item && typeof item === 'string' && !db[key].includes(item)) {
+                db[key].push(item);
+            }
+        });
+    });
+
+    // ---- 13. MERGE DETENTION LOTS & RECORDS ----
+    ['detentionLots', 'detentionRecords'].forEach(key => {
+        if (!importedDb[key] || !Array.isArray(importedDb[key])) return;
+        if (!db[key]) db[key] = [];
+        
+        importedDb[key].forEach(item => {
+            if (!item.id) return;
+            const exists = db[key].some(existing => existing.id === item.id);
+            if (!exists) {
+                db[key].push(item);
+            }
+        });
+    });
+
+    // ---- 14. MERGE TRUCKING SHIPMENTS ----
+    if (importedDb.truckingShipments && importedDb.truckingShipments.length > 0) {
+        if (!db.truckingShipments) db.truckingShipments = [];
+        
+        importedDb.truckingShipments.forEach(ship => {
+            const exists = db.truckingShipments.some(existing => existing.id === ship.id);
+            if (!exists) {
+                db.truckingShipments.push(ship);
+            }
+        });
+    }
+
+    // ---- 15. MERGE FREIGHT CALCULATIONS ----
+    if (importedDb.freightCalculations && importedDb.freightCalculations.length > 0) {
+        if (!db.freightCalculations) db.freightCalculations = [];
+        
+        importedDb.freightCalculations.forEach(calc => {
+            const exists = db.freightCalculations.some(existing => existing.id === calc.id);
+            if (!exists) {
+                db.freightCalculations.push(calc);
+            }
+        });
+    }
+
+    // ---- 16. MERGE PLANNER NOTES & TASKS ----
+    ['plannerNotes', 'plannerTasks'].forEach(key => {
+        if (!importedDb[key] || !Array.isArray(importedDb[key])) return;
+        if (!db[key]) db[key] = [];
+        
+        importedDb[key].forEach(item => {
+            if (!item.id) return;
+            const exists = db[key].some(existing => existing.id === item.id);
+            if (!exists) {
+                db[key].push(item);
+            }
+        });
+    });
+
+    // ---- 17. MERGE CBM & AIR WEIGHT RECORDS ----
+    ['cbmRecords', 'airWeightRecords'].forEach(key => {
+        if (!importedDb[key] || !Array.isArray(importedDb[key])) return;
+        if (!db[key]) db[key] = [];
+        
+        importedDb[key].forEach(item => {
+            if (!item.id) return;
+            const exists = db[key].some(existing => existing.id === item.id);
+            if (!exists) {
+                db[key].push(item);
+            }
+        });
+    });
+
+    // ---- 18. MERGE STUFFING DATA ----
+    if (importedDb.stuffing && importedDb.stuffing.length > 0) {
+        if (!db.stuffing) db.stuffing = [];
+        // Stuffing records don't have unique IDs, so we'll just append all
+        importedDb.stuffing.forEach(item => {
+            db.stuffing.push(item);
+        });
+    }
+
+    // ---- 19. MERGE HIDDEN ITEMS ----
+    if (importedDb.hiddenItems && typeof importedDb.hiddenItems === 'object') {
+        if (!db.hiddenItems) db.hiddenItems = { pol: [], pod: [], incoterms: [], containers: [], carriers: [] };
+        Object.keys(importedDb.hiddenItems).forEach(key => {
+            if (!db.hiddenItems[key]) db.hiddenItems[key] = [];
+            importedDb.hiddenItems[key].forEach(item => {
+                if (!db.hiddenItems[key].includes(item)) {
+                    db.hiddenItems[key].push(item);
+                }
+            });
+        });
+    }
+
+    // ---- 20. MERGE DSR COLUMNS ----
+    if (importedDb.dsrColumns && Array.isArray(importedDb.dsrColumns)) {
+        if (!db.dsrColumns) db.dsrColumns = ['code','shipper','pol','pod','liner','cargoStatus','docsStatus','actions'];
+        // Only update if new columns are different and valid
+        if (importedDb.dsrColumns.length > 0) {
+            db.dsrColumns = importedDb.dsrColumns;
+        }
+    }
+
+    // ---- 21. COMPANY INFO (only if not set) ----
+    if (importedDb.companyName && !db.companyName) {
+        db.companyName = importedDb.companyName;
+    }
+    if (importedDb.companyAddress && !db.companyAddress) {
+        db.companyAddress = importedDb.companyAddress;
+    }
+    if (importedDb.defaultUser && !db.defaultUser) {
+        db.defaultUser = importedDb.defaultUser;
+    }
+    if (importedDb.defaultCCEmailSea && !db.defaultCCEmailSea) {
+        db.defaultCCEmailSea = importedDb.defaultCCEmailSea;
+    }
+    if (importedDb.defaultCCEmailAir && !db.defaultCCEmailAir) {
+        db.defaultCCEmailAir = importedDb.defaultCCEmailAir;
+    }
+    if (importedDb.defaultCCEmailLcl && !db.defaultCCEmailLcl) {
+        db.defaultCCEmailLcl = importedDb.defaultCCEmailLcl;
+    }
+
+    // ---- BUILD SUMMARY ----
+    summary.push(`📊 MERGE SUMMARY:`);
+    summary.push(`  • Quotes: ${added.quotes} added, ${skipped.quotes} skipped (duplicates)`);
+    summary.push(`  • Drafts: ${added.drafts} added, ${skipped.drafts} skipped (duplicates)`);
+    summary.push(`  • Rate Requests: ${added.rr} added, ${skipped.rr} skipped (duplicates)`);
+    summary.push(`  • Rate Sheet: ${added.ratesheet} added, ${skipped.ratesheet} skipped (duplicates)`);
+    summary.push(`  • Shipments: ${added.shipments} added, ${skipped.shipments} skipped (duplicates)`);
+    summary.push(`  • BL Drafts: ${added.bldrafts} added, ${skipped.bldrafts} skipped (duplicates)`);
+    summary.push(`  • Master Data: Merged (POL, POD, Carriers, Containers, Incoterms)`);
+    summary.push(`  • Other Data: Users, Charges, Lots, Records merged`);
+
+    return summary.join('\n');
 }
 
 // ==================== RATE SHEET IMPORT ====================
@@ -4329,19 +4718,17 @@ function sendEmail() {
 
     // Helper to open Outlook and copy HTML
     const copyAndOpenOutlook = () => {
-        // Build mailto link with recipient, subject, and body (plain text fallback)
-        let mailtoLink = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent('Thank you')}`;
+        // Build mailto link with recipient, subject, and NO body (so default signature appears)
+        let mailtoLink = `mailto:${to}?subject=${encodeURIComponent(subject)}`;
         if (cc) mailtoLink += `&cc=${encodeURIComponent(cc)}`;
         window.open(mailtoLink, '_blank');
 
-        // ✅ NEW: Auto‑save draft if this is a Rate Request
+        // Auto-save draft if Rate Request
         if (currentEmailData.mode === 'raterequest') {
             const data = currentEmailData.data;
             if (data && data.pol && data.pod) {
-                // The quote number should already be set in the data
                 saveRateRequestDraftWithData(data);
                 console.log('📩 Rate Request auto‑saved as draft with quote:', data.quoteNumber);
-                // Optionally show a brief notification
                 setTimeout(() => {
                     alert('✅ Rate Request draft saved automatically with Quote No: ' + data.quoteNumber);
                 }, 500);
@@ -4361,14 +4748,11 @@ function sendEmail() {
         });
         navigator.clipboard.write([clipboardItem])
             .then(function() {
-                // Success: copy done, now open Outlook
                 copyAndOpenOutlook();
             })
             .catch(function(err) {
                 console.warn('Clipboard API error, falling back:', err);
-                // Fallback: copy as plain text
                 fallbackCopyText(htmlContent);
-                // Still open Outlook
                 copyAndOpenOutlook();
             });
     } else {
@@ -4848,14 +5232,13 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
 
     // ---- 1. Customer Details (inline widths) ----
 	const detailRows = [
-		['Client', toUpper(data.client), 'Status', toUpper(data.status)],
-		['POL', toUpper(data.pol), 'POD', toUpper(data.pod)],
-		['Commodity', toUpper(data.commodity), (mode === 'sea' ? 'Container' : 'Volume (CBM)'), mode === 'sea' ? toUpper(data.container) : (data.volume || '-')],
-		['Weight (KGS)', data.weight || '-', 'Incoterm', toUpper(data.incoterm)],
-		['Carrier', toUpper(data.carrier), 'Transit Time', transitDisplay],
-		['Quote Date', data.autoDate || '-', 'Validity Date', validityDisplay]
+    ['Client', toUpper(data.client), 'Status', toUpper(data.status)],
+    ['POL', toUpper(data.pol), 'POD', toUpper(data.pod)],
+    ['Commodity', toUpper(data.commodity), (mode === 'sea' ? 'Container' : 'Volume (CBM)'), mode === 'sea' ? toUpper(data.container) : (data.volume || '-')],
+    ['Weight (KGS)', data.weight || '-', 'Incoterm', toUpper(data.incoterm)],
+    ['Carrier', toUpper(data.carrier), 'Transit Time', transitDisplay],
+    ['Quote Date', data.autoDate || '-', 'Validity Date', validityDisplay]
 	];
-
 
 	let detailHtml = `<table style="width:100%;border-collapse:collapse;font-size:${baseFont};">
 		<thead>
@@ -5122,12 +5505,44 @@ function previewSavedRecord(target, mode, idx) {
         <div style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">
             <button class="btn btn-info" onclick="copyPreviewTables()">📋 Copy Tables (Compact)</button>
             <button class="btn" onclick="copyPreviewText()" style="background:#25D366; color:white; border:none; padding:6px 12px; border-radius:4px; font-weight:bold; cursor:pointer;">📄 WhatsApp</button>
+            <button class="btn btn-email" onclick="emailFromPreview()">📧 Email</button>
         </div>
         ${html}
     `;
     document.getElementById('previewBody').style.background = 'white';
     openModal('previewModal');
 }
+
+function emailFromPreview() {
+    if (!_previewData) {
+        alert('No preview data available.');
+        return;
+    }
+    const { data, mode } = _previewData;
+    // Use the existing emailQuote function or emailSavedQuote
+    if (data.quoteNumber) {
+        let target = 'rates';
+        let idx = -1;
+        let foundMode = mode;
+        ['sea','air','lcl'].forEach(m => {
+            const found = db.rates[m].findIndex(r => r.quoteNumber === data.quoteNumber);
+            if (found !== -1) { target = 'rates'; foundMode = m; idx = found; }
+        });
+        if (idx === -1) {
+            ['sea','air','lcl'].forEach(m => {
+                const found = db.drafts[m].findIndex(r => r.quoteNumber === data.quoteNumber);
+                if (found !== -1) { target = 'drafts'; foundMode = m; idx = found; }
+            });
+        }
+        if (idx !== -1) {
+            emailSavedQuote(target, foundMode, idx);
+            return;
+        }
+    }
+    // Fallback: use current form data
+    emailQuote(mode);
+}
+
 
 function copyPreviewText() {
     if (!_previewData) {
@@ -5857,8 +6272,6 @@ function clearDSRFilters() {
     renderShipments();
 }
 // ===== CORRECTED addShipmentFromQuote =====
-// ===== ENHANCED addShipmentFromQuote =====
-// ===== ENHANCED addShipmentFromQuote =====
 function addShipmentFromQuote(target, mode, idx) {
     const quote = db[target][mode][idx];
     if (!quote) return alert('Quote not found.');
@@ -5866,7 +6279,7 @@ function addShipmentFromQuote(target, mode, idx) {
     const freightKey = mode === 'air' ? 'AIR FREIGHT' : 'FREIGHT';
     let rawSellAmt = 0, rawSellCur = 'INR', rawBuyAmt = 0, rawBuyCur = 'INR';
 
-    // --- 1. Extract raw freight amounts from the quote (No conversion) ---
+    // --- 1. Extract raw freight amounts ---
     if (quote.charges && quote.charges[freightKey]) {
         const f = quote.charges[freightKey];
         rawSellAmt = parseFloat(f.amount) || 0;
@@ -5875,7 +6288,7 @@ function addShipmentFromQuote(target, mode, idx) {
         rawBuyCur = f.buyCurrency || rawSellCur || 'INR';
     }
 
-    // --- 2. Build base shipment with correct mappings ---
+    // --- 2. Build base shipment ---
     const baseShipment = {
         exportImport: 'EXPORT',
         mode: mode.toUpperCase(),
@@ -5910,11 +6323,9 @@ function addShipmentFromQuote(target, mode, idx) {
         carrierCharges: null,
         otherCharges: null,
         quoteCharges: null,
-        // For SEA
         sell: 0,
         buy: 0,
         containerNo: '',
-        // For AIR
         sellPK: 0,
         buyPK: 0,
         grossWeight: 0,
@@ -5923,10 +6334,8 @@ function addShipmentFromQuote(target, mode, idx) {
 
     // --- 3. Mode-specific filling ---
     if (mode === 'sea') {
-        // SEA: Convert raw amounts to USD
         let sellAmtUSD = rawSellAmt;
         let buyAmtUSD = rawBuyAmt;
-        
         if (rawSellCur !== 'USD') {
             const inrValue = sellAmtUSD * (db.exchangeRates[rawSellCur] || 1);
             sellAmtUSD = inrValue / (db.exchangeRates.USD || 94.5);
@@ -5935,14 +6344,11 @@ function addShipmentFromQuote(target, mode, idx) {
             const inrValue = buyAmtUSD * (db.exchangeRates[rawBuyCur] || 1);
             buyAmtUSD = inrValue / (db.exchangeRates.USD || 94.5);
         }
-
         const s = {
             ...baseShipment,
             type: 'SEA',
-            code: baseShipment.code,
-            jobNo: baseShipment.jobNo,
-            sell: sellAmtUSD,   // USD amount
-            buy: buyAmtUSD,     // USD amount
+            sell: sellAmtUSD,
+            buy: buyAmtUSD,
             containerNo: quote.container || '',
             packages: quote.container || '',
             carrierCharges: {
@@ -5956,10 +6362,9 @@ function addShipmentFromQuote(target, mode, idx) {
                 LOLO: 0, OTHERLOCAL: 0, ONWHEEL: 0, OTHERLOCAL3: 0
             }
         };
-
         const carrierMap = {
             'THC': 'THC', 'SEAL': 'SEAL', 'MUC': 'MUC', 'DOCS': 'DOCS',
-            'SWITCH BL': 'SEAWAY', 'SEAWAY': 'SEAWAY',
+            'SEAWAY BL': 'SEAWAY', 'SEAWAY': 'SEAWAY',
             'ETS': 'ETS', 'HAZ DOCS': 'HAZDOCS', 'AMS': 'AMS'
         };
         const otherMap = {
@@ -5975,38 +6380,32 @@ function addShipmentFromQuote(target, mode, idx) {
         Object.entries(otherMap).forEach(([key, val]) => {
             if (charges[key]) s.otherCharges[val] = parseFloat(charges[key].amount) || 0;
         });
-
+        db.shipments.push(s);
+        saveDB();
+        // ✅ Mark quote as converted ONLY if it came from "Rates Quoted"
+        if (target === 'rates') {
+            quote.convertedToShipment = true;
+            saveDB();
+        }
         openDsrModal('SEA', null, s);
     }
     else if (mode === 'air') {
-        // Direct INR values uthayein (USD conversion nahi karna)
-        const freightKey = 'AIR FREIGHT';
-        let rawSellPK = 0, rawBuyPK = 0;
-        if (quote.charges && quote.charges[freightKey]) {
-            const f = quote.charges[freightKey];
-            rawSellPK = parseFloat(f.amount) || 0;
-            rawBuyPK = parseFloat(f.buyAmount) || rawSellPK;
-        }
-
+        const rawSellPK = rawSellAmt;
+        const rawBuyPK = rawBuyAmt;
         const s = {
             ...baseShipment,
             type: 'AIR',
-            code: baseShipment.code,
-            jobNo: baseShipment.jobNo,
-            sellPK: rawSellPK,      
-            buyPK: rawBuyPK,        
+            sellPK: rawSellPK,
+            buyPK: rawBuyPK,
             grossWeight: parseFloat(quote.weight) || 0,
             validEtd: quote.validityDate || '',
             packages: quote.pallets ? String(quote.pallets) : '',
-            // EXACT serial-wise mapping keys initialize kari gayi
             quoteCharges: {
                 CARTAGE: 0, MCC: 0, XRAY: 0, GATEPASS: 0, ASI: 0, AMS: 0, PALLET: 0,
                 LOADING_UNLOADING: 0, DGFEE: 0, DGAGENT: 0, PLY: 0, REPACKING: 0, AWB: 0, TEDI: 0,
                 ADD_SURCHARGE: 0, TRANSPORT: 0, CLEARANCE: 0, TERMINAL_TRANSFER: 0
             }
         };
-
-        // Mapping: Quote ka charge name → s.quoteCharges key
         const airMap = {
             'CARTAGE': 'CARTAGE', 'MCC': 'MCC', 'XRAY': 'XRAY',
             'GATE PASS': 'GATEPASS', 'ASI GMAX': 'ASI', 'AMS': 'AMS',
@@ -6020,8 +6419,17 @@ function addShipmentFromQuote(target, mode, idx) {
         Object.entries(airMap).forEach(([key, val]) => {
             if (charges[key]) s.quoteCharges[val] = parseFloat(charges[key].amount) || 0;
         });
-
+        db.shipments.push(s);
+        saveDB();
+        // ✅ Mark quote as converted ONLY if it came from "Rates Quoted"
+        if (target === 'rates') {
+            quote.convertedToShipment = true;
+            saveDB();
+        }
         openDsrModal('AIR', null, s);
+    }
+    else {
+        alert('Unsupported mode: ' + mode);
     }
 }
 
@@ -6036,27 +6444,23 @@ function editDsrShipment(idx) {
 function convertQuoteToShipmentByIndex(target, mode, idx) {
     addShipmentFromQuote(target, mode, idx);
 }
+// Override renderRecords for enhanced views
 const originalRenderRecords = renderRecords;
 renderRecords = function(target) {
-    originalRenderRecords(target);
     if (target === 'rates') {
-        document.querySelectorAll('#rates-sea-list .record-actions, #rates-air-list .record-actions, #rates-lcl-list .record-actions')
-            .forEach(container => {
-                const btns = container.querySelectorAll('.btn-success');
-                btns.forEach(btn => {
-                    if (btn.textContent.includes('Convert to Shipment')) {
-                        const match = btn.onclick.toString().match(/convertQuoteToShipmentByIndex\('([^']+)','([^']+)',(\d+)\)/);
-                        if (match) {
-                            const [, t, m, i] = match;
-                            btn.textContent = '➕ Add Shipment';
-                            btn.onclick = function() { addShipmentFromQuote(t, m, parseInt(i)); };
-                            btn.classList.remove('btn-success');
-                            btn.classList.add('btn-save');
-                        }
-                    }
-                });
-            });
+        renderEnhancedRates();
+        return;
     }
+    if (target === 'drafts') {
+        renderEnhancedDrafts();
+        return;
+    }
+    if (target === 'rrdrafts') {
+        renderEnhancedRRDrafts();
+        return;
+    }
+    // Fallback for other targets
+    originalRenderRecords(target);
 };
 // ===== NEW: Claymorphism Shipment Preview HTML =====
 
@@ -11154,45 +11558,61 @@ function buildShipmentPreviewHTML(s, mode) {
     const modeLabel = mode === 'sea' ? 'SEA SHIPMENT DSR' : 'AIR SHIPMENT DSR';
     const getVal = (val) => (val !== undefined && val !== null && val !== '') ? val : '-';
 
-    // No charge calculations – just display basic info
+    // Define field groups (label, value)
+    const fields = [
+        ['CODE', s.code],
+        ['TYPE', s.type || s.mode],
+        ['SHIPPER', s.shipper],
+        ['POL', s.pol],
+        ['POD', s.pod],
+        ['SHIPPING LINE', s.liner],
+        ['CARGO STATUS', s.cargoStatus],
+        ['DOCS STATUS', s.docsStatus],
+        ['BOOKING NO.', s.bookingNo || s.jobBkg],
+        ['CONTAINER NO.', s.containerNo],
+        ['ETD', s.etd || s.dd],
+        ['ETA', s.eta],
+        ['COMMODITY', s.commodity],
+        ['WEIGHT (KGS)', s.weight || s.grossWeight],
+        ['REMARKS', s.remarks]
+    ];
 
+    // Build table rows – alternate background
+    let rowsHtml = fields.map(([label, value], idx) => {
+        const bg = idx % 2 === 0 ? '#f8fafc' : 'white';
+        return `
+            <tr style="background:${bg};">
+                <td style="padding:8px 12px; border-bottom:1px solid #e2e8f0; font-weight:700; color:#1e3a8a; width:40%;">${label}</td>
+                <td style="padding:8px 12px; border-bottom:1px solid #e2e8f0; color:#1a1a1a; font-weight:500;">${getVal(value)}</td>
+            </tr>
+        `;
+    }).join('');
+
+    // Build the HTML
     return `
-    <div style="background: #f0f2f5; color: #1a1a1a; font-family: 'Segoe UI', Arial, sans-serif; max-width: 100%; margin: 0 auto; padding: 16px; border-radius: 20px; box-shadow: 12px 12px 24px rgba(0,0,0,0.06), -12px -12px 24px rgba(255,255,255,0.9);">
-        
-        <!-- Header -->
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 16px; text-align: center;">
-            <div style="font-size: 1.2rem; font-weight: 800; color: #1e3a8a; letter-spacing: 0.5px;">${modeLabel}</div>
-            <div style="font-family: 'Courier New', monospace; background: #e2e8f0; padding: 4px 12px; border-radius: 30px; font-weight: 700; color: #0f172a; font-size: 0.85rem;">Ref: ${getVal(s.code)}</div>
+    <div style="max-width:800px; margin:0 auto; font-family:'Segoe UI',Arial,sans-serif;">
+        <!-- Header Card -->
+        <div style="background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; padding: 16px 20px; border-radius: 12px 12px 0 0; display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-size:1.2rem; font-weight:700; letter-spacing:0.5px;">${modeLabel}</div>
+            <div style="background:rgba(255,255,255,0.2); padding:4px 14px; border-radius:20px; font-size:0.8rem; font-weight:600;">Ref: ${getVal(s.code)}</div>
         </div>
 
-        <!-- Soft Grid Details (Center Aligned + Dark Blue Bold Labels) -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 20px;">
-            ${[
-                ['Code', s.code], ['Type', s.type || s.mode], ['Shipper', s.shipper], ['POL', s.pol], ['POD', s.pod],
-                ['Shipping Line', s.liner], ['Cargo Status', s.cargoStatus], ['Docs Status', s.docsStatus],
-                ['Booking No.', s.bookingNo || s.jobBkg], ['Container No.', s.containerNo], ['ETD', s.etd || s.dd],
-                ['ETA', s.eta], ['Commodity', s.commodity], ['Weight (KGS)', s.weight || s.grossWeight]
-            ].map(([label, value]) => `
-                <div style="background: #ffffff; padding: 10px 12px; border-radius: 14px; box-shadow: inset 2px 2px 6px rgba(255,255,255,0.8), inset -2px -2px 6px rgba(0,0,0,0.03), 4px 4px 8px rgba(0,0,0,0.02); text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center;">
-                    <div style="font-size: 0.7rem; font-weight: 700; color: #1e3a8a; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px;">${label}</div>
-                    <div style="font-size: 0.9rem; font-weight: 600; color: #0f172a; word-break: break-word;">${getVal(value)}</div>
-                </div>
-            `).join('')}
+        <!-- Details Table -->
+        <div style="background:white; border:1px solid #e2e8f0; border-radius:0 0 12px 12px; overflow:hidden;">
+            <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
         </div>
-
-        <!-- Remarks (if any) -->
-        ${getVal(s.remarks) !== '-' ? `
-        <div style="background: #ffffff; margin-top: 14px; padding: 10px 12px; border-radius: 14px; box-shadow: 4px 4px 10px rgba(0,0,0,0.03); text-align: center;">
-            <div style="font-size: 0.65rem; font-weight: 700; color: #1e3a8a; text-transform: uppercase; letter-spacing: 0.4px;">Remarks</div>
-            <div style="font-size: 0.85rem; color: #334155; margin-top: 2px;">${getVal(s.remarks)}</div>
-        </div>` : ''}
 
         <!-- Footer -->
-        <div style="margin-top: 16px; font-size: 0.65rem; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 12px;">
-            <p style="margin: 2px 0;">Generated on ${new Date().toLocaleString('en-IN')}</p>
-            <div style="font-weight: 500;">Prepared By: ${getVal(s.sales) || userName}</div>
+        <div style="margin-top:12px; font-size:0.7rem; color:#94a3b8; text-align:center; border-top:1px solid #e2e8f0; padding-top:10px;">
+            <p style="margin:2px 0;">Generated on ${new Date().toLocaleString('en-IN')}</p>
+            <div style="font-weight:500; color:#64748b;">Prepared By: ${getVal(s.sales) || userName}</div>
         </div>
-    </div>`;
+    </div>
+    `;
 }
 
 // =============================================================
@@ -11536,43 +11956,51 @@ function buildBLPreviewHTML(b) {
         ? '<span style="background:#10b981; color:white; padding:2px 10px; border-radius:12px; font-size:0.7rem; font-weight:700; margin-left:8px;">✅ FINALIZED</span>' 
         : '<span style="background:#f59e0b; color:white; padding:2px 10px; border-radius:12px; font-size:0.7rem; font-weight:700; margin-left:8px;">📝 DRAFT</span>';
 
+    const vesselLabel = isAir ? 'FLIGHT NO.' : 'VESSEL NAME';
+    const voyageLabel = isAir ? 'DATE' : 'VOYAGE NO.';
+    const polLabel = isAir ? 'AIRPORT OF DEPARTURE' : 'PORT OF LOADING';
+    const podLabel = isAir ? 'AIRPORT OF DESTINATION' : 'PORT OF DISCHARGE';
+    const receiptLabel = isAir ? 'PLACE OF RECEIPT (AIRPORT)' : 'PLACE OF RECEIPT';
+
+    const blDateDisplay = b.blDate ? new Date(b.blDate).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '-';
+
     // ---- GOODS TABLE ----
     const goodsTable = `
-        <table style="width:100%; border-collapse:collapse; font-size:0.78rem;">
+        <table style="width:100%; border-collapse:collapse; font-size:0.78rem; border:1px solid #d1d5db;">
             <thead>
                 <tr style="background:#1e3a8a; color:white;">
-                    <th style="padding:4px 8px; text-align:left; width:15%;">MARKS & NOS</th>
-                    <th style="padding:4px 8px; text-align:left; width:12%;">NO. OF PACKAGES</th>
-                    <th style="padding:4px 8px; text-align:left; width:38%;">DESCRIPTION OF PACKAGES AND GOODS</th>
-                    <th style="padding:4px 8px; text-align:right; width:20%;">GROSS WEIGHT (KGS)</th>
-                    <th style="padding:4px 8px; text-align:right; width:15%;">MEASUREMENT (CBM)</th>
+                    <th style="padding:6px 8px; text-align:left; width:15%; border:1px solid #d1d5db;">MARKS & NOS</th>
+                    <th style="padding:6px 8px; text-align:left; width:12%; border:1px solid #d1d5db;">NO. OF PACKAGES</th>
+                    <th style="padding:6px 8px; text-align:left; width:38%; border:1px solid #d1d5db;">DESCRIPTION OF PACKAGES AND GOODS</th>
+                    <th style="padding:6px 8px; text-align:right; width:20%; border:1px solid #d1d5db;">GROSS WEIGHT (KGS)</th>
+                    <th style="padding:6px 8px; text-align:right; width:15%; border:1px solid #d1d5db;">MEASUREMENT (CBM)</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td style="padding:4px 8px; border-bottom:1px solid #e2e8f0; vertical-align:top;">${b.marks || '-'}</td>
-                    <td style="padding:4px 8px; border-bottom:1px solid #e2e8f0; vertical-align:top;">${b.packagesCount || '-'}</td>
-                    <td style="padding:4px 8px; border-bottom:1px solid #e2e8f0; white-space:pre-wrap; line-height:1.4;">${b.goodsDesc || '-'}</td>
-                    <td style="padding:4px 8px; border-bottom:1px solid #e2e8f0; text-align:right; font-weight:600;">${(b.grossWeight || 0).toFixed(2)}</td>
-                    <td style="padding:4px 8px; border-bottom:1px solid #e2e8f0; text-align:right; font-weight:600;">${(b.measurement || 0).toFixed(2)}</td>
+                    <td style="padding:6px 8px; border:1px solid #d1d5db; vertical-align:top;">${b.marks || '-'}</td>
+                    <td style="padding:6px 8px; border:1px solid #d1d5db; vertical-align:top;">${b.packagesCount || '-'}</td>
+                    <td style="padding:6px 8px; border:1px solid #d1d5db; white-space:pre-wrap; line-height:1.4; vertical-align:top;">${b.goodsDesc || '-'}</td>
+                    <td style="padding:6px 8px; border:1px solid #d1d5db; text-align:right; font-weight:600;">${(b.grossWeight || 0).toFixed(2)}</td>
+                    <td style="padding:6px 8px; border:1px solid #d1d5db; text-align:right; font-weight:600;">${(b.measurement || 0).toFixed(2)}</td>
                 </tr>
             </tbody>
             <tfoot>
                 <tr style="background:#f1f5f9; font-weight:700;">
-                    <td colspan="3" style="padding:4px 8px; text-align:right;">TOTALS</td>
-                    <td style="padding:4px 8px; text-align:right;">${(b.totalGrossWeight || b.grossWeight || 0).toFixed(2)}</td>
-                    <td style="padding:4px 8px; text-align:right;">${(b.totalVolume || b.measurement || 0).toFixed(2)}</td>
+                    <td colspan="3" style="padding:6px 8px; text-align:right; border:1px solid #d1d5db;">TOTALS</td>
+                    <td style="padding:6px 8px; text-align:right; border:1px solid #d1d5db;">${(b.totalGrossWeight || b.grossWeight || 0).toFixed(2)}</td>
+                    <td style="padding:6px 8px; text-align:right; border:1px solid #d1d5db;">${(b.totalVolume || b.measurement || 0).toFixed(2)}</td>
                 </tr>
             </tfoot>
         </table>
     `;
 
-    // ---- CONTAINER TABLE – SR COLUMN REMOVED ----
+    // ---- CONTAINER TABLE ----
     let containerHtml = '';
-    if (!isAir) {
+    if (!isAir && b.containers && b.containers.length > 0) {
         let containersHtml = '';
         let totalGross = 0, totalNet = 0, totalVol = 0;
-        (b.containers || []).forEach((c) => {
+        b.containers.forEach((c) => {
             const gross = c.grossWeight || 0;
             const net = c.netWeight || 0;
             const vol = c.volume || 0;
@@ -11581,43 +12009,43 @@ function buildBLPreviewHTML(b) {
             totalVol += vol;
             containersHtml += `
                 <tr>
-                    <td style="padding:3px 6px; border:1px solid #ddd; text-align:left;">${c.containerNo || '-'}</td>
-                    <td style="padding:3px 6px; border:1px solid #ddd; text-align:center;">${c.type || '-'}</td>
-                    <td style="padding:3px 6px; border:1px solid #ddd; text-align:center;">${c.seal || '-'}</td>
-                    <td style="padding:3px 6px; border:1px solid #ddd; text-align:right;">${gross.toFixed(2)}</td>
-                    <td style="padding:3px 6px; border:1px solid #ddd; text-align:right;">${net.toFixed(2)}</td>
-                    <td style="padding:3px 6px; border:1px solid #ddd; text-align:center;">${c.packages || '-'}</td>
-                    <td style="padding:3px 6px; border:1px solid #ddd; text-align:right;">${vol.toFixed(2)}</td>
+                    <td style="padding:4px 6px; border:1px solid #d1d5db; text-align:left;">${c.containerNo || '-'}</td>
+                    <td style="padding:4px 6px; border:1px solid #d1d5db; text-align:center;">${c.type || '-'}</td>
+                    <td style="padding:4px 6px; border:1px solid #d1d5db; text-align:center;">${c.seal || '-'}</td>
+                    <td style="padding:4px 6px; border:1px solid #d1d5db; text-align:right;">${gross.toFixed(2)}</td>
+                    <td style="padding:4px 6px; border:1px solid #d1d5db; text-align:right;">${net.toFixed(2)}</td>
+                    <td style="padding:4px 6px; border:1px solid #d1d5db; text-align:center;">${c.packages || '-'}</td>
+                    <td style="padding:4px 6px; border:1px solid #d1d5db; text-align:right;">${vol.toFixed(2)}</td>
                 </tr>
             `;
         });
 
         containerHtml = `
-            <div style="margin-top:6px; border:1px solid #e2e8f0; border-radius:4px; overflow:hidden;">
+            <div style="margin-top:8px; border:1px solid #d1d5db; border-radius:4px; overflow:hidden;">
                 <div style="background:#1e3a8a; color:white; padding:4px 10px; font-weight:700; font-size:0.8rem;">CONTAINER DETAILS</div>
                 <div style="overflow-x:auto; padding:4px;">
                     <table style="width:100%; border-collapse:collapse; font-size:0.72rem;">
                         <thead>
                             <tr style="background:#f1f5f9; font-weight:700;">
-                                <th style="padding:3px 6px; border:1px solid #ddd; text-align:left;">CONTAINER NO.</th>
-                                <th style="padding:3px 6px; border:1px solid #ddd; text-align:center;">TYPE</th>
-                                <th style="padding:3px 6px; border:1px solid #ddd; text-align:center;">SEAL</th>
-                                <th style="padding:3px 6px; border:1px solid #ddd; text-align:right;">GROSS WT (KGS)</th>
-                                <th style="padding:3px 6px; border:1px solid #ddd; text-align:right;">NET WT (KGS)</th>
-                                <th style="padding:3px 6px; border:1px solid #ddd; text-align:center;">PKGS</th>
-                                <th style="padding:3px 6px; border:1px solid #ddd; text-align:right;">VOLUME (CBM)</th>
+                                <th style="padding:4px 6px; border:1px solid #d1d5db; text-align:left;">CONTAINER NO.</th>
+                                <th style="padding:4px 6px; border:1px solid #d1d5db; text-align:center;">TYPE</th>
+                                <th style="padding:4px 6px; border:1px solid #d1d5db; text-align:center;">SEAL</th>
+                                <th style="padding:4px 6px; border:1px solid #d1d5db; text-align:right;">GROSS WT (KGS)</th>
+                                <th style="padding:4px 6px; border:1px solid #d1d5db; text-align:right;">NET WT (KGS)</th>
+                                <th style="padding:4px 6px; border:1px solid #d1d5db; text-align:center;">PKGS</th>
+                                <th style="padding:4px 6px; border:1px solid #d1d5db; text-align:right;">VOLUME (CBM)</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${containersHtml || '<tr><td colspan="7" style="padding:6px; text-align:center; color:#64748b;">No containers added</td></tr>'}
+                            ${containersHtml}
                         </tbody>
                         <tfoot>
                             <tr style="background:#f1f5f9; font-weight:700;">
-                                <td colspan="3" style="padding:3px 6px; text-align:right; border-top:2px solid #1e3a8a;">TOTALS</td>
-                                <td style="padding:3px 6px; text-align:right; border-top:2px solid #1e3a8a;">${totalGross.toFixed(2)}</td>
-                                <td style="padding:3px 6px; text-align:right; border-top:2px solid #1e3a8a;">${totalNet.toFixed(2)}</td>
-                                <td style="padding:3px 6px; text-align:center; border-top:2px solid #1e3a8a;">${(b.containers || []).reduce((sum, c) => sum + (parseInt(c.packages) || 0), 0)}</td>
-                                <td style="padding:3px 6px; text-align:right; border-top:2px solid #1e3a8a;">${totalVol.toFixed(2)}</td>
+                                <td colspan="3" style="padding:4px 6px; text-align:right; border-top:2px solid #1e3a8a;">TOTALS</td>
+                                <td style="padding:4px 6px; text-align:right; border-top:2px solid #1e3a8a;">${totalGross.toFixed(2)}</td>
+                                <td style="padding:4px 6px; text-align:right; border-top:2px solid #1e3a8a;">${totalNet.toFixed(2)}</td>
+                                <td style="padding:4px 6px; text-align:center; border-top:2px solid #1e3a8a;">${b.containers.reduce((sum, c) => sum + (parseInt(c.packages) || 0), 0)}</td>
+                                <td style="padding:4px 6px; text-align:right; border-top:2px solid #1e3a8a;">${totalVol.toFixed(2)}</td>
                             </tr>
                         </tfoot>
                     </table>
@@ -11625,15 +12053,6 @@ function buildBLPreviewHTML(b) {
             </div>
         `;
     }
-
-    // Vessel/Port labels
-    const vesselLabel = isAir ? 'FLIGHT NO.' : 'VESSEL NAME';
-    const voyageLabel = isAir ? 'DATE' : 'VOYAGE NO.';
-    const polLabel = isAir ? 'AIRPORT OF DEPARTURE' : 'PORT OF LOADING';
-    const podLabel = isAir ? 'AIRPORT OF DESTINATION' : 'PORT OF DISCHARGE';
-    const receiptLabel = isAir ? 'PLACE OF RECEIPT (AIRPORT)' : 'PLACE OF RECEIPT';
-
-    const blDateDisplay = b.blDate ? new Date(b.blDate).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '-';
 
     // ---- MAIN HTML ----
     return `
@@ -11645,7 +12064,7 @@ function buildBLPreviewHTML(b) {
             <div style="font-size: 0.65rem; color: #64748b;">${companyAddress}</div>
         </div>
 
-        <!-- TITLE + SUBTITLE + STATUS - CENTERED -->
+        <!-- TITLE -->
         <div style="text-align:center; margin-bottom: 6px;">
             <div style="display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:4px;">
                 <span style="font-size: 1.1rem; font-weight: 700; color: #1e3a8a;">${titleText}</span>
@@ -11655,99 +12074,99 @@ function buildBLPreviewHTML(b) {
             <div style="border-bottom: 1px solid #e2e8f0; margin-top: 2px;"></div>
         </div>
 
-		<!-- TOP ROW: BL No, Date, Booking No, Export Ref -->
-		<table style="width:100%; border-collapse:collapse; font-size:0.75rem; margin-bottom:4px;">
-			<tr>
-				<td style="padding:2px 4px; font-weight:700; width:12%;">BL NO.</td>
-				<td style="padding:2px 4px; font-weight:700; color:#1e3a8a; width:28%;">${b.blNumber || 'N/A'}</td>
-				<td style="padding:2px 4px; font-weight:700; width:10%;">DATE</td>
-				<td style="padding:2px 4px; font-weight:700; width:20%;">${blDateDisplay}</td>
-				<td style="padding:2px 4px; font-weight:700; width:12%;">BOOKING NO.</td>
-				<td style="padding:2px 4px; width:18%;">${b.bookingNo || '-'}</td>
-			</tr>
-			${(b.showAgent !== false) ? `
-			<tr>
-				<td style="padding:2px 4px; font-weight:700;">EXPORT REF.</td>
-				<td style="padding:2px 4px;">${b.exportRef || '-'}</td>
-				<td style="padding:2px 4px; font-weight:700;">FORWARDING AGENT</td>
-				<td colspan="3" style="padding:2px 4px;">${b.forwardingAgent || '-'} ${b.fmcNo ? 'FMC NO. '+b.fmcNo : ''}</td>
-			</tr>
-			` : ''}
-		</table>
+        <!-- TOP ROW: BL No, Date, Booking No, Export Ref -->
+        <table style="width:100%; border-collapse:collapse; font-size:0.75rem; margin-bottom:4px; border:1px solid #d1d5db;">
+            <tr>
+                <td style="padding:4px 8px; font-weight:700; width:12%; border:1px solid #d1d5db;">BL NO.</td>
+                <td style="padding:4px 8px; font-weight:700; color:#1e3a8a; width:28%; border:1px solid #d1d5db;">${b.blNumber || 'N/A'}</td>
+                <td style="padding:4px 8px; font-weight:700; width:10%; border:1px solid #d1d5db;">DATE</td>
+                <td style="padding:4px 8px; font-weight:700; width:20%; border:1px solid #d1d5db;">${blDateDisplay}</td>
+                <td style="padding:4px 8px; font-weight:700; width:12%; border:1px solid #d1d5db;">BOOKING NO.</td>
+                <td style="padding:4px 8px; width:18%; border:1px solid #d1d5db;">${b.bookingNo || '-'}</td>
+            </tr>
+            ${(b.showAgent !== false) ? `
+            <tr>
+                <td style="padding:4px 8px; font-weight:700; border:1px solid #d1d5db;">EXPORT REF.</td>
+                <td style="padding:4px 8px; border:1px solid #d1d5db;">${b.exportRef || '-'}</td>
+                <td style="padding:4px 8px; font-weight:700; border:1px solid #d1d5db;">FORWARDING AGENT</td>
+                <td colspan="3" style="padding:4px 8px; border:1px solid #d1d5db;">${b.forwardingAgent || '-'} ${b.fmcNo ? 'FMC NO. '+b.fmcNo : ''}</td>
+            </tr>
+            ` : ''}
+        </table>
 
         <!-- PARTIES -->
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:4px;">
-            <div style="border:1px solid #e2e8f0; border-radius:3px; padding:4px 6px; background:#f8fafc;">
-                <div style="font-weight:700; color:#1e3a8a; font-size:0.65rem; border-bottom:1px solid #e2e8f0; padding-bottom:2px; margin-bottom:2px;">SHIPPER / EXPORTER</div>
+            <div style="border:1px solid #d1d5db; border-radius:3px; padding:6px 8px; background:#f8fafc;">
+                <div style="font-weight:700; color:#1e3a8a; font-size:0.65rem; border-bottom:1px solid #d1d5db; padding-bottom:2px; margin-bottom:2px;">SHIPPER / EXPORTER</div>
                 <div style="font-size:0.75rem; white-space:pre-wrap; line-height:1.3;"><strong>${b.shipperName || ''}</strong>${b.shipperAddr ? '<br>'+b.shipperAddr : ''}</div>
             </div>
-            <div style="border:1px solid #e2e8f0; border-radius:3px; padding:4px 6px; background:#f8fafc;">
-                <div style="font-weight:700; color:#1e3a8a; font-size:0.65rem; border-bottom:1px solid #e2e8f0; padding-bottom:2px; margin-bottom:2px;">CONSIGNEE</div>
+            <div style="border:1px solid #d1d5db; border-radius:3px; padding:6px 8px; background:#f8fafc;">
+                <div style="font-weight:700; color:#1e3a8a; font-size:0.65rem; border-bottom:1px solid #d1d5db; padding-bottom:2px; margin-bottom:2px;">CONSIGNEE</div>
                 <div style="font-size:0.75rem; white-space:pre-wrap; line-height:1.3;"><strong>${b.consigneeName || ''}</strong>${b.consigneeAddr ? '<br>'+b.consigneeAddr : ''}</div>
             </div>
-            <div style="border:1px solid #e2e8f0; border-radius:3px; padding:4px 6px; background:#f8fafc;">
-                <div style="font-weight:700; color:#1e3a8a; font-size:0.65rem; border-bottom:1px solid #e2e8f0; padding-bottom:2px; margin-bottom:2px;">NOTIFY PARTY</div>
+            <div style="border:1px solid #d1d5db; border-radius:3px; padding:6px 8px; background:#f8fafc;">
+                <div style="font-weight:700; color:#1e3a8a; font-size:0.65rem; border-bottom:1px solid #d1d5db; padding-bottom:2px; margin-bottom:2px;">NOTIFY PARTY</div>
                 <div style="font-size:0.75rem; white-space:pre-wrap; line-height:1.3;"><strong>${b.notifyName || ''}</strong>${b.notifyAddr ? '<br>'+b.notifyAddr : ''}</div>
             </div>
-            <div style="border:1px solid #e2e8f0; border-radius:3px; padding:4px 6px; background:#f8fafc;">
-                <div style="font-weight:700; color:#1e3a8a; font-size:0.65rem; border-bottom:1px solid #e2e8f0; padding-bottom:2px; margin-bottom:2px;">DELIVERY AGENT</div>
+            <div style="border:1px solid #d1d5db; border-radius:3px; padding:6px 8px; background:#f8fafc;">
+                <div style="font-weight:700; color:#1e3a8a; font-size:0.65rem; border-bottom:1px solid #d1d5db; padding-bottom:2px; margin-bottom:2px;">DELIVERY AGENT</div>
                 <div style="font-size:0.75rem; white-space:pre-wrap; line-height:1.3;"><strong>${b.deliveryAgentName || ''}</strong>${b.deliveryAgentAddr ? '<br>'+b.deliveryAgentAddr : ''}</div>
             </div>
         </div>
 
         <!-- VESSEL & PORT TABLE -->
-        <table style="width:100%; border-collapse:collapse; font-size:0.72rem; margin-bottom:4px; border:1px solid #e2e8f0; border-radius:3px; overflow:hidden;">
+        <table style="width:100%; border-collapse:collapse; font-size:0.72rem; margin-bottom:4px; border:1px solid #d1d5db; border-radius:3px; overflow:hidden;">
             <thead>
                 <tr style="background:#1e3a8a; color:white;">
-                    <th style="padding:3px 6px; text-align:left; font-weight:600; width:25%;">PRE-CARRIAGE BY</th>
-                    <th style="padding:3px 6px; text-align:left; font-weight:600; width:25%;">${receiptLabel}</th>
-                    <th style="padding:3px 6px; text-align:left; font-weight:600; width:25%;">${vesselLabel}</th>
-                    <th style="padding:3px 6px; text-align:left; font-weight:600; width:25%;">${voyageLabel}</th>
+                    <th style="padding:4px 8px; text-align:left; font-weight:600; width:25%; border:1px solid #d1d5db;">PRE-CARRIAGE BY</th>
+                    <th style="padding:4px 8px; text-align:left; font-weight:600; width:25%; border:1px solid #d1d5db;">${receiptLabel}</th>
+                    <th style="padding:4px 8px; text-align:left; font-weight:600; width:25%; border:1px solid #d1d5db;">${vesselLabel}</th>
+                    <th style="padding:4px 8px; text-align:left; font-weight:600; width:25%; border:1px solid #d1d5db;">${voyageLabel}</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td style="padding:3px 6px; border-bottom:1px solid #e2e8f0;">${b.preCarriage || '-'}</td>
-                    <td style="padding:3px 6px; border-bottom:1px solid #e2e8f0;">${b.placeOfReceipt || '-'}</td>
-                    <td style="padding:3px 6px; border-bottom:1px solid #e2e8f0;">${b.vessel || '-'}</td>
-                    <td style="padding:3px 6px; border-bottom:1px solid #e2e8f0;">${b.voyage || '-'}</td>
+                    <td style="padding:4px 8px; border-bottom:1px solid #d1d5db; border:1px solid #d1d5db;">${b.preCarriage || '-'}</td>
+                    <td style="padding:4px 8px; border-bottom:1px solid #d1d5db; border:1px solid #d1d5db;">${b.placeOfReceipt || '-'}</td>
+                    <td style="padding:4px 8px; border-bottom:1px solid #d1d5db; border:1px solid #d1d5db;">${b.vessel || '-'}</td>
+                    <td style="padding:4px 8px; border-bottom:1px solid #d1d5db; border:1px solid #d1d5db;">${b.voyage || '-'}</td>
                 </tr>
                 <tr style="background:#1e3a8a; color:white;">
-                    <td style="padding:3px 6px; font-weight:600;">${polLabel}</td>
-                    <td style="padding:3px 6px; font-weight:600;">${podLabel}</td>
-                    <td style="padding:3px 6px; font-weight:600;">PLACE OF DELIVERY</td>
-                    <td style="padding:3px 6px; font-weight:600;">FREIGHT PAYABLE</td>
+                    <td style="padding:4px 8px; font-weight:600; border:1px solid #d1d5db;">${polLabel}</td>
+                    <td style="padding:4px 8px; font-weight:600; border:1px solid #d1d5db;">${podLabel}</td>
+                    <td style="padding:4px 8px; font-weight:600; border:1px solid #d1d5db;">PLACE OF DELIVERY</td>
+                    <td style="padding:4px 8px; font-weight:600; border:1px solid #d1d5db;">FREIGHT PAYABLE</td>
                 </tr>
                 <tr>
-                    <td style="padding:3px 6px;">${b.pol || '-'}</td>
-                    <td style="padding:3px 6px;">${b.pod || '-'}</td>
-                    <td style="padding:3px 6px;">${b.placeOfDelivery || '-'}</td>
-                    <td style="padding:3px 6px;">${b.freightPayable || 'ORIGIN'}</td>
+                    <td style="padding:4px 8px; border:1px solid #d1d5db;">${b.pol || '-'}</td>
+                    <td style="padding:4px 8px; border:1px solid #d1d5db;">${b.pod || '-'}</td>
+                    <td style="padding:4px 8px; border:1px solid #d1d5db;">${b.placeOfDelivery || '-'}</td>
+                    <td style="padding:4px 8px; border:1px solid #d1d5db;">${b.freightPayable || 'ORIGIN'}</td>
                 </tr>
             </tbody>
         </table>
 
         <!-- GOODS TABLE -->
-        <div style="margin-top:2px; border:1px solid #e2e8f0; border-radius:4px; overflow:hidden;">
+        <div style="margin-top:2px; border:1px solid #d1d5db; border-radius:4px; overflow:hidden;">
             <div style="padding:4px 2px; overflow-x:auto;">
                 ${goodsTable}
             </div>
         </div>
 
-        <!-- CONTAINER DETAILS (Only for SEA, no SR column) -->
+        <!-- CONTAINER DETAILS -->
         ${!isAir ? containerHtml : ''}
 
         <!-- FREIGHT & ISSUANCE -->
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:4px;">
-            <div style="border:1px solid #e2e8f0; border-radius:3px; padding:4px 6px;">
-                <div style="font-weight:700; color:#1e3a8a; font-size:0.65rem; border-bottom:1px solid #e2e8f0; padding-bottom:2px; margin-bottom:2px;">FREIGHT & CHARGES</div>
+            <div style="border:1px solid #d1d5db; border-radius:3px; padding:6px 8px;">
+                <div style="font-weight:700; color:#1e3a8a; font-size:0.65rem; border-bottom:1px solid #d1d5db; padding-bottom:2px; margin-bottom:2px;">FREIGHT & CHARGES</div>
                 <table style="width:100%; font-size:0.7rem;">
                     <tr><td style="padding:2px 4px; font-weight:700;">Terms</td><td style="padding:2px 4px;">${b.freightType || 'Prepaid'}</td></tr>
                     <tr><td style="padding:2px 4px; font-weight:700;">Amount</td><td style="padding:2px 4px;">${b.freightCurrency || 'USD'} ${(b.freightAmount || 0).toFixed(2)}</td></tr>
                 </table>
             </div>
-            <div style="border:1px solid #e2e8f0; border-radius:3px; padding:4px 6px;">
-                <div style="font-weight:700; color:#1e3a8a; font-size:0.65rem; border-bottom:1px solid #e2e8f0; padding-bottom:2px; margin-bottom:2px;">ISSUANCE DETAILS</div>
+            <div style="border:1px solid #d1d5db; border-radius:3px; padding:6px 8px;">
+                <div style="font-weight:700; color:#1e3a8a; font-size:0.65rem; border-bottom:1px solid #d1d5db; padding-bottom:2px; margin-bottom:2px;">ISSUANCE DETAILS</div>
                 <table style="width:100%; font-size:0.7rem;">
                     <tr><td style="padding:2px 4px; font-weight:700;">Originals</td><td style="padding:2px 4px;">${b.numOriginals || 1}</td></tr>
                     <tr><td style="padding:2px 4px; font-weight:700;">Place</td><td style="padding:2px 4px;">${b.placeOfIssue || '-'}</td></tr>
@@ -11778,6 +12197,7 @@ function downloadBLPDF(idx) {
     const renderArea = document.getElementById('pdf-render-area');
     renderArea.innerHTML = html;
     renderArea.style.cssText = 'position:fixed;left:0;top:0;width:1000px;background:white;z-index:9999;opacity:1;padding:0;';
+
     setTimeout(() => {
         html2canvas(renderArea, { 
             scale: 3, 
@@ -11789,23 +12209,21 @@ function downloadBLPDF(idx) {
         .then(canvas => {
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-            const pdfWidth = pdf.internal.pageSize.getWidth();  // 210mm
-            const pdfHeight = pdf.internal.pageSize.getHeight(); // 297mm
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
 
             const imgData = canvas.toDataURL('image/jpeg', 1.0);
-            // Scale image to fit width of page
             let imgWidth = pdfWidth;
             let imgHeight = (canvas.height * imgWidth) / canvas.width;
-            // If image height exceeds page height, we need to split, else place at (0,0)
+            
             if (imgHeight > pdfHeight) {
-                // Split into multiple pages
                 let remainingHeight = canvas.height;
                 let yOffset = 0;
                 let page = 1;
                 const pageCanvas = document.createElement('canvas');
                 const pageCtx = pageCanvas.getContext('2d');
-                // Calculate the height of each page segment in canvas pixels
                 const pageSegmentHeight = (pdfHeight / imgHeight) * canvas.height;
+                
                 while (remainingHeight > 0) {
                     const segHeight = Math.min(remainingHeight, pageSegmentHeight);
                     pageCanvas.width = canvas.width;
@@ -11824,7 +12242,6 @@ function downloadBLPDF(idx) {
                     page++;
                 }
             } else {
-                // Place image at (0,0) covering full page
                 pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight);
             }
             pdf.save(`BL_${b.blNumber || 'Draft'}.pdf`);
@@ -11838,6 +12255,7 @@ function downloadBLPDF(idx) {
         });
     }, 500);
 }
+
 // ==================== DSR CUSTOM COLUMNS ====================
 let dsrColumns = db.dsrColumns || ['code','shipper','pol','pod','liner','cargoStatus','docsStatus','actions'];
 
@@ -12317,56 +12735,105 @@ function bulkExportDefaultCharges() {
         return;
     }
 
-    const rows = [];
+    // Determine active mode
+    let mode = 'sea';
+    if (document.getElementById('airlocal')?.classList.contains('active')) mode = 'air';
+    else if (document.getElementById('lcllocal')?.classList.contains('active')) mode = 'lcl';
 
-    function addDefaultChargeRows(mode, records) {
-        records.forEach(rec => {
-            const charges = rec.charges || {};
-            Object.entries(charges).forEach(([key, val]) => {
-                let container = '';
-                let chargeName = key;
-                if (key.endsWith('_20')) {
-                    container = '20 GP';
-                    chargeName = key.slice(0, -3);
-                } else if (key.endsWith('_40')) {
-                    container = '40 HC';
-                    chargeName = key.slice(0, -3);
-                }
-                rows.push({
-                    'Mode': mode.toUpperCase(),
-                    'POL': rec.pol,
-                    'Commodity': rec.commodity || '',
-                    'Charge Name': chargeName,
-                    'Container': container,
-                    'Sell Amount': val.amount || 0,
-                    'Buy Amount': val.buyAmount || 0,
-                    'Currency': val.currency || 'INR'
-                });
-            });
-        });
-    }
+    console.log('🔹 Exporting default charges for mode:', mode);
 
-    addDefaultChargeRows('sea', db.defaultSeaCharges || []);
-    addDefaultChargeRows('air', db.defaultAirCharges || []);
-    addDefaultChargeRows('lcl', db.defaultLclCharges || []);
+    let records = [];
+    if (mode === 'sea') records = db.defaultSeaCharges || [];
+    else if (mode === 'air') records = db.defaultAirCharges || [];
+    else if (mode === 'lcl') records = db.defaultLclCharges || [];
 
-    if (rows.length === 0) {
-        alert('⚠️ No default charges found to export.');
+    if (records.length === 0) {
+        alert(`No default charges found for ${mode.toUpperCase()}.`);
         return;
     }
 
+    // ---- For SEA: all charges are container-specific (if they have _20/_40 suffix) ----
+    // For AIR/LCL: no container suffix
+    const isSea = (mode === 'sea');
+
+    // Collect all base charge names (without suffix)
+    const chargeSet = new Set();
+    records.forEach(rec => {
+        Object.keys(rec.charges || {}).forEach(key => {
+            let base = key;
+            if (key.endsWith('_20') || key.endsWith('_40')) {
+                base = key.slice(0, -3);
+            }
+            chargeSet.add(base);
+        });
+    });
+    const chargeColumns = Array.from(chargeSet).sort();
+
+    // Build rows
+    const rows = [];
+    records.forEach(rec => {
+        const baseRow = {
+            MODE: mode.toUpperCase(),
+            POL: rec.pol || '',
+            COMMODITY: rec.commodity || ''
+        };
+
+        // Check which suffixes exist for this record
+        const has20 = Object.keys(rec.charges).some(k => k.endsWith('_20'));
+        const has40 = Object.keys(rec.charges).some(k => k.endsWith('_40'));
+
+        if (!isSea || (!has20 && !has40)) {
+            // AIR, LCL, or SEA with no container-specific charges: single row with CONTAINER = "ALL"
+            const row = { ...baseRow, CONTAINER: 'ALL' };
+            chargeColumns.forEach(col => {
+                const val = rec.charges?.[col];
+                row[col] = val?.amount || '';
+            });
+            rows.push(row);
+            return;
+        }
+
+        // ---- SEA: create separate rows for each container ----
+        // Row for 20 GP
+        if (has20) {
+            const row = { ...baseRow, CONTAINER: '20 GP' };
+            chargeColumns.forEach(col => {
+                const key = col + '_20'; // All charges get _20 suffix for 20 GP
+                const val = rec.charges?.[key];
+                row[col] = val?.amount || '';
+            });
+            rows.push(row);
+        }
+
+        // Row for 40 HC
+        if (has40) {
+            const row = { ...baseRow, CONTAINER: '40 HC' };
+            chargeColumns.forEach(col => {
+                const key = col + '_40'; // All charges get _40 suffix for 40 HC
+                const val = rec.charges?.[key];
+                row[col] = val?.amount || '';
+            });
+            rows.push(row);
+        }
+    });
+
+    if (rows.length === 0) {
+        alert('No data to export.');
+        return;
+    }
+
+    console.log(`📤 Exporting ${rows.length} rows. Sample:`, rows[0]);
+
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Default Charges');
-    XLSX.writeFile(wb, `DefaultCharges_Backup_${new Date().toISOString().split('T')[0]}.xlsx`);
-    alert('✅ Default charges exported (vertical format – one row per charge).');
+    XLSX.utils.book_append_sheet(wb, ws, 'Default Charges Horizontal');
+    XLSX.writeFile(wb, `DefaultCharges_${mode.toUpperCase()}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    alert(`✅ Exported ${rows.length} default charge rows.\nCheck console for details.`);
 }
 
 
-
-
 // ---------- 3. Import Carrier-Specific Charges ----------
-function bulkImportCarrierCharges(input) {
+function bulkImportDefaultCharges(input) {
     if (!input.files || !input.files[0]) {
         alert('Please select an Excel file.');
         return;
@@ -12378,103 +12845,145 @@ function bulkImportCarrierCharges(input) {
         try {
             const data = new Uint8Array(e.target.result);
             const workbook = XLSX.read(data, { type: 'array' });
-            const sheet = workbook.Sheets['Carrier Charges Horizontal'];
+
+            // Try to find the sheet
+            let sheetName = 'Default Charges Horizontal';
+            let sheet = workbook.Sheets[sheetName];
             if (!sheet) {
-                alert('❌ Sheet "Carrier Charges Horizontal" not found. Available: ' + workbook.SheetNames.join(', '));
+                sheetName = workbook.SheetNames[0];
+                sheet = workbook.Sheets[sheetName];
+                console.warn(`Sheet "${'Default Charges Horizontal'}" not found, using "${sheetName}" instead.`);
+            }
+            if (!sheet) {
+                alert('❌ No sheets found in the Excel file.');
                 return;
             }
 
             const rows = XLSX.utils.sheet_to_json(sheet);
-            if (!rows.length) {
-                alert('❌ No data found.');
+            if (!rows || rows.length === 0) {
+                alert('❌ No data rows found.');
                 return;
             }
+
+            console.log('📊 Importing', rows.length, 'rows from sheet:', sheetName);
 
             function normalize(str) {
                 if (!str) return '';
                 return str.toString().trim().replace(/\s*,\s*/g, ', ').replace(/\s+/g, ' ').toUpperCase();
             }
 
+            // Detect mode from first row
             const mode = normalize(rows[0].MODE || '');
-            if (!['SEA','LCL','AIR'].includes(mode)) {
-                alert('❌ Invalid MODE. Must be SEA, LCL, or AIR.');
+            if (!['SEA','AIR','LCL'].includes(mode)) {
+                alert(`❌ Invalid MODE "${mode}". Must be SEA, AIR, or LCL.`);
                 return;
             }
             const modeKey = mode.toLowerCase();
-            const chargeColumns = getHorizontalChargeColumns(modeKey);
-            const targetArr = modeKey === 'air' ? db.carrierChargesAir : db.carrierChargesSeaLcl;
+            const isSea = (modeKey === 'sea');
 
-            let imported = 0, updated = 0;
+            let targetArr;
+            if (isSea) targetArr = db.defaultSeaCharges;
+            else if (modeKey === 'air') targetArr = db.defaultAirCharges;
+            else targetArr = db.defaultLclCharges;
 
-            rows.forEach(row => {
+            // All columns except MODE, POL, COMMODITY, CONTAINER
+            const header = Object.keys(rows[0]);
+            const chargeColumns = header.filter(h => !['MODE','POL','COMMODITY','CONTAINER'].includes(h));
+
+            if (chargeColumns.length === 0) {
+                alert('❌ No charge columns found. Ensure the file has charge names as column headers.');
+                return;
+            }
+
+            console.log('📋 Charge columns found:', chargeColumns);
+
+            // Group rows by (POL, COMMODITY)
+            const groups = {};
+            rows.forEach((row, idx) => {
                 const pol = normalize(row.POL || '');
-                const liner = normalize(row.LINER || '');
-                const cargo = normalize(row.CARGO || '');
-                if (!pol || !liner) return;
-
-                // Build charges object (sell = buy)
+                const commodity = normalize(row.COMMODITY || '');
+                if (!pol) {
+                    console.warn(`⚠️ Row ${idx+1} skipped: POL is empty.`);
+                    return;
+                }
+                const key = `${pol}||${commodity}`;
+                if (!groups[key]) {
+                    groups[key] = { pol, commodity, containerRows: [] };
+                }
+                // Store container and charges
+                const container = normalize(row.CONTAINER || '');
                 const charges = {};
                 chargeColumns.forEach(col => {
                     const raw = row[col];
                     if (raw === undefined || raw === null || raw === '') return;
-
-                    // Detect currency and parse amount
                     let strVal = String(raw).trim();
                     let currency = 'INR';
                     let numericStr = strVal;
-
-                    // Check for $ sign (could be "$ 18,408" or "18,408$" etc.)
                     if (strVal.includes('$')) {
                         currency = 'USD';
-                        // Remove $, commas, and any non-numeric except decimal point
                         numericStr = strVal.replace(/[^0-9.]/g, '');
                     } else {
-                        // Remove commas (Indian format) and any non-numeric except decimal point
                         numericStr = strVal.replace(/,/g, '').replace(/[^0-9.]/g, '');
                     }
-
                     const val = parseFloat(numericStr);
                     if (isNaN(val) || val <= 0) return;
+                    charges[col] = { amount: val, currency, buyAmount: val, buyCurrency: currency };
+                });
+                groups[key].containerRows.push({ container, charges });
+            });
 
-                    let key = col;
-                    if (col === 'THC 20') key = 'THC_20';
-                    else if (col === 'THC 40') key = 'THC_40';
+            console.log('📦 Groups found:', Object.keys(groups).length);
 
-                    charges[key] = {
-                        amount: val,
-                        currency: currency,
-                        buyAmount: val,
-                        buyCurrency: currency
-                    };
+            let imported = 0, updated = 0;
+
+            // Process each group
+            Object.values(groups).forEach(group => {
+                const { pol, commodity, containerRows } = group;
+                if (containerRows.length === 0) return;
+
+                // Merge all container rows into one charges object
+                const mergedCharges = {};
+                containerRows.forEach(cr => {
+                    const container = cr.container;
+                    Object.entries(cr.charges).forEach(([chargeName, chargeVal]) => {
+                        let key = chargeName;
+                        // For SEA, add suffix based on container
+                        if (isSea && container) {
+                            if (container === '20 GP') key = chargeName + '_20';
+                            else if (container === '40 HC') key = chargeName + '_40';
+                            // If container is "ALL", keep as base name (no suffix)
+                        }
+                        // If the charge already exists, keep the larger amount
+                        if (!mergedCharges[key]) {
+                            mergedCharges[key] = chargeVal;
+                        } else {
+                            if (chargeVal.amount > mergedCharges[key].amount) {
+                                mergedCharges[key].amount = chargeVal.amount;
+                                mergedCharges[key].buyAmount = chargeVal.buyAmount;
+                            }
+                            mergedCharges[key].currency = chargeVal.currency || mergedCharges[key].currency;
+                            mergedCharges[key].buyCurrency = chargeVal.buyCurrency || mergedCharges[key].buyCurrency;
+                        }
+                    });
                 });
 
-                if (Object.keys(charges).length === 0) return;
+                if (Object.keys(mergedCharges).length === 0) return;
 
-                // Find existing or create new
-                let idx = -1;
-                if (modeKey === 'air') {
-                    idx = targetArr.findIndex(r =>
-                        normalize(r.carrier) === liner &&
-                        normalize(r.pol) === pol &&
-                        normalize(r.commodity || '') === cargo
-                    );
-                } else {
-                    idx = targetArr.findIndex(r =>
-                        r.mode === modeKey &&
-                        normalize(r.carrier) === liner &&
-                        normalize(r.pol) === pol &&
-                        normalize(r.commodity || '') === cargo
-                    );
-                }
+                console.log(`📌 Merged charges for ${pol} | ${commodity}:`, Object.keys(mergedCharges));
 
-                if (idx !== -1) {
-                    // Merge (update existing)
-                    const existing = targetArr[idx];
-                    Object.entries(charges).forEach(([key, val]) => {
+                // Find existing record
+                const existingIdx = targetArr.findIndex(r =>
+                    normalize(r.pol) === pol &&
+                    normalize(r.commodity || '') === commodity
+                );
+
+                if (existingIdx !== -1) {
+                    // Merge
+                    const existing = targetArr[existingIdx];
+                    Object.entries(mergedCharges).forEach(([key, val]) => {
                         if (!existing.charges[key]) {
                             existing.charges[key] = val;
                         } else {
-                            // Keep larger amount if conflict (you can change logic if needed)
                             if (val.amount > existing.charges[key].amount) {
                                 existing.charges[key].amount = val.amount;
                                 existing.charges[key].buyAmount = val.buyAmount;
@@ -12483,32 +12992,29 @@ function bulkImportCarrierCharges(input) {
                             existing.charges[key].buyCurrency = val.buyCurrency || existing.charges[key].buyCurrency;
                         }
                     });
-                    existing.updated = new Date().toISOString();
+                    existing.updatedAt = new Date().toISOString();
                     updated++;
                 } else {
-                    // Create new record
+                    // Create new
                     const newRec = {
-                        carrier: liner,
-                        pol: pol,
-                        commodity: cargo,
-                        charges: charges,
-                        updated: new Date().toISOString()
+                        pol,
+                        commodity,
+                        charges: mergedCharges,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
                     };
-                    if (modeKey !== 'air') newRec.mode = modeKey;
                     targetArr.push(newRec);
                     imported++;
                 }
             });
 
             saveDB();
-            // Refresh the correct table
-            const displayMode = modeKey === 'air' ? 'air' : (modeKey === 'lcl' ? 'lcl' : 'sealcl');
-            renderCarrierChargesMaster(displayMode);
-            alert(`✅ Import completed.\nNew: ${imported}, Updated: ${updated}`);
+            renderDefaultChargesMaster(modeKey);
+            alert(`✅ Import completed.\nNew: ${imported}, Updated: ${updated}\nTotal: ${imported + updated}\nCheck console for details.`);
             autoBackup();
         } catch (err) {
             alert('❌ Import failed: ' + err.message);
-            console.error(err);
+            console.error('Import error:', err);
         }
     };
     reader.readAsArrayBuffer(file);
@@ -12731,136 +13237,6 @@ function migrateDefaultSeaChargesToSplit() {
     }
 }
 
-function bulkImportDefaultCharges(input) {
-    if (!input.files || !input.files[0]) {
-        alert('Please select an Excel file.');
-        return;
-    }
-
-    const file = input.files[0];
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: 'array' });
-            const sheetName = 'Default Charges';
-            const sheet = workbook.Sheets[sheetName];
-            if (!sheet) {
-                alert(`❌ Sheet "${sheetName}" not found. Available: ${workbook.SheetNames.join(', ')}`);
-                return;
-            }
-
-            const rows = XLSX.utils.sheet_to_json(sheet);
-            if (rows.length === 0) {
-                alert('❌ No data found.');
-                return;
-            }
-
-            function normalize(str) {
-                if (!str) return '';
-                return str.trim()
-                    .replace(/\s*,\s*/g, ', ')
-                    .replace(/\s+/g, ' ')
-                    .toUpperCase();
-            }
-
-            function getContainerSuffix(containerStr) {
-                const c = normalize(containerStr);
-                if (c === '20 GP' || c === '20\'' || c === '20') return '_20';
-                if (c === '40 HC' || c === '40\'' || c === '40') return '_40';
-                return '';
-            }
-
-            const groups = {};
-            rows.forEach(row => {
-                const mode = normalize(row.Mode || '').toLowerCase();
-                if (!['sea', 'air', 'lcl'].includes(mode)) return;
-                const pol = normalize(row.POL || '');
-                const commodity = normalize(row.Commodity || '');
-                if (!pol) return;
-                const key = `${mode}||${pol}||${commodity}`;
-                if (!groups[key]) {
-                    groups[key] = { mode, pol, commodity, charges: {} };
-                }
-                const chargeName = normalize(row['Charge Name'] || '');
-                if (!chargeName) return;
-                const container = normalize(row.Container || '');
-                const sellAmt = parseFloat(row['Sell Amount']) || 0;
-                const buyAmt = parseFloat(row['Buy Amount']) || 0;
-                const currency = row.Currency || 'INR';
-
-                let chargeKey = chargeName;
-                if (mode === 'sea') {
-                    const suffix = getContainerSuffix(container);
-                    if (suffix) {
-                        chargeKey = chargeName + suffix;
-                    }
-                }
-                // For Air/LCL, store as base name
-
-                if (!groups[key].charges[chargeKey]) {
-                    groups[key].charges[chargeKey] = { amount: 0, buyAmount: 0, currency: 'INR' };
-                }
-                if (sellAmt > 0) groups[key].charges[chargeKey].amount = sellAmt;
-                if (buyAmt > 0) groups[key].charges[chargeKey].buyAmount = buyAmt;
-                groups[key].charges[chargeKey].currency = currency;
-            });
-
-            let imported = 0, updated = 0;
-            const targetMap = {
-                sea: db.defaultSeaCharges,
-                air: db.defaultAirCharges,
-                lcl: db.defaultLclCharges
-            };
-
-            Object.values(groups).forEach(g => {
-                const targetArr = targetMap[g.mode];
-                if (!targetArr) return;
-
-                const existingIdx = targetArr.findIndex(r => {
-                    const rPol = normalize(r.pol);
-                    const rCommodity = normalize(r.commodity || '');
-                    return rPol === g.pol && rCommodity === g.commodity;
-                });
-
-                if (existingIdx !== -1) {
-                    const existing = targetArr[existingIdx];
-                    Object.entries(g.charges).forEach(([key, val]) => {
-                        if (!existing.charges[key]) {
-                            existing.charges[key] = val;
-                        } else {
-                            if (val.amount > 0) existing.charges[key].amount = val.amount;
-                            if (val.buyAmount > 0) existing.charges[key].buyAmount = val.buyAmount;
-                            existing.charges[key].currency = val.currency || existing.charges[key].currency;
-                        }
-                    });
-                    existing.updatedAt = new Date().toISOString();
-                    updated++;
-                } else {
-                    const record = {
-                        pol: g.pol,
-                        commodity: g.commodity,
-                        charges: g.charges,
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString()
-                    };
-                    targetArr.push(record);
-                    imported++;
-                }
-            });
-
-            saveDB();
-            ['sea','air','lcl'].forEach(m => renderDefaultChargesMaster(m));
-            alert(`✅ Default charges import completed.\nNew records: ${imported}\nUpdated records: ${updated}\nTotal processed: ${imported + updated}`);
-            autoBackup();
-        } catch (err) {
-            alert('❌ Import failed: ' + err.message);
-            console.error(err);
-        }
-    };
-    reader.readAsArrayBuffer(file);
-    input.value = '';
-}
 
 function bulkExportCarrierCharges() {
     if (typeof XLSX === 'undefined') {
@@ -12928,11 +13304,11 @@ function bulkExportCarrierCharges() {
 function getHorizontalChargeColumns(mode) {
     const map = {
         sea: [
-            'THC 20', 'THC 40', 'SEAL', 'MUC', 'DOCS', 'SWITCH BL',
+            'THC 20', 'THC 40', 'SEAL', 'MUC', 'DOCS', 'SEAWAY BL',
             'ETS', 'HAZ DOCS', 'AMS'
         ],
         lcl: [
-            'FREIGHT', 'THC', 'MUC', 'DOCS', 'SWITCH BL',
+            'FREIGHT', 'THC', 'MUC', 'DOCS', 'SEAWAY BL',
             'HAZ DOCS', 'AMS', 'CLEARANCE', 'VGM'
         ],
         air: [
@@ -13463,6 +13839,7 @@ function getRateRequestData(format) {
         data.term = getSel('rr-term-sea1');
         data.validity = getVal('rr-validity-sea1');
         data.freeTime = getSel('rr-freeTime-sea1');
+		data.remarks = getVal('rr-remarks-sea1');
     } else if (format === 'seaWithoutShipper') {
         data.forwarder = getVal('rr-forwarder-sea2');
         data.pol = getVal('rr-pol-sea2');
@@ -13473,6 +13850,7 @@ function getRateRequestData(format) {
         data.term = getSel('rr-term-sea2');
         data.validity = getVal('rr-validity-sea2');
         data.freeTime = getSel('rr-freeTime-sea2');
+		data.remarks = getVal('rr-remarks-sea2');
     } else if (format === 'air') {
         data.shipper = getVal('rr-shipper-air');
         data.pol = getVal('rr-pol-air');
@@ -13484,6 +13862,7 @@ function getRateRequestData(format) {
         data.pallet = getSel('rr-pallet-air');
         data.dimension = getVal('rr-dimension-air');
         data.temp = getSel('rr-temp-air');
+		data.remarks = getVal('rr-remarks-air');
     }
     return data;
 }
@@ -13545,9 +13924,24 @@ function buildRateRequestEmail(data) {
 
 function clearRateRequestForm(format) {
     const ids = {
-        'seaWithShipper': ['rr-shipper', 'rr-forwarder-sea1', 'rr-pol-sea1', 'rr-pod-sea1', 'rr-commodity-sea1', 'rr-inventory-sea1', 'rr-weight-sea1', 'rr-term-sea1', 'rr-validity-sea1', 'rr-freeTime-sea1'],
-        'seaWithoutShipper': ['rr-forwarder-sea2', 'rr-pol-sea2', 'rr-pod-sea2', 'rr-commodity-sea2', 'rr-inventory-sea2', 'rr-weight-sea2', 'rr-term-sea2', 'rr-validity-sea2', 'rr-freeTime-sea2'],
-        'air': ['rr-shipper-air', 'rr-pol-air', 'rr-pod-air', 'rr-clearance-air', 'rr-commodity-air', 'rr-weight-air', 'rr-packaging-air', 'rr-pallet-air', 'rr-dimension-air', 'rr-temp-air']
+        'seaWithShipper': [
+            'rr-shipper', 'rr-forwarder-sea1', 'rr-pol-sea1', 'rr-pod-sea1',
+            'rr-commodity-sea1', 'rr-inventory-sea1', 'rr-weight-sea1',
+            'rr-term-sea1', 'rr-validity-sea1', 'rr-freeTime-sea1',
+            'rr-remarks-sea1'   // 🆕 added
+        ],
+        'seaWithoutShipper': [
+            'rr-forwarder-sea2', 'rr-pol-sea2', 'rr-pod-sea2',
+            'rr-commodity-sea2', 'rr-inventory-sea2', 'rr-weight-sea2',
+            'rr-term-sea2', 'rr-validity-sea2', 'rr-freeTime-sea2',
+            'rr-remarks-sea2'   // 🆕 added
+        ],
+        'air': [
+            'rr-shipper-air', 'rr-pol-air', 'rr-pod-air', 'rr-clearance-air',
+            'rr-commodity-air', 'rr-weight-air', 'rr-packaging-air',
+            'rr-pallet-air', 'rr-dimension-air', 'rr-temp-air',
+            'rr-remarks-air'    // 🆕 added
+        ]
     };
     const fieldIds = ids[format] || [];
     fieldIds.forEach(id => {
@@ -13555,10 +13949,10 @@ function clearRateRequestForm(format) {
         if (el) {
             if (el.tagName === 'SELECT') el.selectedIndex = 0;
             else if (el.type === 'number') el.value = '';
-            else if (el.type === 'text' || el.type === 'date') el.value = '';
+            else if (el.type === 'text' || el.type === 'date' || el.type === 'textarea') el.value = '';
         }
     });
-    // Reset defaults
+    // Reset defaults (preserve remarks clearing)
     if (format === 'seaWithShipper' || format === 'seaWithoutShipper') {
         const suffix = format === 'seaWithShipper' ? 'sea1' : 'sea2';
         document.getElementById(`rr-validity-${suffix}`).value = getEndOfMonthDate();
@@ -13566,11 +13960,13 @@ function clearRateRequestForm(format) {
         document.getElementById(`rr-forwarder-${suffix}`).value = db.companyName || 'GATEWAY EXIM';
         document.getElementById(`rr-term-${suffix}`).value = 'PREPAID';
         document.getElementById(`rr-freeTime-${suffix}`).value = '14 Days';
+        // remarks already cleared
     }
     if (format === 'air') {
         document.getElementById('rr-clearance-air').value = 'INQUIRY';
         document.getElementById('rr-pallet-air').value = 'PALLETIZED';
         document.getElementById('rr-temp-air').value = 'NORMAL';
+        // remarks already cleared
     }
 }
 
@@ -13594,8 +13990,8 @@ function buildRateRequestPreviewHTML(data) {
     if (format === 'seaWithShipper') {
         rows = rows.concat([
             ['SHIPPER', data.shipper || '-'],
-            ['POL', data.pol || '-'],
             ['FORWARDER', data.forwarder || company],
+            ['POL', data.pol || '-'],
             ['POD', data.pod || '-'],
             ['INVENTORY', data.inventory || '-'],
             ['COMMODITY', data.commodity || '-'],
@@ -13606,8 +14002,8 @@ function buildRateRequestPreviewHTML(data) {
         ]);
     } else if (format === 'seaWithoutShipper') {
         rows = rows.concat([
-            ['POL', data.pol || '-'],
             ['FORWARDER', data.forwarder || company],
+            ['POL', data.pol || '-'],
             ['POD', data.pod || '-'],
             ['INVENTORY', data.inventory || '-'],
             ['COMMODITY', data.commodity || '-'],
@@ -13661,11 +14057,22 @@ function buildRateRequestPreviewHTML(data) {
             <tbody>
                 ${rowsHtml}
             </tbody>
-        </table>
-    </div>`;
+        </table>`;
+
+    // ---- 🆕 ADD REMARKS SECTION ----
+    if (data.remarks) {
+        html += `
+        <div style="margin-top:12px; border-top:1px solid #e2e8f0; padding-top:8px;">
+            <div style="font-weight:700; color:#1e3a8a; font-size:0.78rem;">📝 Remarks</div>
+            <div style="font-size:0.85rem; color:#1a1a1a; background:#f8fafc; padding:6px 10px; border-radius:4px; margin-top:4px;">
+                ${data.remarks}
+            </div>
+        </div>`;
+    }
+
+    html += `</div>`;
     return html;
 }
-
 
 
 function buildRateRequestCompactEmailHTML(data) {
@@ -13737,8 +14144,17 @@ function buildRateRequestCompactEmailHTML(data) {
             <tbody>
                 ${rowsHtml}
             </tbody>
-        </table>
-    </div>`;
+        </table>`;
+
+    // ---- 🆕 ADD REMARKS (if present) ----
+    if (data.remarks) {
+        html += `
+        <div style="margin-top:6px; font-size:10px; border-top:1px solid #e2e8f0; padding-top:4px;">
+            <strong>📝 Remarks:</strong> ${data.remarks}
+        </div>`;
+    }
+
+    html += `</div>`;
     return html;
 }
 
@@ -14148,3 +14564,795 @@ function clearRRDraftsFilters() {
     document.getElementById('rrdrafts-search-date').value = '';
     renderRRDrafts();
 }
+
+
+// ==================== ENHANCED RATES VIEW ====================
+let ratesSortColumn = 'timestamp';
+let ratesSortOrder = 'desc'; // 'asc' or 'desc'
+
+function renderEnhancedRates() {
+    const ratesPanel = document.getElementById('rates');
+    if (!ratesPanel) return;
+
+    // --- Ensure container exists ---
+    let container = document.getElementById('rates-list-container');
+    let actionBar = document.querySelector('.rates-action-bar');
+    let paginationEl = document.getElementById('rates-pagination');
+
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'rates-list-container';
+        const filterRow = ratesPanel.querySelector('.filter-row');
+        if (filterRow) filterRow.after(container);
+        else ratesPanel.appendChild(container);
+    }
+
+    if (!actionBar) {
+        actionBar = document.createElement('div');
+        actionBar.className = 'rates-action-bar';
+        actionBar.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; margin:8px 0; align-items:center;';
+        actionBar.innerHTML = `
+            <span style="font-weight:600; font-size:0.8rem; color:var(--text-light); margin-right:8px;">Actions:</span>
+            <button class="btn btn-sm btn-preview" onclick="ratesBulkAction('preview')">👁 Preview</button>
+            <button class="btn btn-sm btn-pdf" onclick="ratesBulkAction('pdf')">📄 PDF</button>
+            <button class="btn btn-sm btn-email" onclick="ratesBulkAction('email')">📧 Email</button>
+            <button class="btn btn-sm btn-duplicate" onclick="ratesBulkAction('duplicate')">📋 Duplicate</button>
+            <button class="btn btn-sm btn-draft" onclick="ratesBulkAction('edit')">✏️ Edit</button>
+            <button class="btn btn-sm btn-clear" onclick="ratesBulkAction('delete')">🗑️ Delete</button>
+            <span style="margin-left:auto; font-size:0.75rem; color:var(--text-light);" id="rates-selected-count">0 selected</span>
+        `;
+        const filterRow = ratesPanel.querySelector('.filter-row');
+        if (filterRow) filterRow.after(actionBar);
+        else ratesPanel.insertBefore(actionBar, container);
+    }
+
+    if (!paginationEl) {
+        paginationEl = document.createElement('div');
+        paginationEl.id = 'rates-pagination';
+        paginationEl.className = 'pagination';
+        container.after(paginationEl);
+    }
+
+    // Remove old list containers
+    ['rates-sea-list', 'rates-air-list', 'rates-lcl-list'].forEach(id => {
+        const old = document.getElementById(id);
+        if (old) old.remove();
+    });
+
+    // --- Get filter values ---
+    const searchText = (document.getElementById('rates-search-text')?.value || '').toLowerCase();
+    const statusFilter = document.getElementById('rates-status-filter')?.value || '';
+    const modeFilter = document.getElementById('rates-mode-filter')?.value || '';
+    const userFilter = document.getElementById('rates-user-filter')?.value || '';
+
+    // --- Collect all quotes ---
+    let allQuotes = [];
+    ['sea', 'air', 'lcl'].forEach(mode => {
+        (db.rates[mode] || []).forEach((quote, idx) => {
+            allQuotes.push({
+                ...quote,
+                _mode: mode,
+                _idx: idx,
+                _modeLabel: mode.toUpperCase()
+            });
+        });
+    });
+
+    // --- Populate User Filter ---
+    const userSelect = document.getElementById('rates-user-filter');
+    if (userSelect) {
+        const users = [...new Set(allQuotes.map(q => q.sales || q.createdBy || db.defaultUser || 'Unknown'))].filter(Boolean);
+        const currentVal = userSelect.value;
+        userSelect.innerHTML = '<option value="">All Users</option>' + 
+            users.map(u => `<option value="${u}" ${u === currentVal ? 'selected' : ''}>${u}</option>`).join('');
+    }
+
+    // --- Apply filters ---
+    let filtered = allQuotes.filter(q => {
+        if (searchText) {
+            const searchable = `${q.quoteNumber||''} ${q.client||''} ${q.pol||''} ${q.pod||''}`.toLowerCase();
+            if (!searchable.includes(searchText)) return false;
+        }
+        if (statusFilter && (q.followUpStatus || 'PENDING') !== statusFilter) return false;
+        if (modeFilter && q._modeLabel !== modeFilter) return false;
+        if (userFilter && (q.sales || q.createdBy || db.defaultUser) !== userFilter) return false;
+        return true;
+    });
+
+    // --- Sort ---
+    const sortKey = ratesSortColumn;
+    const sortOrder = ratesSortOrder === 'asc' ? 1 : -1;
+    filtered.sort((a, b) => {
+        let valA = a[sortKey] || '';
+        let valB = b[sortKey] || '';
+        if (sortKey === 'timestamp') {
+            valA = new Date(valA);
+            valB = new Date(valB);
+            return sortOrder * (valA - valB);
+        }
+        valA = String(valA).toLowerCase();
+        valB = String(valB).toLowerCase();
+        return sortOrder * valA.localeCompare(valB);
+    });
+
+    // --- Update Counters ---
+    updateRatesCounters(allQuotes, filtered);
+
+    // --- Pagination ---
+    const perPage = 10;
+    const total = filtered.length;
+    const totalPages = Math.ceil(total / perPage) || 1;
+    let page = parseInt(sessionStorage.getItem('ratesPage') || '1');
+    if (page < 1) page = 1;
+    if (page > totalPages) page = totalPages;
+    sessionStorage.setItem('ratesPage', String(page));
+
+    const start = (page - 1) * perPage;
+    const pageData = filtered.slice(start, start + perPage);
+
+    if (total === 0) {
+        container.innerHTML = '<p style="color:var(--text-light);padding:20px;text-align:center;">No quotes found.</p>';
+        paginationEl.innerHTML = '';
+        updateSelectedCount();
+        return;
+    }
+
+    // --- Build table ---
+    let html = `
+    <div class="rates-table-wrapper">
+        <table class="rates-enhanced-table" id="rates-table">
+            <thead>
+                <tr>
+                    <th style="width:30px;"><input type="checkbox" id="rates-select-all" onchange="toggleAllRatesCheckboxes()" /></th>
+                    <th data-sort="quoteNumber" onclick="sortRates('quoteNumber')" style="width:12%;">QUOTE REF <span class="sort-arrow"></span></th>
+                    <th data-sort="client" onclick="sortRates('client')" style="width:15%;">CUSTOMER <span class="sort-arrow"></span></th>
+                    <th data-sort="pol" onclick="sortRates('pol')" style="width:14%;">ORIGIN <span class="sort-arrow"></span></th>
+                    <th data-sort="pod" onclick="sortRates('pod')" style="width:14%;">DESTINATION <span class="sort-arrow"></span></th>
+                    <th data-sort="_modeLabel" onclick="sortRates('_modeLabel')" style="width:8%;">SERVICE <span class="sort-arrow"></span></th>
+                    <th data-sort="followUpStatus" onclick="sortRates('followUpStatus')" style="width:10%;">STATUS <span class="sort-arrow"></span></th>
+                    <th data-sort="validityDate" onclick="sortRates('validityDate')" style="width:12%;">VALID TILL <span class="sort-arrow"></span></th>
+                    <th data-sort="timestamp" onclick="sortRates('timestamp')" style="width:10%;">CREATED ON <span class="sort-arrow"></span></th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    pageData.forEach((q, index) => {
+        const status = q.followUpStatus || 'PENDING';
+        const statusClass = `follow-up-${status.toLowerCase().replace('-','')}`;
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        const validityDate = q.validityDate ? new Date(q.validityDate) : null;
+        
+        // --- VALIDITY DISPLAY WITH RED DAYS ---
+        let validityDisplay = '-';
+        if (validityDate) {
+            const diff = Math.ceil((validityDate - today) / (1000 * 60 * 60 * 24));
+            const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][validityDate.getMonth()];
+            const day = String(validityDate.getDate()).padStart(2,'0');
+            const year = String(validityDate.getFullYear()).slice(-2);
+            const datePart = `${day}-${month}-${year}`;
+            if (diff >= 0) {
+                validityDisplay = `${datePart} (<span class="validity-days">${diff}</span>)`;
+            } else {
+                validityDisplay = `${datePart} (<span class="validity-days expired">Expired</span>)`;
+            }
+        }
+
+        const createdDate = q.timestamp ? new Date(q.timestamp) : new Date();
+        const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][createdDate.getMonth()];
+        const day = String(createdDate.getDate()).padStart(2,'0');
+        const year = String(createdDate.getFullYear()).slice(-2);
+        const createdDisplay = `${day}-${month}-${year}`;
+
+        const serviceMap = { 'SEA': 'FCL', 'AIR': 'AIR', 'LCL': 'LCL' };
+        const service = serviceMap[q._modeLabel] || q._modeLabel;
+
+        const rowBg = (index % 2 === 1) ? '#C7F0EA' : 'transparent';
+
+        html += `
+            <tr style="background:${rowBg};" data-quote='${JSON.stringify(q).replace(/'/g,"&apos;")}'>
+                <td style="text-align:center;"><input type="checkbox" class="rates-row-checkbox" data-quote='${JSON.stringify(q).replace(/'/g,"&apos;")}' onchange="updateSelectedCount()" /></td>
+                <td><strong>${q.quoteNumber || 'N/A'}</strong></td>
+                <td>${q.client || '-'}</td>
+                <td>${q.pol || '-'}</td>
+                <td>${q.pod || '-'}</td>
+                <td><span class="service-badge">${service}</span></td>
+                <td>
+                    <select class="status-dropdown ${statusClass}" onchange="updateQuoteStatus(this, '${q._mode}', ${q._idx})">
+                        <option value="PENDING" ${status==='PENDING'?'selected':''}>⏳ Pending</option>
+                        <option value="SENT" ${status==='SENT'?'selected':''}>📤 Sent</option>
+                        <option value="FOLLOW-UP" ${status==='FOLLOW-UP'?'selected':''}>🔄 Follow-up</option>
+                        <option value="WON" ${status==='WON'?'selected':''}>✅ Won</option>
+                        <option value="LOST" ${status==='LOST'?'selected':''}>❌ Lost</option>
+                    </select>
+                </td>
+                <td>${validityDisplay}</td>
+                <td>${createdDisplay}</td>
+            </tr>
+        `;
+    });
+
+    html += `</tbody></table></div>`;
+    container.innerHTML = html;
+
+    // --- Update sort arrows ---
+    updateSortArrows();
+
+    // --- Pagination ---
+    if (totalPages <= 1) {
+        paginationEl.innerHTML = '';
+    } else {
+        let pagHtml = `<button class="page-btn" onclick="changeRatesPage(${page - 1})" ${page === 1 ? 'disabled' : ''}>‹ Prev</button>`;
+        pagHtml += `<span class="page-info">Page ${page} of ${totalPages} (${total} records)</span>`;
+        pagHtml += `<button class="page-btn" onclick="changeRatesPage(${page + 1})" ${page === totalPages ? 'disabled' : ''}>Next ›</button>`;
+        paginationEl.innerHTML = pagHtml;
+    }
+
+    updateSelectedCount();
+}
+
+function updateSortArrows() {
+    document.querySelectorAll('#rates-table th[data-sort]').forEach(th => {
+        const col = th.dataset.sort;
+        const arrow = th.querySelector('.sort-arrow');
+        if (col === ratesSortColumn) {
+            arrow.textContent = ratesSortOrder === 'asc' ? ' ▲' : ' ▼';
+        } else {
+            arrow.textContent = '';
+        }
+    });
+}
+
+function sortRates(column) {
+    if (ratesSortColumn === column) {
+        ratesSortOrder = ratesSortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+        ratesSortColumn = column;
+        ratesSortOrder = 'asc';
+    }
+    renderRecords('rates');
+}
+
+function updateQuoteStatus(select, mode, idx) {
+    const newStatus = select.value;
+    const quote = db.rates[mode][idx];
+    if (!quote) return;
+    quote.followUpStatus = newStatus;
+    quote.followUpUpdated = new Date().toISOString();
+    quote.lastModified = new Date().toISOString();
+    if (newStatus === 'LOST') {
+        setTimeout(() => {
+            const reason = prompt('Please enter reason for losing this quote:\n\nOptions:\n- High Rates\n- Slow Response\n- No Service\n- Client Not Interested\n- Competitor Won\n- Budget Constraints\n- Other');
+            if (reason) {
+                quote.lostReason = reason;
+                saveDB();
+                renderRecords('rates');
+            }
+        }, 100);
+    } else {
+        saveDB();
+        // Update only the status dropdown style
+        select.className = 'status-dropdown follow-up-' + newStatus.toLowerCase().replace('-','');
+    }
+}
+
+function toggleAllRatesCheckboxes() {
+    const checked = document.getElementById('rates-select-all').checked;
+    document.querySelectorAll('.rates-row-checkbox').forEach(cb => cb.checked = checked);
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const checked = document.querySelectorAll('.rates-row-checkbox:checked').length;
+    const el = document.getElementById('rates-selected-count');
+    if (el) el.textContent = checked + ' selected';
+}
+
+function getSelectedQuotes() {
+    const selected = [];
+    document.querySelectorAll('.rates-row-checkbox:checked').forEach(cb => {
+        const q = JSON.parse(cb.dataset.quote);
+        selected.push(q);
+    });
+    return selected;
+}
+
+function ratesBulkAction(action) {
+    const selected = getSelectedQuotes();
+    if (selected.length === 0) {
+        alert('Please select at least one quote.');
+        return;
+    }
+    if (action === 'preview') {
+        const q = selected[0];
+        previewSavedRecord('rates', q._mode, q._idx);
+    } else if (action === 'pdf') {
+        const q = selected[0];
+        downloadSavedPDF('rates', q._mode, q._idx);
+    } else if (action === 'email') {
+        const q = selected[0];
+        emailSavedQuote('rates', q._mode, q._idx);
+    } else if (action === 'duplicate') {
+        selected.forEach(q => {
+            duplicateQuote('rates', q._mode, q._idx);
+        });
+        alert(`Duplicated ${selected.length} quote(s).`);
+    } else if (action === 'edit') {
+        const q = selected[0];
+        editRecord('rates', q._mode, q._idx);
+    } else if (action === 'delete') {
+        if (!confirm(`Delete ${selected.length} selected quote(s)?`)) return;
+        // Delete in reverse order to avoid index shifting
+        const toDelete = selected.map(q => ({ mode: q._mode, idx: q._idx })).reverse();
+        toDelete.forEach(({ mode, idx }) => {
+            if (idx < db.rates[mode].length) {
+                db.rates[mode].splice(idx, 1);
+            }
+        });
+        saveDB();
+        renderRecords('rates');
+        alert('Selected quotes deleted.');
+    }
+}
+
+function changeRatesPage(page) {
+    sessionStorage.setItem('ratesPage', String(page));
+    renderRecords('rates');
+}
+
+function clearRatesFilters() {
+    document.getElementById('rates-search-text').value = '';
+    document.getElementById('rates-status-filter').value = '';
+    document.getElementById('rates-mode-filter').value = '';
+    document.getElementById('rates-user-filter').value = '';
+    sessionStorage.setItem('ratesPage', '1');
+    renderRecords('rates');
+}
+
+function updateRatesCounters(allQuotes, filtered) {
+    const countersEl = document.getElementById('rates-counters');
+    if (!countersEl) return;
+
+    const totalSea = db.rates.sea ? db.rates.sea.length : 0;
+    const totalAir = db.rates.air ? db.rates.air.length : 0;
+    const totalLcl = db.rates.lcl ? db.rates.lcl.length : 0;
+    const totalAll = totalSea + totalAir + totalLcl;
+
+    const converted = allQuotes.filter(q => q.convertedToShipment === true).length;
+    const expired = allQuotes.filter(q => {
+        if (!q.validityDate) return false;
+        const v = new Date(q.validityDate);
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        return v < today;
+    }).length;
+
+    countersEl.innerHTML = `
+        <div class="counter-card" style="border-color:#3b82f6;"><div class="counter-label">🚢 SEA</div><div class="counter-value">${totalSea}</div></div>
+        <div class="counter-card" style="border-color:#f59e0b;"><div class="counter-label">✈️ AIR</div><div class="counter-value">${totalAir}</div></div>
+        <div class="counter-card" style="border-color:#10b981;"><div class="counter-label">📦 LCL</div><div class="counter-value">${totalLcl}</div></div>
+        <div class="counter-card" style="border-color:#8b5cf6;"><div class="counter-label">📋 CONVERTED</div><div class="counter-value">${converted}</div></div>
+        <div class="counter-card" style="border-color:#ef4444;"><div class="counter-label">⏰ EXPIRED</div><div class="counter-value">${expired}</div></div>
+        <div class="counter-card" style="border-color:#1e3a8a;"><div class="counter-label">📊 TOTAL</div><div class="counter-value">${totalAll}</div></div>
+    `;
+}
+
+// ==================== ENHANCED DRAFTS VIEW ====================
+let draftsSortColumn = 'timestamp';
+let draftsSortOrder = 'desc';
+
+function renderEnhancedDrafts() {
+    const draftsPanel = document.getElementById('drafts');
+    if (!draftsPanel) return;
+
+    let container = document.getElementById('drafts-list-container');
+    let paginationEl = document.getElementById('drafts-pagination');
+
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'drafts-list-container';
+        const filterRow = draftsPanel.querySelector('.filter-row');
+        if (filterRow) filterRow.after(container);
+        else draftsPanel.appendChild(container);
+    }
+
+    if (!paginationEl) {
+        paginationEl = document.createElement('div');
+        paginationEl.id = 'drafts-pagination';
+        paginationEl.className = 'pagination';
+        container.after(paginationEl);
+    }
+
+    ['drafts-sea-list', 'drafts-air-list', 'drafts-lcl-list'].forEach(id => {
+        const old = document.getElementById(id);
+        if (old) old.remove();
+    });
+    draftsPanel.querySelectorAll('.section-heading').forEach(el => el.remove());
+
+    const searchText = (document.getElementById('drafts-search-text')?.value || '').toLowerCase();
+    const searchQN = (document.getElementById('drafts-search-qn')?.value || '').toLowerCase();
+    const searchDate = document.getElementById('drafts-search-date')?.value || '';
+
+    let allDrafts = [];
+    ['sea', 'air', 'lcl'].forEach(mode => {
+        (db.drafts[mode] || []).forEach((draft, idx) => {
+            allDrafts.push({
+                ...draft,
+                _mode: mode,
+                _idx: idx,
+                _modeLabel: mode.toUpperCase()
+            });
+        });
+    });
+
+    let filtered = allDrafts.filter(d => {
+        if (searchText) {
+            const text = `${d.client||''} ${d.pol||''} ${d.pod||''} ${d.carrier||''} ${d.quoteNumber||''}`.toLowerCase();
+            if (!text.includes(searchText)) return false;
+        }
+        if (searchQN && !(d.quoteNumber||'').toLowerCase().includes(searchQN)) return false;
+        if (searchDate) {
+            const dDate = new Date(d.timestamp).toISOString().split('T')[0];
+            if (dDate !== searchDate) return false;
+        }
+        return true;
+    });
+
+    const sortKey = draftsSortColumn;
+    const sortOrder = draftsSortOrder === 'asc' ? 1 : -1;
+    filtered.sort((a, b) => {
+        let valA = a[sortKey] || '';
+        let valB = b[sortKey] || '';
+        if (sortKey === 'timestamp') {
+            valA = new Date(valA);
+            valB = new Date(valB);
+            return sortOrder * (valA - valB);
+        }
+        valA = String(valA).toLowerCase();
+        valB = String(valB).toLowerCase();
+        return sortOrder * valA.localeCompare(valB);
+    });
+
+    updateDraftsCounters(allDrafts, filtered);
+
+    const perPage = 10;
+    const total = filtered.length;
+    const totalPages = Math.ceil(total / perPage) || 1;
+    let page = parseInt(sessionStorage.getItem('draftsPage') || '1');
+    if (page < 1) page = 1;
+    if (page > totalPages) page = totalPages;
+    sessionStorage.setItem('draftsPage', String(page));
+
+    const start = (page - 1) * perPage;
+    const pageData = filtered.slice(start, start + perPage);
+
+    if (total === 0) {
+        container.innerHTML = '<p style="color:var(--text-light);padding:20px;text-align:center;">No drafts found.</p>';
+        paginationEl.innerHTML = '';
+        return;
+    }
+
+    // Build table with fixed widths
+    let html = `
+    <div class="rates-table-wrapper">
+        <table class="rates-enhanced-table">
+            <thead>
+                <tr>
+                    <th style="width:12%;" data-sort="quoteNumber" onclick="sortDrafts('quoteNumber')">QUOTE REF <span class="sort-arrow"></span></th>
+                    <th style="width:15%;" data-sort="client" onclick="sortDrafts('client')">CUSTOMER <span class="sort-arrow"></span></th>
+                    <th style="width:14%;" data-sort="pol" onclick="sortDrafts('pol')">ORIGIN <span class="sort-arrow"></span></th>
+                    <th style="width:14%;" data-sort="pod" onclick="sortDrafts('pod')">DESTINATION <span class="sort-arrow"></span></th>
+                    <th style="width:8%;" data-sort="_modeLabel" onclick="sortDrafts('_modeLabel')">SERVICE <span class="sort-arrow"></span></th>
+                    <th style="width:12%;" data-sort="validityDate" onclick="sortDrafts('validityDate')">VALID TILL <span class="sort-arrow"></span></th>
+                    <th style="width:10%;" data-sort="timestamp" onclick="sortDrafts('timestamp')">CREATED ON <span class="sort-arrow"></span></th>
+                    <th style="width:15%;">ACTIONS</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    pageData.forEach((d, index) => {
+        const validityDate = d.validityDate ? new Date(d.validityDate) : null;
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        let validityDisplay = '-';
+        if (validityDate) {
+            const diff = Math.ceil((validityDate - today) / (1000 * 60 * 60 * 24));
+            const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][validityDate.getMonth()];
+            const day = String(validityDate.getDate()).padStart(2,'0');
+            const year = String(validityDate.getFullYear()).slice(-2);
+            validityDisplay = `${day}-${month}-${year}`;
+            if (diff >= 0) validityDisplay += ` (${diff})`;
+            else validityDisplay += ` (Expired)`;
+        }
+        const createdDate = d.timestamp ? new Date(d.timestamp) : new Date();
+        const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][createdDate.getMonth()];
+        const day = String(createdDate.getDate()).padStart(2,'0');
+        const year = String(createdDate.getFullYear()).slice(-2);
+        const createdDisplay = `${day}-${month}-${year}`;
+
+        const serviceMap = { 'SEA': 'FCL', 'AIR': 'AIR', 'LCL': 'LCL' };
+        const service = serviceMap[d._modeLabel] || d._modeLabel;
+
+        const rowBg = (index % 2 === 1) ? '#C7F0EA' : 'transparent';
+
+        html += `
+            <tr style="background:${rowBg};">
+                <td><strong>${d.quoteNumber || 'N/A'}</strong></td>
+                <td>${d.client || '-'}</td>
+                <td>${d.pol || '-'}</td>
+                <td>${d.pod || '-'}</td>
+                <td><span class="service-badge">${service}</span></td>
+                <td>${validityDisplay}</td>
+                <td>${createdDisplay}</td>
+                <td>
+                    <button class="btn btn-sm btn-preview" onclick="editRecord('drafts','${d._mode}',${d._idx})" title="Edit">✏️</button>
+                    <button class="btn btn-sm btn-preview" onclick="previewSavedRecord('drafts','${d._mode}',${d._idx})" title="Preview">👁</button>
+                    <button class="btn btn-sm btn-pdf" onclick="downloadSavedPDF('drafts','${d._mode}',${d._idx})" title="PDF">📄</button>
+                    <button class="btn btn-sm btn-duplicate" onclick="duplicateQuote('drafts','${d._mode}',${d._idx})" title="Duplicate">📋</button>
+                    <button class="btn btn-sm btn-clear" onclick="deleteRecord('drafts','${d._mode}',${d._idx})" title="Delete">×</button>
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `</tbody></table></div>`;
+    container.innerHTML = html;
+
+    updateDraftsSortArrows();
+
+    if (totalPages <= 1) {
+        paginationEl.innerHTML = '';
+    } else {
+        let pagHtml = `<button class="page-btn" onclick="changeDraftsPage(${page - 1})" ${page === 1 ? 'disabled' : ''}>‹ Prev</button>`;
+        pagHtml += `<span class="page-info">Page ${page} of ${totalPages} (${total} records)</span>`;
+        pagHtml += `<button class="page-btn" onclick="changeDraftsPage(${page + 1})" ${page === totalPages ? 'disabled' : ''}>Next ›</button>`;
+        paginationEl.innerHTML = pagHtml;
+    }
+}
+
+function updateDraftsCounters(allDrafts, filtered) {
+    const countersEl = document.getElementById('drafts-counters');
+    if (!countersEl) return;
+    const sea = allDrafts.filter(d => d._mode === 'sea').length;
+    const air = allDrafts.filter(d => d._mode === 'air').length;
+    const lcl = allDrafts.filter(d => d._mode === 'lcl').length;
+    const total = allDrafts.length;
+    countersEl.innerHTML = `
+        <div class="counter-card" style="border-color:#3b82f6;"><div class="counter-label">🚢 SEA Drafts</div><div class="counter-value">${sea}</div></div>
+        <div class="counter-card" style="border-color:#f59e0b;"><div class="counter-label">✈️ AIR Drafts</div><div class="counter-value">${air}</div></div>
+        <div class="counter-card" style="border-color:#10b981;"><div class="counter-label">📦 LCL Drafts</div><div class="counter-value">${lcl}</div></div>
+        <div class="counter-card" style="border-color:#1e3a8a;"><div class="counter-label">📊 TOTAL</div><div class="counter-value">${total}</div></div>
+    `;
+}
+
+function sortDrafts(column) {
+    if (draftsSortColumn === column) {
+        draftsSortOrder = draftsSortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+        draftsSortColumn = column;
+        draftsSortOrder = 'asc';
+    }
+    renderRecords('drafts');
+}
+
+function updateDraftsSortArrows() {
+    document.querySelectorAll('#drafts-list-container .rates-enhanced-table th[data-sort]').forEach(th => {
+        const col = th.dataset.sort;
+        const arrow = th.querySelector('.sort-arrow');
+        if (col === draftsSortColumn) {
+            arrow.textContent = draftsSortOrder === 'asc' ? ' ▲' : ' ▼';
+        } else {
+            arrow.textContent = '';
+        }
+    });
+}
+
+function changeDraftsPage(page) {
+    sessionStorage.setItem('draftsPage', String(page));
+    renderRecords('drafts');
+}
+
+
+// ==================== ENHANCED RR DRAFTS VIEW ====================
+let rrSortColumn = 'timestamp';
+let rrSortOrder = 'desc';
+
+function renderEnhancedRRDrafts() {
+    const rrPanel = document.getElementById('rrdrafts');
+    if (!rrPanel) return;
+
+    let container = document.getElementById('rrdrafts-list-container');
+    let paginationEl = document.getElementById('rrdrafts-pagination');
+
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'rrdrafts-list-container';
+        const filterRow = rrPanel.querySelector('.filter-row');
+        if (filterRow) filterRow.after(container);
+        else rrPanel.appendChild(container);
+    }
+
+    if (!paginationEl) {
+        paginationEl = document.createElement('div');
+        paginationEl.id = 'rrdrafts-pagination';
+        paginationEl.className = 'pagination';
+        container.after(paginationEl);
+    }
+
+    const oldList = document.getElementById('rrdrafts-list');
+    if (oldList) oldList.remove();
+
+    const searchText = (document.getElementById('rrdrafts-search-text')?.value || '').toLowerCase();
+    const searchQN = (document.getElementById('rrdrafts-search-qn')?.value || '').toLowerCase();
+    const searchDate = document.getElementById('rrdrafts-search-date')?.value || '';
+    const modeFilter = document.getElementById('rrdrafts-mode-filter')?.value || '';
+
+    let allRR = db.drafts.rr || [];
+    allRR = allRR.map((rr, idx) => ({ ...rr, _idx: idx }));
+
+    let filtered = allRR.filter(rr => {
+        if (searchText) {
+            const text = `${rr.shipper||''} ${rr.forwarder||''} ${rr.pol||''} ${rr.pod||''} ${rr.quoteNumber||''}`.toLowerCase();
+            if (!text.includes(searchText)) return false;
+        }
+        if (searchQN && !(rr.quoteNumber||'').toLowerCase().includes(searchQN)) return false;
+        if (searchDate) {
+            const dDate = new Date(rr.timestamp).toISOString().split('T')[0];
+            if (dDate !== searchDate) return false;
+        }
+        if (modeFilter && rr.mode !== modeFilter) return false;
+        return true;
+    });
+
+    const sortKey = rrSortColumn;
+    const sortOrder = rrSortOrder === 'asc' ? 1 : -1;
+    filtered.sort((a, b) => {
+        let valA = a[sortKey] || '';
+        let valB = b[sortKey] || '';
+        if (sortKey === 'timestamp') {
+            valA = new Date(valA);
+            valB = new Date(valB);
+            return sortOrder * (valA - valB);
+        }
+        valA = String(valA).toLowerCase();
+        valB = String(valB).toLowerCase();
+        return sortOrder * valA.localeCompare(valB);
+    });
+
+    updateRRCounters(allRR, filtered);
+
+    const perPage = 10;
+    const total = filtered.length;
+    const totalPages = Math.ceil(total / perPage) || 1;
+    let page = parseInt(sessionStorage.getItem('rrPage') || '1');
+    if (page < 1) page = 1;
+    if (page > totalPages) page = totalPages;
+    sessionStorage.setItem('rrPage', String(page));
+
+    const start = (page - 1) * perPage;
+    const pageData = filtered.slice(start, start + perPage);
+
+    if (total === 0) {
+        container.innerHTML = '<p style="color:var(--text-light);padding:20px;text-align:center;">No RR drafts found.</p>';
+        paginationEl.innerHTML = '';
+        return;
+    }
+
+    // Build table with fixed widths
+    let html = `
+    <div class="rates-table-wrapper">
+        <table class="rates-enhanced-table">
+            <thead>
+                <tr>
+                    <th style="width:14%;" data-sort="quoteNumber" onclick="sortRR('quoteNumber')">QUOTE REF <span class="sort-arrow"></span></th>
+                    <th style="width:16%;" data-sort="shipper" onclick="sortRR('shipper')">SHIPPER <span class="sort-arrow"></span></th>
+                    <th style="width:14%;" data-sort="pol" onclick="sortRR('pol')">POL <span class="sort-arrow"></span></th>
+                    <th style="width:14%;" data-sort="pod" onclick="sortRR('pod')">POD <span class="sort-arrow"></span></th>
+                    <th style="width:10%;" data-sort="mode" onclick="sortRR('mode')">MODE <span class="sort-arrow"></span></th>
+                    <th style="width:12%;" data-sort="timestamp" onclick="sortRR('timestamp')">CREATED ON <span class="sort-arrow"></span></th>
+                    <th style="width:20%;">ACTIONS</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    pageData.forEach((rr, index) => {
+        const createdDate = rr.timestamp ? new Date(rr.timestamp) : new Date();
+        const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][createdDate.getMonth()];
+        const day = String(createdDate.getDate()).padStart(2,'0');
+        const year = String(createdDate.getFullYear()).slice(-2);
+        const createdDisplay = `${day}-${month}-${year}`;
+
+        const modeIcon = rr.mode === 'AIR' ? '✈️' : '🚢';
+        const modeDisplay = rr.mode || 'SEA';
+
+        const rowBg = (index % 2 === 1) ? '#C7F0EA' : 'transparent';
+
+        html += `
+            <tr style="background:${rowBg};">
+                <td><strong>${rr.quoteNumber || 'N/A'}</strong></td>
+                <td>${rr.shipper || rr.forwarder || '-'}</td>
+                <td>${rr.pol || '-'}</td>
+                <td>${rr.pod || '-'}</td>
+                <td><span class="service-badge">${modeIcon} ${modeDisplay}</span></td>
+                <td>${createdDisplay}</td>
+                <td>
+                    <button class="btn btn-sm btn-preview" onclick="editRecord('drafts','rr',${rr._idx})" title="Edit">✏️</button>
+                    <button class="btn btn-sm btn-preview" onclick="previewRateRequestDraft('drafts','rr',${rr._idx})" title="Preview">👁</button>
+                    <button class="btn btn-sm btn-quoted" onclick="convertRRToQuote('drafts','rr',${rr._idx})" title="Convert to Quote">📤</button>
+                    <button class="btn btn-sm btn-duplicate" onclick="duplicateQuote('drafts','rr',${rr._idx})" title="Duplicate">📋</button>
+                    <button class="btn btn-sm btn-clear" onclick="deleteRecord('drafts','rr',${rr._idx})" title="Delete">×</button>
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `</tbody></table></div>`;
+    container.innerHTML = html;
+
+    updateRRSortArrows();
+
+    if (totalPages <= 1) {
+        paginationEl.innerHTML = '';
+    } else {
+        let pagHtml = `<button class="page-btn" onclick="changeRRPage(${page - 1})" ${page === 1 ? 'disabled' : ''}>‹ Prev</button>`;
+        pagHtml += `<span class="page-info">Page ${page} of ${totalPages} (${total} records)</span>`;
+        pagHtml += `<button class="page-btn" onclick="changeRRPage(${page + 1})" ${page === totalPages ? 'disabled' : ''}>Next ›</button>`;
+        paginationEl.innerHTML = pagHtml;
+    }
+}
+
+function updateRRCounters(allRR, filtered) {
+    const countersEl = document.getElementById('rrdrafts-counters');
+    if (!countersEl) return;
+    const total = allRR.length;
+    countersEl.innerHTML = `
+        <div class="counter-card" style="border-color:#ec4899;"><div class="counter-label">📩 RR Drafts</div><div class="counter-value">${total}</div></div>
+    `;
+}
+
+function sortRR(column) {
+    if (rrSortColumn === column) {
+        rrSortOrder = rrSortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+        rrSortColumn = column;
+        rrSortOrder = 'asc';
+    }
+    renderRecords('rrdrafts');
+}
+
+function updateRRSortArrows() {
+    document.querySelectorAll('#rrdrafts-list-container .rates-enhanced-table th[data-sort]').forEach(th => {
+        const col = th.dataset.sort;
+        const arrow = th.querySelector('.sort-arrow');
+        if (col === rrSortColumn) {
+            arrow.textContent = rrSortOrder === 'asc' ? ' ▲' : ' ▼';
+        } else {
+            arrow.textContent = '';
+        }
+    });
+}
+
+function changeRRPage(page) {
+    sessionStorage.setItem('rrPage', String(page));
+    renderRecords('rrdrafts');
+}
+
+// ==================== TOGGLE SIDE NAV ====================
+function toggleNav() {
+    const wrapper = document.querySelector('.app-wrapper');
+    wrapper.classList.toggle('nav-collapsed');
+    // Store preference in localStorage (optional)
+    const isCollapsed = wrapper.classList.contains('nav-collapsed');
+    localStorage.setItem('navCollapsed', isCollapsed ? 'true' : 'false');
+}
+
+// Restore nav state on load
+document.addEventListener('DOMContentLoaded', function() {
+    const navState = localStorage.getItem('navCollapsed');
+    if (navState === 'true') {
+        document.querySelector('.app-wrapper').classList.add('nav-collapsed');
+    }
+});
