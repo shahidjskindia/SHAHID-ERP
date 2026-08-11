@@ -15366,7 +15366,18 @@ document.addEventListener('DOMContentLoaded', function() {
  * Supports both personal OneDrive and business/SharePoint links
  */
 function getOneDriveDirectUrl(shareLink) {
-    // Try .ws trick as the simplest conversion
+    // --- Handle Dropbox links ---
+    if (shareLink.includes('dropbox.com')) {
+        // Remove any existing dl, raw, or st parameters
+        let cleanLink = shareLink.replace(/[?&](dl|raw|st)=[^&]*/g, '');
+        // If there's already a ? add &raw=1, else add ?raw=1
+        if (cleanLink.includes('?')) {
+            return cleanLink + '&raw=1';
+        } else {
+            return cleanLink + '?raw=1';
+        }
+    }
+    // --- Handle OneDrive links ---
     if (shareLink.includes('1drv.ms')) {
         return shareLink.replace('1drv.ms', '1drv.ws');
     }
