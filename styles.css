@@ -89,6 +89,7 @@ header h1 {
 .app-wrapper {
     display: flex;
     height: calc(100vh - var(--header-h));
+    transition: all 0.3s ease;
 }
 .tab-nav-vertical {
     position: relative;
@@ -100,6 +101,7 @@ header h1 {
     border-right: 3px solid var(--primary-light);
     scrollbar-width: thin;
     flex-shrink: 0;
+    transition: width 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
 }
 [data-theme="dark"] .tab-nav-vertical {
     background: linear-gradient(180deg, #0f172a, #020617);
@@ -177,6 +179,7 @@ header h1 {
     padding: 18px 24px;
     background: var(--bg);
     height: 100%;
+    transition: flex 0.3s ease;
 }
 .tab-panel {
     display: none;
@@ -453,26 +456,26 @@ header h1 {
 .charge-category-header {
     background: linear-gradient(90deg, var(--primary), var(--primary-light));
     color: white;
-    padding: 6px 12px;
-    border-radius: 5px;
-    font-size: 0.9rem;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 0.82rem;
     font-weight: 700;
     text-transform: uppercase;
-    margin: 8px 0 4px 0;
+    margin: 6px 0 3px 0;
     letter-spacing: 0.5px;
 }
 .charges-header {
     display: grid;
-    grid-template-columns: 130px 90px 70px 90px 70px 80px 80px 80px 70px 70px 35px;
-    gap: 5px;
-    padding: 6px 8px;
+    grid-template-columns: 260px 90px 70px 90px 70px 80px 80px 80px 70px 70px 35px;
+    gap: 4px;
+    padding: 4px 6px;
     background: #1e3a8a;
     color: white;
-    border-radius: 5px;
-    font-size: .85rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
     font-weight: 600;
     text-transform: uppercase;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 .charges-header .buy-col {
     background: #fa0000;
@@ -482,22 +485,23 @@ header h1 {
 .charges-grid {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 2px;
     max-height: 500px;
     overflow-y: auto;
 }
 .charge-row {
     display: grid;
-    grid-template-columns: 130px 90px 70px 90px 70px 80px 80px 80px 70px 70px 35px;
-    gap: 5px;
+    grid-template-columns: 260px 90px 70px 90px 70px 80px 80px 80px 70px 70px 35px;
+    gap: 4px;
     align-items: center;
     background: var(--card-bg);
-    padding: 5px 8px;
-    border-radius: 5px;
-    border: 5px solid var(--border);
-    font-size: 0.76rem;
+    padding: 4px 6px;
+    border-radius: 4px;
+    border: 3px solid var(--border);
+    font-size: 0.72rem;
     cursor: grab;
     transition: all 0.4s;
+    margin-bottom: 2px;
 }
 .charge-row.dragging {
     opacity: 0.4;
@@ -517,6 +521,9 @@ header h1 {
     display: flex;
     align-items: center;
     gap: 4px;
+    min-width: 240px;
+    max-width: 240px;
+    flex-shrink: 0;
 }
 .charge-name-wrap {
     display: flex;
@@ -533,16 +540,18 @@ header h1 {
     color: var(--text);
     min-width: 80px;
     flex-shrink: 0;
+    height: 22px;
 }
 .charge-row input,
 .charge-row select {
-    padding: 4px 5px;
+    padding: 3px 4px;
     border: 1px solid var(--border);
-    border-radius: 5px;
-    font-size: 0.74rem;
+    border-radius: 3px;
+    font-size: 0.7rem;
     width: 100%;
     background: var(--card-bg);
     color: var(--text);
+    height: 22px;
 }
 .charge-row .buy-input {
     background: #fef2f2;
@@ -578,9 +587,14 @@ header h1 {
     border: none;
     border-radius: 3px;
     cursor: pointer;
-    font-size: 0.7rem;
-    padding: 1px 1px;
+    font-size: 0.65rem;
+    padding: 1px 3px;
     font-weight: bold;
+    height: 20px;
+    width: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 .charge-row.freight-row {
     background: #fee2e2 !important;
@@ -1384,35 +1398,28 @@ header h1 {
     border-collapse: collapse;
     font-size: 0.78rem;
 }
-
-/* 🟢 ROW KA BACKGROUND (Light Blue) */
 .dsr-table tbody tr {
     background-color: #c8f7f5 !important; 
 }
-
-/* 🟢 HEADERS (Center & Bold) */
 .dsr-table th,
 .bl-table th {
     background: #1e3a8a;
     color: white;
     padding: 6px 8px;
-    text-align: center !important;    /* CHANGED: left se center */
-    font-weight: bold !important;     /* CHANGED: Bold headers */
+    text-align: center !important;
+    font-weight: bold !important;
     position: sticky;
     top: 0;
     z-index: 2;
 }
-
-/* 🟢 DATA CELLS (Center, Bold, & Middle Vertical) */
 .dsr-table td,
 .bl-table td {
     padding: 6px 8px;
     border-bottom: 1px solid var(--border);
-    text-align: center !important;      /* ADDED: Center align text */
-    font-weight: bold !important;       /* ADDED: Bold text */
-    vertical-align: middle !important;  /* ADDED: Vertically center */
+    text-align: center !important;
+    font-weight: bold !important;
+    vertical-align: middle !important;
 }
-
 .dsr-table tr:hover,
 .bl-table tr:hover {
     background: rgba(59, 130, 246, 0.05);
@@ -1842,7 +1849,7 @@ header h1 {
 }
 .dsr-charges-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr !important;   /* was 1fr 1fr 1fr */
+    grid-template-columns: 1fr 1fr 1fr 1fr !important;
     gap: 6px;
     padding: 4px 0;
 }
@@ -2491,8 +2498,12 @@ header h1 {
     }
     .charges-header,
     .charge-row {
-        grid-template-columns: 110px 70px 55px 70px 55px 65px 65px 65px 55px 55px 30px;
-        font-size: 0.62rem;
+        grid-template-columns: 180px 70px 50px 70px 50px 60px 60px 60px 50px 50px 30px;
+        font-size: 0.7rem;
+    }
+    .charge-name {
+        min-width: 160px;
+        max-width: 160px;
     }
     .master-controls {
         grid-template-columns: 1fr 1fr;
@@ -2561,11 +2572,19 @@ header h1 {
     .form-grid-3col {
         grid-template-columns: 1fr;
     }
-    .charges-header,
+    .charges-header {
+        display: none;
+    }
     .charge-row {
         grid-template-columns: 1fr 1fr;
         gap: 4px;
         font-size: 0.7rem;
+        padding: 6px;
+    }
+    .charge-name {
+        min-width: auto;
+        max-width: none;
+        flex: 1;
     }
     .totals-grid {
         grid-template-columns: 1fr 1fr;
@@ -3930,4 +3949,145 @@ grid-template-columns: 1fr;
 .text-muted {
     color: var(--text-light);
     font-weight: 400;
+}
+
+/* Enhanced Rates Table – Compact */
+.rates-table-wrapper {
+    overflow-x: auto;
+    margin-top: 10px;
+}
+.rates-enhanced-table {
+    table-layout: fixed;
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+    background: var(--card-bg);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+}
+.rates-enhanced-table thead {
+    background: #1e3a8a;
+    color: white;
+}
+.rates-enhanced-table th {
+    padding: 6px 10px;
+    text-align: left;
+    font-weight: 700;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+.rates-enhanced-table td {
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+    line-height: 1.4;
+    font-weight: bold;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.rates-enhanced-table tbody tr:hover {
+    background: rgba(59, 130, 246, 0.04);
+    cursor: pointer;
+}
+.rates-enhanced-table .service-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 12px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    background: #dbeafe;
+    color: #1e40af;
+}
+.rates-enhanced-table .status-badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 12px;
+    font-size: 0.65rem;
+    font-weight: 700;
+}
+.rates-enhanced-table .follow-up-pending { background: #fef3c7; color: #92400e; }
+.rates-enhanced-table .follow-up-sent { background: #dbeafe; color: #1e40af; }
+.rates-enhanced-table .follow-up-followup { background: #fed7aa; color: #9a3412; }
+.rates-enhanced-table .follow-up-won { background: #d1fae5; color: #065f46; }
+.rates-enhanced-table .follow-up-lost { background: #fee2e2; color: #991b1b; }
+
+.status-dropdown {
+    padding: 1px 6px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 0.65rem;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    color: var(--text);
+    cursor: pointer;
+    height: 24px;
+}
+.status-dropdown:hover {
+    border-color: var(--primary-light);
+}
+.status-dropdown.follow-up-pending { background: #fef3c7; color: #92400e; }
+.status-dropdown.follow-up-sent { background: #dbeafe; color: #1e40af; }
+.status-dropdown.follow-up-followup { background: #fed7aa; color: #9a3412; }
+.status-dropdown.follow-up-won { background: #d1fae5; color: #065f46; }
+.status-dropdown.follow-up-lost { background: #fee2e2; color: #991b1b; }
+
+.rates-action-bar {
+    background: var(--card-bg);
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    margin-bottom: 10px;
+}
+th[data-sort] {
+    cursor: pointer;
+    user-select: none;
+}
+th[data-sort]:hover {
+    background: rgba(255,255,255,0.1);
+}
+.sort-arrow {
+    display: inline-block;
+    margin-left: 4px;
+    font-size: 0.7rem;
+}
+.rates-enhanced-table th:first-child,
+.rates-enhanced-table td:first-child {
+    text-align: center;
+    width: 30px;
+}
+.validity-days {
+    color: #dc2626;
+    font-weight: bold;
+}
+.validity-days.expired {
+    color: #dc2626;
+    font-weight: bold;
+}
+
+.nav-toggle-btn {
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border: none;
+    font-size: 1.4rem;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    line-height: 1;
+    transition: background 0.2s;
+}
+.nav-toggle-btn:hover {
+    background: rgba(255,255,255,0.25);
+}
+.app-wrapper.nav-collapsed .tab-nav-vertical {
+    width: 0;
+    padding: 0;
+    margin: 0;
+    opacity: 0;
+    overflow: hidden;
+    border-right: none;
 }
