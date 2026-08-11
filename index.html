@@ -663,6 +663,8 @@
 				<div class="counters" id="rates-counters"></div>
 				<div class="filter-row">
 					<input type="text" id="rates-search-text" class="search-box" placeholder="🔍 Search by Quote, Customer, Route..." style="flex:2;margin:0;" oninput="debouncedSearch('rates')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+					<input type="text" id="rates-search-qn" class="search-box" placeholder="🔍 Quote No." style="flex:1;margin:0;" oninput="debouncedSearch('rates')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+					<input type="date" id="rates-search-date" class="search-box" style="flex:1;margin:0;" onchange="renderRecords('rates')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" />
 					<select id="rates-status-filter" onchange="renderRecords('rates')" style="flex:1;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
 						<option value="">All Status</option>
 						<option value="PENDING">Pending</option>
@@ -683,7 +685,7 @@
 					<button class="btn btn-clear" type="button" onclick="clearRatesFilters()" style="height:36px;">Reset</button>
 				</div>
 
-				<!-- Action buttons above table -->
+				<!-- Action buttons -->
 				<div class="rates-action-bar" style="display:flex; gap:6px; flex-wrap:wrap; margin:8px 0; align-items:center;">
 					<span style="font-weight:600; font-size:0.8rem; color:var(--text-light); margin-right:8px;">Actions:</span>
 					<button class="btn btn-sm btn-preview" onclick="ratesBulkAction('preview')">👁 Preview</button>
@@ -695,8 +697,9 @@
 					<span style="margin-left:auto; font-size:0.75rem; color:var(--text-light);" id="rates-selected-count">0 selected</span>
 				</div>
 
+				<!-- Table container -->
 				<div id="rates-list-container">
-					<!-- Enhanced list will be inserted here -->
+					<!-- Enhanced table will be inserted here -->
 				</div>
 				<div id="rates-pagination" class="pagination"></div>
 			</div>
@@ -1959,32 +1962,50 @@
 					</div>
 				</div>
 				
-				<!-- JSON URL Sync -->
+				<!-- JSON Auto-Sync -->
 				<div class="db-section">
 					<div class="db-header">🌐 JSON Auto-Sync from URL</div>
 					<div class="db-body">
+						<!-- Row 1: JSON URL -->
 						<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:6px;">
 							<label style="font-weight:600; font-size:0.8rem; min-width:120px;">JSON URL</label>
 							<input type="url" id="json-url-input" style="flex:2; min-width:250px; padding:6px 10px; border:1px solid var(--border); border-radius:4px; background:var(--card-bg); color:var(--text);" placeholder="GitHub Gist Raw URL or Google Drive Link" />
+							<button class="btn btn-sm btn-quoted" onclick="saveJsonSyncSettings()" title="Save URL & API Key">💾 Save</button>
 						</div>
+						
+						<!-- Row 2: Google API Key -->
 						<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:6px;">
 							<label style="font-weight:600; font-size:0.8rem; min-width:120px;">Google API Key</label>
 							<input type="text" id="google-api-key-input" style="flex:1; min-width:200px; padding:6px 10px; border:1px solid var(--border); border-radius:4px; background:var(--card-bg); color:var(--text);" placeholder="AIzaSy... (Only for Google Drive)" />
-							<span style="font-size:0.65rem; color:var(--text-light);">(Get from Google Cloud Console)</span>
+							<span style="font-size:0.65rem; color:var(--text-light);">(From Google Cloud Console)</span>
 						</div>
+						
+						<!-- Row 3: Sync Interval -->
+						<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:6px;">
+							<label style="font-weight:600; font-size:0.8rem; min-width:120px;">Sync Interval (min)</label>
+							<input type="number" id="sync-interval-input" style="width:80px; padding:6px 10px; border:1px solid var(--border); border-radius:4px; background:var(--card-bg); color:var(--text);" value="5" min="1" max="1440" />
+							<span style="font-size:0.65rem; color:var(--text-light);">(Default: 5 min, max: 24 hrs)</span>
+						</div>
+						
+						<!-- Row 4: Action Buttons -->
 						<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
 							<button class="btn btn-sm btn-info" onclick="fetchAndMergeJSON()">📥 Fetch & Merge</button>
 							<button class="btn btn-sm btn-success" onclick="toggleAutoSync()" id="auto-sync-toggle">⏰ Auto-Sync Off</button>
-							<span id="auto-sync-status" style="font-size:0.75rem; color:var(--text-light);"></span>
 							<button class="btn btn-sm btn-preview" onclick="testJsonUrl()">🔍 Test URL</button>
+							<button class="btn btn-sm btn-warning" onclick="syncNow()" id="sync-now-btn" style="display:none;">🔄 Sync Now</button>
+							<span id="auto-sync-status" style="font-size:0.75rem; color:var(--text-light);"></span>
 						</div>
+						
+						<!-- Status Message -->
 						<div id="sync-message" style="font-size:0.75rem; color:var(--text-light); margin-top:4px;"></div>
+						
+						<!-- Info -->
 						<p style="font-size:0.7rem; color:var(--text-light); margin-top:4px;">
-							💡 <strong>Google Drive:</strong> Paste share link (e.g., <code>https://drive.google.com/file/d/xxx/view</code>) + your API Key. <strong>GitHub Gist:</strong> Paste raw URL directly.
+							💡 <strong>Google Drive:</strong> Paste share link (e.g., <code>https://drive.google.com/file/d/xxx/view</code>) + your API Key. <br>
+							<strong>GitHub Gist:</strong> Paste raw URL directly. Click <strong>"Save"</strong> to store settings.
 						</p>
 					</div>
-				</div>				
-				
+				</div>
                 <!-- Exchange Rates -->
                 <div class="db-section">
                     <div class="db-header">💱 Exchange Rates (Base: INR = 1)</div>
