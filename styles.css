@@ -4091,3 +4091,13 @@ th[data-sort]:hover {
     overflow: hidden;
     border-right: none;
 }
+
+/* Rate Sheet Action Bar */
+.ratesheet-action-bar {
+    background: var(--card-bg);
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    margin-bottom: 10px;
+}
