@@ -1,4 +1,3 @@
-
 // ==================== DATA DEFINITIONS ====================
 const AIR_MIN_THRESHOLDS = {
     'CARTAGE': 450,
