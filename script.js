@@ -15384,9 +15384,58 @@ function getOneDriveDirectUrl(shareLink) {
     return shareLink;
 }
 
-// ===== JSON URL SYNC =====
+
+// ==================== JSON URL SYNC (Google Drive + GitHub) ====================
+
 let autoSyncInterval = null;
 let autoSyncEnabled = false;
+
+/**
+ * Google Drive share link se File ID extract karein
+ */
+function extractGoogleDriveFileId(url) {
+    // Format: https://drive.google.com/file/d/FILE_ID/view
+    const match = url.match(/\/d\/([^/]+)/);
+    if (match) return match[1];
+    
+    // Format: https://drive.google.com/open?id=FILE_ID
+    const idMatch = url.match(/[?&]id=([^&]+)/);
+    if (idMatch) return idMatch[1];
+    
+    return null;
+}
+
+/**
+ * URL ko direct fetchable URL mein convert karein
+ */
+function getDirectFetchUrl(url, apiKey) {
+    // ---------- Google Drive ----------
+    if (url.includes('drive.google.com') || url.includes('drive.usercontent.google.com')) {
+        const fileId = extractGoogleDriveFileId(url);
+        if (!fileId) return null;
+        if (!apiKey) return null;
+        return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${apiKey}`;
+    }
+    
+    // ---------- Dropbox ----------
+    if (url.includes('dropbox.com')) {
+        // dl=0 → raw=1
+        return url.replace(/[?&]dl=0/, '&raw=1').replace(/[?&]dl=1/, '&raw=1');
+    }
+    
+    // ---------- OneDrive ----------
+    if (url.includes('1drv.ms')) {
+        return url.replace('1drv.ms', '1drv.ws');
+    }
+    
+    // ---------- GitHub Gist (already raw) ----------
+    if (url.includes('gist.githubusercontent.com')) {
+        return url;
+    }
+    
+    // ---------- Default: as is ----------
+    return url;
+}
 
 function fetchAndMergeJSON() {
     const urlInput = document.getElementById('json-url-input');
@@ -15396,65 +15445,99 @@ function fetchAndMergeJSON() {
         return;
     }
 
+    const apiKeyInput = document.getElementById('google-api-key-input');
+    let apiKey = apiKeyInput ? apiKeyInput.value.trim() : '';
+
     const msgEl = document.getElementById('sync-message');
     msgEl.textContent = '⏳ Fetching JSON...';
     msgEl.style.color = 'var(--text-light)';
 
-    // ----- Convert OneDrive link to potential direct URLs -----
-    let candidates = [];
-    if (url.includes('1drv.ms') || url.includes('onedrive.live.com')) {
-        // 1. Replace with .ws
-        candidates.push(url.replace('1drv.ms', '1drv.ws'));
-        // 2. API method (try with download=1)
-        candidates.push(url + '&download=1');
-        // 3. CORS proxy
-        candidates.push('https://api.allorigins.win/raw?url=' + encodeURIComponent(url));
-        // 4. Alternate proxy
-        candidates.push('https://corsproxy.io/?' + encodeURIComponent(url));
-    } else {
-        // For non-OneDrive URLs, just use as is
-        candidates.push(url);
+    // Convert to direct fetch URL
+    let fetchUrl = getDirectFetchUrl(url, apiKey);
+    if (!fetchUrl) {
+        msgEl.textContent = '❌ Could not extract File ID from Google Drive link.';
+        msgEl.style.color = 'var(--danger)';
+        return;
     }
 
-    // Try each candidate until one works
-    let currentIndex = 0;
+    console.log('🔗 Fetching from:', fetchUrl);
 
-    function tryNextCandidate() {
-        if (currentIndex >= candidates.length) {
-            msgEl.textContent = `❌ All fetch methods failed. Please use a GitHub raw URL or Dropbox direct link.`;
-            msgEl.style.color = 'var(--danger)';
-            return;
-        }
-
-        const fetchUrl = candidates[currentIndex];
-        console.log(`🔍 Trying candidate ${currentIndex + 1}/${candidates.length}:`, fetchUrl);
-
-        fetch(fetchUrl, { cache: 'no-cache' })
-            .then(response => {
-                if (!response.ok) throw new Error('HTTP ' + response.status);
-                return response.json();
-            })
-            .then(data => {
-                const importedDb = data.data || data;
-                if (!importedDb || typeof importedDb !== 'object') {
-                    throw new Error('Invalid JSON format.');
+    fetch(fetchUrl, { cache: 'no-cache' })
+        .then(response => {
+            if (!response.ok) {
+                if (response.status === 403) {
+                    throw new Error('API Key invalid or Drive API not enabled. Check your API key.');
                 }
-                const summary = mergeDatabase(importedDb);
-                saveDB();
-                db.jsonSyncUrl = url;
-                saveDB();
-                msgEl.textContent = `✅ Merge successful! ${summary} (via ${fetchUrl})`;
-                msgEl.style.color = 'var(--success)';
-                refreshCurrentTab();
-            })
-            .catch(err => {
-                console.warn(`❌ Candidate ${currentIndex + 1} failed:`, err.message);
-                currentIndex++;
-                tryNextCandidate();
-            });
-    }
+                if (response.status === 404) {
+                    throw new Error('File not found. Check if File ID is correct and file is public.');
+                }
+                throw new Error('HTTP ' + response.status);
+            }
+            return response.json();
+        })
+        .then(data => {
+            const importedDb = data.data || data;
+            if (!importedDb || typeof importedDb !== 'object') {
+                throw new Error('Invalid JSON format.');
+            }
+            const summary = mergeDatabase(importedDb);
+            saveDB();
+            // Save URL and API key for persistence
+            db.jsonSyncUrl = url;
+            db.googleApiKey = apiKey;
+            saveDB();
+            msgEl.textContent = `✅ Merge successful! ${summary}`;
+            msgEl.style.color = 'var(--success)';
+            refreshCurrentTab();
+        })
+        .catch(err => {
+            msgEl.textContent = `❌ Error: ${err.message}`;
+            msgEl.style.color = 'var(--danger)';
+            console.error('Fetch error:', err);
+        });
+}
 
-    tryNextCandidate();
+function toggleAutoSync() {
+    const url = document.getElementById('json-url-input').value.trim();
+    if (!url) {
+        alert('Please enter a JSON URL first.');
+        return;
+    }
+    const toggleBtn = document.getElementById('auto-sync-toggle');
+    if (autoSyncEnabled) {
+        clearInterval(autoSyncInterval);
+        autoSyncEnabled = false;
+        toggleBtn.textContent = '⏰ Auto-Sync Off';
+        document.getElementById('auto-sync-status').textContent = 'Stopped';
+        return;
+    }
+    autoSyncInterval = setInterval(fetchAndMergeJSON, 5 * 60 * 1000);
+    autoSyncEnabled = true;
+    toggleBtn.textContent = '⏰ Auto-Sync On';
+    document.getElementById('auto-sync-status').textContent = 'Running (every 5 min)';
+    fetchAndMergeJSON();
+}
+
+function loadJsonSyncUrl() {
+    const savedUrl = db.jsonSyncUrl || '';
+    const savedKey = db.googleApiKey || '';
+    const urlInput = document.getElementById('json-url-input');
+    const keyInput = document.getElementById('google-api-key-input');
+    if (urlInput) urlInput.value = savedUrl;
+    if (keyInput) keyInput.value = savedKey;
+}
+
+function refreshCurrentTab() {
+    const activePanel = document.querySelector('.tab-panel.active');
+    if (!activePanel) return;
+    const tabId = activePanel.id;
+    if (tabId === 'rates') renderRecords('rates');
+    else if (tabId === 'drafts') renderRecords('drafts');
+    else if (tabId === 'rrdrafts') renderRecords('rrdrafts');
+    else if (tabId === 'ratesheet') { renderRateSheet(); updateExpiryDashboard(); }
+    else if (tabId === 'dsr') renderShipments();
+    else if (tabId === 'bldraft') renderBLDrafts();
+    else if (tabId === 'database') renderDatabase();
 }
 
 function toggleAutoSync() {
@@ -15498,4 +15581,40 @@ function refreshCurrentTab() {
     else if (tabId === 'dsr') renderShipments();
     else if (tabId === 'bldraft') renderBLDrafts();
     else if (tabId === 'database') renderDatabase();
+}
+
+
+function testJsonUrl() {
+    const url = document.getElementById('json-url-input').value.trim();
+    const apiKey = document.getElementById('google-api-key-input').value.trim();
+    if (!url) {
+        alert('Please enter a URL.');
+        return;
+    }
+    const msgEl = document.getElementById('sync-message');
+    msgEl.textContent = '⏳ Testing URL...';
+    msgEl.style.color = 'var(--text-light)';
+
+    const fetchUrl = getDirectFetchUrl(url, apiKey);
+    if (!fetchUrl) {
+        msgEl.textContent = '❌ Could not extract File ID.';
+        msgEl.style.color = 'var(--danger)';
+        return;
+    }
+
+    fetch(fetchUrl)
+        .then(res => {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+        })
+        .then(data => {
+            msgEl.textContent = `✅ URL works! Data has ${Object.keys(data).length} top-level keys.`;
+            msgEl.style.color = 'var(--success)';
+            console.log('✅ Test successful:', data);
+        })
+        .catch(err => {
+            msgEl.textContent = `❌ Test failed: ${err.message}`;
+            msgEl.style.color = 'var(--danger)';
+            console.error('❌ Test failed:', err);
+        });
 }
