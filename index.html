@@ -1888,7 +1888,23 @@
                         <p style="font-size:0.78rem;color:var(--text-light);margin-top:8px;">Current Company: <strong id="current-company-name">Not Set</strong></p>
                     </div>
                 </div>
-				
+				<!-- JSON URL Sync -->
+				<div class="db-section">
+					<div class="db-header">🌐 JSON Auto-Sync from URL</div>
+					<div class="db-body">
+						<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+							<label style="font-weight:600; font-size:0.8rem; min-width:120px;">JSON URL (Auto‑Sync)</label>
+							<input type="url" id="json-url-input" style="flex:1; min-width:250px; padding:6px 10px; border:1px solid var(--border); border-radius:4px; background:var(--card-bg); color:var(--text);" placeholder="Paste OneDrive share link or direct JSON URL" />
+							<button class="btn btn-sm btn-info" onclick="fetchAndMergeJSON()">📥 Fetch & Merge</button>
+							<button class="btn btn-sm btn-success" onclick="toggleAutoSync()" id="auto-sync-toggle">⏰ Auto-Sync Off</button>
+							<span id="auto-sync-status" style="font-size:0.75rem; color:var(--text-light);"></span>
+						</div>
+						<div id="sync-message" style="font-size:0.75rem; color:var(--text-light); margin-top:4px;"></div>
+						<p style="font-size:0.7rem; color:var(--text-light); margin-top:4px;">
+							💡 <strong>OneDrive links are supported!</strong> Just paste your share link (e.g., <code>https://1drv.ms/u/...</code>) and the system will auto-convert it to a direct download URL.
+						</p>
+					</div>
+				</div>
 						<!-- Default CC Emails per Mode -->
 				<div class="db-section">
 					<div class="db-header">📧 Default CC Emails</div>
