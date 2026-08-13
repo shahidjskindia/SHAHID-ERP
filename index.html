@@ -75,6 +75,10 @@
                 <div class="nav-category-items" id="cat-dsrCat">
                     <button class="tab-btn-vertical" data-tab="dsr" type="button">🚢 Shipment List</button>
                     <button class="tab-btn-vertical" data-tab="bldraft" type="button">📄 BL Draft</button>
+					<button class="tab-btn-vertical" data-tab="invoice" type="button">🧾 Invoice</button>
+					<button class="tab-btn-vertical" data-tab="dsr-exceptions" type="button">⚠️ Exceptions</button>
+					<button class="tab-btn-vertical" data-tab="cutoff-calendar" type="button">⏱️ Cut-off Calendar</button>
+					<button class="tab-btn-vertical" data-tab="container-tracker" type="button">📦 Container Tracker</button>
                 </div>
             </div>
             <!-- REPORTS -->
@@ -85,6 +89,12 @@
                 <div class="nav-category-items" id="cat-reports">
 					<button class="tab-btn-vertical" data-tab="planner" type="button">📅 Planner</button>
                     <button class="tab-btn-vertical" data-tab="dashboard" type="button">📊 Dashboard</button>
+					<button class="tab-btn-vertical" data-tab="salesreport" type="button">💰 Sales Report</button>
+					<button class="tab-btn-vertical" data-tab="opsreport" type="button">🚚 Operations Report</button>
+					<button class="tab-btn-vertical" data-tab="profitreport" type="button">💵 Profitability</button>
+					<button class="tab-btn-vertical" data-tab="customer360" type="button">👤 Customer 360</button>
+					<button class="tab-btn-vertical" data-tab="carrierreport" type="button">🚢 Carrier Performance</button>
+					<button class="tab-btn-vertical" data-tab="receivables" type="button">💳 Receivables</button>
                     <button class="tab-btn-vertical" data-tab="measurement" type="button">📏 Measurement</button>
                 </div>
             </div>
@@ -1876,6 +1886,171 @@
 				</div>
 			</div>
 			
+			<!-- ===== INVOICE ===== -->
+			<div class="tab-panel" id="invoice">
+				<div class="tab-heading">
+					<div>
+						<h2>🧾 Invoice</h2>
+						<div class="module-subtitle">Generate invoice directly from Quote Ref / DSR</div>
+					</div>
+					<button class="btn btn-success" onclick="openInvoiceFromQuote()">＋ New Invoice</button>
+				</div>
+
+				<!-- KPI Cards -->
+				<div class="dsr-kpi-grid">
+					<div class="dsr-kpi"><span>🧾 Total</span><strong id="invoice-kpi-total">0</strong></div>
+					<div class="dsr-kpi transit"><span>📤 Issued</span><strong id="invoice-kpi-issued">0</strong></div>
+					<div class="dsr-kpi done"><span>✅ Paid</span><strong id="invoice-kpi-paid">0</strong></div>
+					<div class="dsr-kpi docs"><span>💰 Outstanding</span><strong id="invoice-kpi-outstanding">₹ 0</strong></div>
+				</div>
+
+				<!-- Toolbar -->
+				<div class="v11-management-toolbar">
+					<button class="btn btn-sm btn-success" onclick="openInvoiceFromQuote()">＋ Generate from Quote</button>
+					<button class="btn btn-sm btn-preview" onclick="renderInvoiceTab()">↻ Refresh</button>
+					<span id="v11-invoice-selected" class="v11-selected" style="margin-left:auto;">0 selected</span>
+				</div>
+
+				<!-- Table – exactly like Rate Quotes -->
+				<div class="v9-table-shell">
+					<table class="v9-management-table v11-management-table">
+						<thead>
+							<tr>
+								<th style="width:30px;"><input type="checkbox" id="invoice-select-all" onchange="toggleAllInvoices(this.checked)"></th>
+								<th>INVOICE NO.</th>
+								<th>QUOTE REF</th>
+								<th>CUSTOMER</th>
+								<th>MODE</th>
+								<th>POL</th>
+								<th>POD</th>
+								<th>AMOUNT</th>
+								<th>DATE</th>
+								<th>STATUS</th>
+								<th>ACTIONS</th>
+							</tr>
+						</thead>
+						<tbody id="invoice-list">
+							<tr><td colspan="11" class="v9-empty">No invoices yet. Click "+ New Invoice" to generate one.</td></tr>
+						</tbody>
+					</table>
+				</div>
+			</div>
+			
+			<!-- Invoice Generator Modal -->
+			<div class="modal-overlay" id="v91InvoiceModal">
+				<div class="v91-invoice-modal">
+					<div class="modal-header">
+						<div><h3>🧾 Generate Invoice</h3><small>Quote Ref → Invoice</small></div>
+						<button class="btn btn-clear" onclick="document.getElementById('v91InvoiceModal').classList.remove('show')">×</button>
+					</div>
+					<div class="v91-invoice-body" id="v91InvoiceBody"></div>
+				</div>
+			</div>
+
+			<!-- Invoice Preview Modal -->
+			<div class="modal-overlay" id="v11InvoicePreview">
+				<div class="modal-content" style="max-width:800px;">
+					<div class="modal-header">
+						<span style="font-weight:600;" id="v11-inv-title">Invoice Preview</span>
+						<span class="close-modal" onclick="document.getElementById('v11InvoicePreview').classList.remove('show')">&times;</span>
+					</div>
+					<div class="modal-body" id="v11-inv-preview-body"></div>
+				</div>
+			</div>
+
+			
+			
+			
+			<!-- ===== DSR EXCEPTIONS ===== -->
+			<div class="tab-panel" id="dsr-exceptions">
+				<div class="tab-heading"><div><h2>⚠️ Shipment Exception Center</h2><div class="module-subtitle">Operational exceptions, risk scoring and action ownership</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderDSRExceptions()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportDSRExceptionsExcel()">📊 Excel</button></div></div>
+				<div class="report-kpi-grid" id="exception-kpis"></div>
+				<div class="report-filter-bar"><input id="exception-search" class="search-box" placeholder="Search Job / Customer / Exception" oninput="renderDSRExceptions()"><select id="exception-severity" onchange="renderDSRExceptions()"><option value="">All Severity</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option></select><select id="exception-owner" onchange="renderDSRExceptions()"><option value="">All Owners</option></select><button class="btn btn-clear btn-sm" onclick="clearExceptionFilters()">Clear</button></div>
+				<div class="form-section"><h3>🚨 Open Exceptions</h3><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Risk</th><th>Job</th><th>Customer</th><th>Exception</th><th>Severity</th><th>Due</th><th>Owner</th><th>Action</th></tr></thead><tbody id="exception-detail"></tbody></table></div></div>
+			</div>
+			
+			<!-- ===== CUT-OFF CALENDAR ===== -->
+			<div class="tab-panel" id="cutoff-calendar">
+				<div class="tab-heading"><div><h2>⏱️ Cut-off Calendar</h2><div class="module-subtitle">SI / VGM / CY / Gate cut-off control</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderCutoffCalendar()">↻ Refresh</button><button class="btn btn-preview btn-sm" onclick="printCutoffCalendar()">🖨 Print</button></div></div>
+				<div class="report-filter-bar"><input type="date" id="cutoff-from" onchange="renderCutoffCalendar()"><input type="date" id="cutoff-to" onchange="renderCutoffCalendar()"><select id="cutoff-type" onchange="renderCutoffCalendar()"><option value="">All Cut-offs</option><option value="SI">SI</option><option value="VGM">VGM</option><option value="CY">CY</option><option value="GATE">GATE</option></select><button class="btn btn-clear btn-sm" onclick="clearCutoffFilters()">Clear</button></div>
+				<div class="report-kpi-grid" id="cutoff-kpis"></div><div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Due</th><th>Type</th><th>Job</th><th>Customer</th><th>Vessel / Flight</th><th>Route</th><th>Status</th><th>Owner</th></tr></thead><tbody id="cutoff-detail"></tbody></table></div></div>
+			</div>
+			
+			<!-- ===== CONTAINER TRACKER ===== -->
+			<div class="tab-panel" id="container-tracker">
+				<div class="tab-heading"><div><h2>📦 Container Tracker</h2><div class="module-subtitle">Container lifecycle and milestone control</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderContainerTracker()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportContainerTrackerExcel()">📊 Excel</button></div></div>
+				<div class="report-filter-bar"><input id="container-search" class="search-box" placeholder="Container / Job / Seal / Customer" oninput="renderContainerTracker()"><select id="container-status" onchange="renderContainerTracker()"><option value="">All Lifecycle Status</option><option>RELEASED</option><option>PICKED UP</option><option>STUFFED</option><option>GATED IN</option><option>LOADED</option><option>DEPARTED</option><option>ARRIVED</option><option>DELIVERED</option><option>EMPTY RETURNED</option></select><button class="btn btn-clear btn-sm" onclick="clearContainerFilters()">Clear</button></div>
+				<div class="report-kpi-grid" id="container-kpis"></div><div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Container</th><th>Job</th><th>Customer</th><th>Type</th><th>Seal</th><th>VGM</th><th>Current Status</th><th>ETD</th><th>ETA</th><th>Action</th></tr></thead><tbody id="container-detail"></tbody></table></div></div>
+			</div>
+			
+			<!-- ===== SALES REPORT ===== -->
+			<div class="tab-panel" id="salesreport">
+				<div class="tab-heading">
+					<div><h2>💰 Sales Report</h2><div class="module-subtitle">Quotation performance, conversion, revenue and margin</div></div>
+					<div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderSalesReport()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportSalesReportExcel()">📊 Excel</button></div>
+				</div>
+				<div class="report-filter-bar">
+					<input type="date" id="sales-report-from" onchange="renderSalesReport()"><input type="date" id="sales-report-to" onchange="renderSalesReport()">
+					<select id="sales-report-mode" onchange="renderSalesReport()"><option value="">All Modes</option><option value="sea">SEA</option><option value="air">AIR</option><option value="lcl">LCL</option></select>
+					<select id="sales-report-status" onchange="renderSalesReport()"><option value="">All Follow-up</option><option value="WON">WON</option><option value="LOST">LOST</option><option value="PENDING">PENDING</option></select><select id="sales-report-shipper" onchange="renderSalesReport()"><option value="">All Shippers</option></select>
+					<button class="btn btn-clear btn-sm" onclick="clearSalesReportFilters()">Clear</button>
+				</div>
+				<div class="report-kpi-grid">
+					<div class="report-kpi"><span>Total Quotes</span><strong id="sales-r-total">0</strong></div><div class="report-kpi"><span>Won</span><strong id="sales-r-won">0</strong></div><div class="report-kpi"><span>Conversion</span><strong id="sales-r-conv">0%</strong></div><div class="report-kpi"><span>Revenue</span><strong id="sales-r-revenue">₹ 0</strong></div><div class="report-kpi"><span>Margin</span><strong id="sales-r-margin">₹ 0</strong></div>
+				</div>
+				<div class="report-grid-2"><div class="form-section"><h3>🏆 Client Performance</h3><div id="sales-client-report"></div></div><div class="form-section"><h3>🛣️ Route Performance</h3><div id="sales-route-report"></div></div></div>
+				<div class="form-section"><h3>📋 Quote Performance Detail</h3><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Quote</th><th>Mode</th><th>Client</th><th>POL</th><th>POD</th><th>Status</th><th>Sell</th><th>Margin</th><th>Validity</th></tr></thead><tbody id="sales-detail-report"></tbody></table></div></div>
+			</div>
+			
+			<!-- ===== OPERATIONS REPORT ===== -->
+			<div class="tab-panel" id="opsreport">
+				<div class="tab-heading">
+					<div><h2>🚚 Operations Report</h2><div class="module-subtitle">Shipment milestones, document control and delivery performance</div></div>
+					<div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderOperationsReport()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportOperationsReportExcel()">📊 Excel</button></div>
+				</div>
+				<div class="report-filter-bar">
+					<input type="date" id="ops-report-from" onchange="renderOperationsReport()"><input type="date" id="ops-report-to" onchange="renderOperationsReport()">
+					<select id="ops-report-mode" onchange="renderOperationsReport()"><option value="">All Modes</option><option value="SEA">SEA</option><option value="AIR">AIR</option></select>
+					<select id="ops-report-cargo" onchange="renderOperationsReport()"><option value="">All Cargo Status</option></select>
+					<button class="btn btn-clear btn-sm" onclick="clearOperationsReportFilters()">Clear</button>
+				</div>
+				<div class="report-kpi-grid">
+					<div class="report-kpi"><span>Total Shipments</span><strong id="ops-r-total">0</strong></div><div class="report-kpi"><span>In Transit</span><strong id="ops-r-transit">0</strong></div><div class="report-kpi"><span>Docs Pending</span><strong id="ops-r-docs">0</strong></div><div class="report-kpi"><span>Delivered</span><strong id="ops-r-delivered">0</strong></div><div class="report-kpi"><span>On-Time ETA</span><strong id="ops-r-ontime">-</strong></div>
+				</div>
+				<div class="report-grid-2"><div class="form-section"><h3>📦 Cargo Status</h3><div id="ops-cargo-report"></div></div><div class="form-section"><h3>📄 Documentation Status</h3><div id="ops-docs-report"></div></div></div>
+				<div class="form-section"><h3>🧭 Shipment Detail</h3><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Job</th><th>Mode</th><th>Shipper</th><th>Route</th><th>Liner</th><th>ETD</th><th>ETA</th><th>Cargo</th><th>Docs</th></tr></thead><tbody id="ops-detail-report"></tbody></table></div></div>
+			</div>
+			
+			
+			<!-- ===== PROFITABILITY ===== -->
+			<div class="tab-panel" id="profitreport">
+				<div class="tab-heading"><div><h2>💵 Profitability Intelligence</h2><div class="module-subtitle">Estimated vs actual shipment profitability</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderProfitabilityReport()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportProfitabilityExcel()">📊 Excel</button></div></div>
+				<div class="report-filter-bar"><input type="date" id="profit-from" onchange="renderProfitabilityReport()"><input type="date" id="profit-to" onchange="renderProfitabilityReport()"><select id="profit-mode" onchange="renderProfitabilityReport()"><option value="">All Modes</option><option>SEA</option><option>AIR</option><option>LCL</option></select><input id="profit-search" class="search-box" placeholder="Customer / Job / Route" oninput="renderProfitabilityReport()"><button class="btn btn-clear btn-sm" onclick="clearProfitFilters()">Clear</button></div>
+				<div class="report-kpi-grid" id="profit-kpis"></div><div class="report-grid-2"><div class="form-section"><h3>👤 Customer Profitability</h3><div id="profit-customer-report"></div></div><div class="form-section"><h3>🛣️ Route Profitability</h3><div id="profit-route-report"></div></div></div><div class="form-section"><h3>📋 Shipment Profit Detail</h3><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Job</th><th>Customer</th><th>Mode</th><th>Route</th><th>Estimated Sell</th><th>Estimated Cost</th><th>Actual Sell</th><th>Actual Cost</th><th>Profit</th><th>Margin %</th><th>Variance</th></tr></thead><tbody id="profit-detail"></tbody></table></div></div>
+			</div>
+			
+			<!-- ===== CUSTOMER 360 ===== -->
+			<div class="tab-panel" id="customer360">
+				<div class="tab-heading"><div><h2>👤 Customer 360</h2><div class="module-subtitle">Quotes + shipments + revenue + profitability + activity</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderCustomer360()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportCustomer360Excel()">📊 Excel</button></div></div>
+				<div class="report-filter-bar"><input id="customer360-search" class="search-box" placeholder="Search customer" oninput="renderCustomer360()"><select id="customer360-mode" onchange="renderCustomer360()"><option value="">All Modes</option><option>SEA</option><option>AIR</option><option>LCL</option></select><button class="btn btn-clear btn-sm" onclick="clearCustomer360()">Clear</button></div>
+				<div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Customer</th><th>Quotes</th><th>Won</th><th>Shipments</th><th>Revenue</th><th>Profit</th><th>Conversion</th><th>Last Activity</th><th>Score</th><th>Open</th></tr></thead><tbody id="customer360-detail"></tbody></table></div></div><div id="customer360-drawer" class="feature-drawer"></div>
+			</div>
+			
+			<!-- ===== CARRIER PERFORMANCE ===== -->
+			<div class="tab-panel" id="carrierreport">
+				<div class="tab-heading"><div><h2>🚢 Carrier Performance</h2><div class="module-subtitle">Carrier volume, route usage, reliability and profitability</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderCarrierPerformance()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportCarrierPerformanceExcel()">📊 Excel</button></div></div>
+				<div class="report-filter-bar"><input type="date" id="carrier-from" onchange="renderCarrierPerformance()"><input type="date" id="carrier-to" onchange="renderCarrierPerformance()"><input id="carrier-search" class="search-box" placeholder="Search carrier / route" oninput="renderCarrierPerformance()"><button class="btn btn-clear btn-sm" onclick="clearCarrierFilters()">Clear</button></div>
+				<div class="report-kpi-grid" id="carrier-kpis"></div><div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Carrier</th><th>Shipments</th><th>Containers</th><th>Routes</th><th>Delivered</th><th>In Transit</th><th>Avg Delay</th><th>Profit</th><th>Performance</th></tr></thead><tbody id="carrier-detail"></tbody></table></div></div>
+			</div>
+			
+			<!-- ===== RECEIVABLES ===== -->
+			<div class="tab-panel" id="receivables">
+				<div class="tab-heading"><div><h2>💳 Receivables & Credit Control</h2><div class="module-subtitle">Outstanding, ageing and customer credit exposure</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderReceivables()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportReceivablesExcel()">📊 Excel</button></div></div>
+				<div class="report-filter-bar"><input id="receivable-search" class="search-box" placeholder="Customer / Invoice" oninput="renderReceivables()"><select id="receivable-age" onchange="renderReceivables()"><option value="">All Ageing</option><option value="0-30">0–30</option><option value="31-60">31–60</option><option value="61-90">61–90</option><option value="90+">90+</option></select><button class="btn btn-clear btn-sm" onclick="clearReceivableFilters()">Clear</button></div>
+				<div class="report-kpi-grid" id="receivable-kpis"></div><div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Customer</th><th>Invoice</th><th>Date</th><th>Due Date</th><th>Amount</th><th>Received</th><th>Outstanding</th><th>Age</th><th>Status</th></tr></thead><tbody id="receivable-detail"></tbody></table></div></div>
+			</div>
+			
+			
             <!-- ===== DATABASE ===== -->
             <div class="tab-panel" id="database">
                 <div class="tab-heading"><h2>🗄️ Database Management</h2></div>
@@ -2455,6 +2630,28 @@
             <div class="modal-body" id="renewBody"></div>
         </div>
     </div>
+
+	<div class="modal-overlay" id="v11InvoicePreview">
+		<div class="v11-invoice-preview-modal">
+			<div class="modal-header"><div><h3>🧾 Invoice Preview</h3><small id="v11-inv-title"></small></div><button class="btn btn-clear" onclick="document.getElementById('v11InvoicePreview').classList.remove('show')">×</button></div>
+			<div id="v11-inv-preview-body"></div>
+		</div>
+	</div>
+	
+	<div class="modal-overlay" id="v91WonModal">
+		<div class="v9-won-modal">
+			<div class="modal-header"><div><h3>🏆 Quote Won — Create DSR</h3><small>Customer, route, carrier and references will be auto-fetched.</small></div><button class="btn btn-clear" onclick="document.getElementById('v91WonModal').classList.remove('show')">×</button></div>
+			<div id="v91WonBody" class="v91-invoice-body"></div>
+			<div class="v91-invoice-actions"><button class="btn btn-clear" onclick="document.getElementById('v91WonModal').classList.remove('show')">Not Now</button><button class="btn btn-success" id="v91WonOpen">🚢 Open DSR with Auto Data</button></div>
+		</div>
+	</div>	
+
+	<div class="modal-overlay" id="v3TimelineModal">
+		<div class="modal-content" style="max-width:1100px">
+			<div class="modal-header"><h3 id="v3TimelineTitle">Shipment Timeline</h3><button class="btn btn-clear" onclick="document.getElementById('v3TimelineModal').classList.remove('show')">×</button></div>
+			<div id="v3TimelineBody"></div>
+		</div>
+	</div>
 
     <!-- ===== DSR MODALS ===== -->
     <div class="modal" id="dsrModal">
