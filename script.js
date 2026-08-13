@@ -1,3 +1,4 @@
+
 // ==================== DATA DEFINITIONS ====================
 const AIR_MIN_THRESHOLDS = {
     'CARTAGE': 450,
@@ -1093,13 +1094,6 @@ document.addEventListener('change', function(e) {
     }
 });
 
-// ---------- Escape HTML ----------
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
 
 // ---------- Init function ----------
 function initPlanner() {
@@ -1290,14 +1284,8 @@ document.querySelectorAll('.tab-btn-vertical').forEach(btn => {
 });
 
 function switchToTab(targetTab) {
-    // --- Auto-hide side menu when switching tabs ---
-    const wrapper = document.querySelector('.app-wrapper');
-    if (wrapper && !wrapper.classList.contains('nav-collapsed')) {
-        wrapper.classList.add('nav-collapsed');
-        localStorage.setItem('navCollapsed', 'true');
-    }
+    // --- NO AUTO-HIDE – menu stays visible ---
 
-    // --- Existing tab switching logic ---
     document.querySelectorAll('.tab-btn-vertical').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     const btn = document.querySelector(`.tab-btn-vertical[data-tab="${targetTab}"]`);
@@ -1307,10 +1295,9 @@ function switchToTab(targetTab) {
     db.navState.lastTab = targetTab;
     saveDB();
 
-    // --- Remove active class from all category headers ---
+    // Remove active class from all category headers
     document.querySelectorAll('.nav-category-header').forEach(h => h.classList.remove('active'));
 
-    // --- Add active class to the parent category ---
     if (btn) {
         const category = btn.closest('.nav-category');
         if (category) {
@@ -1319,7 +1306,7 @@ function switchToTab(targetTab) {
         }
     }
 
-    // --- Render content based on tab ---
+    // Render content based on tab
     if (targetTab === 'drafts') renderRecords('drafts');
     if (targetTab === 'rates') renderRecords('rates');
     if (targetTab === 'ratesheet') { renderRateSheet(); updateExpiryDashboard(); }
@@ -1487,6 +1474,7 @@ function toINR(amount, currency) {
 function formatINR(n) {
     return '₹ ' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+
 
 // ==================== QUOTE NUMBER GENERATION ====================
 function generateQuoteNumber(mode) {
@@ -3287,6 +3275,7 @@ function getFilteredRateSheet() {
     }
     return rates;
 }
+
 function renderRateSheet() {
     const tbody = document.getElementById('ratesheet-body');
     const table = document.getElementById('ratesheet-table');
@@ -6342,14 +6331,14 @@ function clearDSRFilters() {
     renderShipments();
 }
 // ===== CORRECTED addShipmentFromQuote =====
-function addShipmentFromQuote(target, mode, idx) {
+function addShipmentFromQuote(target, mode, idx, noModal = false) {
     const quote = db[target][mode][idx];
     if (!quote) return alert('Quote not found.');
 
     const freightKey = mode === 'air' ? 'AIR FREIGHT' : 'FREIGHT';
     let rawSellAmt = 0, rawSellCur = 'INR', rawBuyAmt = 0, rawBuyCur = 'INR';
 
-    // --- 1. Extract raw freight amounts ---
+    // Extract freight amounts
     if (quote.charges && quote.charges[freightKey]) {
         const f = quote.charges[freightKey];
         rawSellAmt = parseFloat(f.amount) || 0;
@@ -6358,7 +6347,7 @@ function addShipmentFromQuote(target, mode, idx) {
         rawBuyCur = f.buyCurrency || rawSellCur || 'INR';
     }
 
-    // --- 2. Build base shipment ---
+    // Base shipment object
     const baseShipment = {
         exportImport: 'EXPORT',
         mode: mode.toUpperCase(),
@@ -6402,7 +6391,7 @@ function addShipmentFromQuote(target, mode, idx) {
         validEtd: ''
     };
 
-    // --- 3. Mode-specific filling ---
+    // Mode-specific filling
     if (mode === 'sea') {
         let sellAmtUSD = rawSellAmt;
         let buyAmtUSD = rawBuyAmt;
@@ -6452,12 +6441,13 @@ function addShipmentFromQuote(target, mode, idx) {
         });
         db.shipments.push(s);
         saveDB();
-        // ✅ Mark quote as converted ONLY if it came from "Rates Quoted"
         if (target === 'rates') {
             quote.convertedToShipment = true;
             saveDB();
         }
-        openDsrModal('SEA', null, s);
+        if (!noModal) {
+            openDsrModal('SEA', null, s);
+        }
     }
     else if (mode === 'air') {
         const rawSellPK = rawSellAmt;
@@ -6491,12 +6481,13 @@ function addShipmentFromQuote(target, mode, idx) {
         });
         db.shipments.push(s);
         saveDB();
-        // ✅ Mark quote as converted ONLY if it came from "Rates Quoted"
         if (target === 'rates') {
             quote.convertedToShipment = true;
             saveDB();
         }
-        openDsrModal('AIR', null, s);
+        if (!noModal) {
+            openDsrModal('AIR', null, s);
+        }
     }
     else {
         alert('Unsupported mode: ' + mode);
@@ -9107,6 +9098,1631 @@ function saveMeasurementDefaults() {
     alert('Measurement defaults saved!');
     refreshMeasurementDefaults();
 }
+
+// ============================================================
+// NEW FEATURES – DSR & REPORTS (V9/V11)
+// ============================================================
+
+/* ---------- HELPERS ---------- */
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function dateOnly(v) {
+    if (!v) return '';
+    const d = new Date(v);
+    if (isNaN(d)) return String(v).slice(0, 10);
+    return d.toISOString().slice(0, 10);
+}
+
+function fmtDate(v) {
+    if (!v) return '-';
+    const d = new Date(v);
+    if (isNaN(d)) return escapeHtml(v);
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function num(v) { return Number(v) || 0; }
+
+function norm(v) { return String(v || '').trim().toUpperCase(); }
+
+function inRange(v, from, to) {
+    const d = dateOnly(v);
+    return (!from || !d || d >= from) && (!to || !d || d <= to);
+}
+
+// Quotes from all modes
+function quoteRows() {
+    const all = [];
+    ['sea', 'air', 'lcl'].forEach(mode => {
+        (db.rates?.[mode] || []).forEach(q => {
+            all.push({ ...q, __mode: mode.toUpperCase() });
+        });
+    });
+    return all;
+}
+
+// Shipment customer name
+function shipmentCustomer(s) {
+    return s.shipper || s.client || s.customer || s.consignee || '-';
+}
+
+// Shipment carrier
+function shipmentCarrier(s) {
+    return s.liner || s.carrier || s.carrierName || '-';
+}
+
+// Shipment mode
+function shipmentMode(s) {
+    return norm(s.mode || s.type || 'SEA');
+}
+
+/* ---------- RISK SCORE ---------- */
+function riskFor(s) {
+    let score = 0, reasons = [];
+    const cargo = norm(s.cargoStatus), docs = norm(s.docsStatus);
+    const now = new Date();
+    if (['CANCELLED', 'LOST'].includes(cargo)) { score += 60; reasons.push('Shipment cancelled/lost'); }
+    if (docs && !['BL APPROVED', 'TAX INVOICE SEND', 'INVOICE APPROVED', 'COMPLETED'].includes(docs)) {
+        score += 20; reasons.push('Documentation pending');
+    }
+    if (s.eta) {
+        const d = new Date(s.eta);
+        if (!isNaN(d) && d < now && !['DELIVERED', 'COMPLETED'].includes(cargo)) {
+            score += 30; reasons.push('ETA overdue');
+        }
+    }
+    if (s.etd) {
+        const d = new Date(s.etd);
+        if (!isNaN(d) && d < now && !['DEPARTED', 'IN TRANSIT', 'DELIVERED', 'COMPLETED'].includes(cargo)) {
+            score += 15; reasons.push('ETD milestone overdue');
+        }
+    }
+    if (!s.containerNo && shipmentMode(s) === 'SEA') { score += 10; reasons.push('Container not assigned'); }
+    if (!s.mblNo && shipmentMode(s) === 'SEA') { score += 8; reasons.push('MBL not available'); }
+    if (!s.hblNo) { score += 4; reasons.push('HBL not available'); }
+    if (!s.eta && !s.etd) { score += 5; reasons.push('ETD/ETA unavailable'); }
+    score = Math.min(100, score);
+    const severity = score >= 70 ? 'CRITICAL' : score >= 45 ? 'HIGH' : score >= 20 ? 'MEDIUM' : 'LOW';
+    return { score, severity, reasons };
+}
+
+/* ---------- CUT-OFFS FROM SHIPMENT ---------- */
+function cutoffsFor(s) {
+    const map = [
+        ['SI', s.siCutoff || s.siDeadline || s.siDate],
+        ['VGM', s.vgmCutoff || s.vgmDeadline || s.vgmDate],
+        ['CY', s.cyCutoff || s.cyDeadline || s.cyDate],
+        ['GATE', s.gateCutoff || s.gateDeadline || s.gateDate]
+    ];
+    return map.filter(x => x[1]).map(([type, d]) => ({
+        type,
+        date: dateOnly(d),
+        job: s.jobNo || s.code || '-',
+        customer: shipmentCustomer(s),
+        vessel: s.vessel || s.flight || '-',
+        route: `${s.pol || '-'} → ${s.pod || '-'}`,
+        owner: s.sales || s.owner || '-',
+        raw: s
+    }));
+}
+
+/* ---------- CONTAINERS FROM SHIPMENT ---------- */
+function containersFor(s) {
+    let list = [];
+    if (Array.isArray(s.containers)) list = s.containers;
+    else if (s.containerNo) list = [{ containerNo: s.containerNo, sealNo: s.sealNo, containerType: s.containerType || s.containerSize, vgm: s.vgm, grossWeight: s.grossWeight }];
+    return list.map(c => ({
+        job: s.jobNo || s.code || '-',
+        customer: shipmentCustomer(s),
+        mode: shipmentMode(s),
+        containerNo: c.containerNo || c.number || c.no || '-',
+        sealNo: c.sealNo || c.seal || s.sealNo || '-',
+        type: c.containerType || c.type || s.containerType || '-',
+        vgm: c.vgm || c.vgmWeight || s.vgm || '-',
+        status: norm(c.status || s.containerStatus || s.cargoStatus || 'RELEASED'),
+        etd: s.etd,
+        eta: s.eta,
+        raw: s
+    }));
+}
+
+/* ---------- NAVIGATE TO SHIPMENT FROM JOB ---------- */
+function openJobFromReport(job) {
+    const target = String(job || '').trim().toLowerCase();
+    const rows = db.shipments || [];
+    const idx = rows.findIndex(s => String(s.jobNo || s.code || '').trim().toLowerCase() === target);
+    if (idx < 0) return alert(`Job ${job} not found in Shipment DSR.`);
+    switchToTab('dsr');
+    setTimeout(() => {
+        if (typeof editDsrShipment === 'function') editDsrShipment(idx);
+        else if (typeof openDsrModal === 'function') openDsrModal(rows[idx].mode || rows[idx].type || 'SEA', idx, rows[idx]);
+    }, 80);
+}
+
+/* ---------- SHIPMENT TIMELINE ---------- */
+function openShipmentTimeline(idx) {
+    const s = (db.shipments || [])[idx];
+    if (!s) return alert('Shipment not found.');
+    const steps = [
+        ['Created', s.createdAt || s.date],
+        ['Booking', s.bookingDate || s.bookingCreatedAt],
+        ['SI', s.siDate || s.siSubmittedAt],
+        ['BL Draft', s.blDraftDate || s.blDraftAt],
+        ['BL Approved', s.blApprovedDate || s.blApprovalDate],
+        ['Gate-in', s.gateInDate || s.gateIn],
+        ['ETD', s.etd],
+        ['ETA', s.eta],
+        ['Arrival', s.arrivalDate || s.arrivedAt],
+        ['Delivered', s.deliveryDate || s.deliveredAt]
+    ];
+    const current = norm(s.cargoStatus);
+    let activeIndex = steps.findIndex(x => {
+        const label = x[0].toUpperCase();
+        return (label === 'DELIVERED' && ['DELIVERED', 'COMPLETED'].includes(current)) ||
+               (label === 'ETA' && current === 'IN TRANSIT');
+    });
+    if (activeIndex < 0) activeIndex = steps.filter(x => x[1]).length - 1;
+    const html = `
+        <div class="timeline">${steps.map((x, i) => `
+            <div class="timeline-step ${x[1] ? 'done' : ''} ${i === activeIndex ? 'current' : ''}">
+                <div class="timeline-dot"></div>
+                <div class="timeline-label">${x[0]}</div>
+                <div class="timeline-date">${fmtDate(x[1])}</div>
+            </div>
+        `).join('')}</div>
+        <div class="form-section"><h3>📦 Shipment</h3><div class="report-grid-2">
+            <div>Job: <b>${escapeHtml(s.jobNo || s.code || '-')}</b><br>Customer: ${escapeHtml(shipmentCustomer(s))}<br>Mode: ${shipmentMode(s)}<br>Carrier: ${escapeHtml(shipmentCarrier(s))}</div>
+            <div>Route: <b>${escapeHtml(s.pol || '-')} → ${escapeHtml(s.pod || '-')}</b><br>ETD: ${fmtDate(s.etd)}<br>ETA: ${fmtDate(s.eta)}<br>Risk: <b>${riskFor(s).score}/100</b></div>
+        </div></div>
+    `;
+    const modal = document.getElementById('v3TimelineModal');
+    if (modal) {
+        document.getElementById('v3TimelineTitle').textContent = `Shipment Timeline — ${s.jobNo || s.code || '-'}`;
+        document.getElementById('v3TimelineBody').innerHTML = html;
+        modal.classList.add('show');
+    }
+}
+
+// ---------- INVOICE MODULE ----------
+// ============================================================
+// INVOICE MODULE – COMPLETE & WORKING
+// ============================================================
+
+// ---------- Helper: Find Quote by Ref ----------
+function findQuote(ref) {
+    if (!ref) return null;
+    const r = String(ref).trim().toUpperCase();
+    if (!r) return null;
+    for (const m of ['sea', 'air', 'lcl']) {
+        const arr = db.rates?.[m] || [];
+        const idx = arr.findIndex(x => String(x.quoteNumber || '').trim().toUpperCase() === r);
+        if (idx >= 0) return { target: 'rates', mode: m, idx: idx, data: arr[idx] };
+    }
+    for (const m of ['sea', 'air', 'lcl']) {
+        const arr = db.drafts?.[m] || [];
+        const idx = arr.findIndex(x => String(x.quoteNumber || '').trim().toUpperCase() === r);
+        if (idx >= 0) return { target: 'drafts', mode: m, idx: idx, data: arr[idx] };
+    }
+    return null;
+}
+
+// ---------- Extract charge lines ----------
+function quoteChargeLines(q) {
+    const charges = q.charges || {};
+    const lines = [];
+    Object.entries(charges).forEach(([name, c]) => {
+        if (!c) return;
+        const amount = parseFloat(c.amount) || 0;
+        const buy = parseFloat(c.buyAmount) || 0;
+        if (amount === 0 && buy === 0) return;
+        let qty = 1;
+        let basis = String(c.basis || 'Normal');
+        const upper = basis.toUpperCase();
+        if (upper.includes('KGS')) qty = parseFloat(q.weight) || 1;
+        else if (upper.includes('CBM')) qty = parseFloat(q.volume) || 1;
+        else if (upper.includes('CONT')) qty = parseFloat(q.containers) || parseFloat(q.containerCount) || 1;
+        else if (upper.includes('PKG')) qty = parseFloat(q.packages) || parseFloat(q.pallets) || 1;
+        const rate = amount;
+        const total = rate * qty;
+        lines.push({ name, basis, qty, rate, total, currency: c.currency || 'INR' });
+    });
+    return lines;
+}
+
+// ---------- Open Invoice Modal ----------
+function openInvoiceFromQuote(prefillRef) {
+    let modal = document.getElementById('v91InvoiceModal');
+    if (!modal) {
+        // Create modal if not present
+        modal = document.createElement('div');
+        modal.id = 'v91InvoiceModal';
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="v91-invoice-modal">
+                <div class="modal-header">
+                    <div><h3>🧾 Generate Invoice</h3><small>Quote Ref → Invoice</small></div>
+                    <button class="btn btn-clear" onclick="document.getElementById('v91InvoiceModal').classList.remove('show')">×</button>
+                </div>
+                <div class="v91-invoice-body" id="v91InvoiceBody"></div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    // Build quote list
+    const quotes = [];
+    ['sea', 'air', 'lcl'].forEach(mode => {
+        (db.rates?.[mode] || []).forEach(q => quotes.push({ ...q, _mode: mode }));
+    });
+    const options = quotes.map(q =>
+        `<option value="${escapeHtml(q.quoteNumber || '')}">${escapeHtml(q.quoteNumber || '-')} — ${escapeHtml(q.client || '-')} — ${escapeHtml(q.pol || '-')} → ${escapeHtml(q.pod || '-')}</option>`
+    ).join('');
+
+    const body = document.getElementById('v91InvoiceBody');
+    body.innerHTML = `
+        <div class="v91-invoice-grid">
+            <div><label>QUOTE REF *</label>
+                <input id="v91-inv-quote" list="v91-inv-quote-list" value="${escapeHtml(prefillRef || '')}" placeholder="Type or select Quote Ref" onchange="loadInvoiceFromQuote()">
+                <datalist id="v91-inv-quote-list">${options}</datalist>
+            </div>
+            <div><label>Invoice Date</label><input type="date" id="v91-inv-date" value="${new Date().toISOString().slice(0, 10)}"></div>
+            <div><label>Due Date</label><input type="date" id="v91-inv-due"></div>
+            <div><label>Payment Terms</label><input id="v91-inv-terms" value="15 Days"></div>
+        </div>
+        <div id="v91-inv-preview" class="v91-invoice-preview">Select a Quote Ref to fetch customer, route and amount.</div>
+        <div class="v91-invoice-actions">
+            <button class="btn btn-clear" onclick="document.getElementById('v91InvoiceModal').classList.remove('show')">Cancel</button>
+            <button class="btn btn-success" onclick="saveInvoiceFromQuote()">💾 Generate Invoice</button>
+        </div>
+    `;
+    modal.classList.add('show');
+    if (prefillRef) setTimeout(loadInvoiceFromQuote, 100);
+}
+
+// ---------- Load Quote Data ----------
+function loadInvoiceFromQuote() {
+    const ref = document.getElementById('v91-inv-quote')?.value.trim();
+    const preview = document.getElementById('v91-inv-preview');
+    if (!ref) {
+        preview.innerHTML = 'Please select a Quote Ref.';
+        return;
+    }
+    const found = findQuote(ref);
+    if (!found) {
+        preview.innerHTML = '❌ Quote not found. Please check the reference.';
+        return;
+    }
+    const q = found.data;
+    const lines = quoteChargeLines(q);
+    let total = parseFloat(q.totalSellINR) || 0;
+    if (!total) total = lines.reduce((a, l) => a + l.total, 0);
+
+    let linesHtml = lines.map(l =>
+        `<tr><td>${escapeHtml(l.name)}</td><td>${escapeHtml(l.basis)}</td><td>${l.qty}</td><td>${escapeHtml(l.currency)} ${l.rate.toFixed(2)}</td><td><strong>${escapeHtml(l.currency)} ${l.total.toFixed(2)}</strong></td></tr>`
+    ).join('') || '<tr><td colspan="5">No charge lines found.</td></tr>';
+
+    preview.innerHTML = `
+        <div class="v91-invoice-summary">
+            <div><span>QUOTE</span><b>${escapeHtml(q.quoteNumber || '-')}</b></div>
+            <div><span>CUSTOMER</span><b>${escapeHtml(q.client || '-')}</b></div>
+            <div><span>ROUTE</span><b>${escapeHtml(q.pol || '-')} → ${escapeHtml(q.pod || '-')}</b></div>
+            <div><span>MODE</span><b>${escapeHtml((found.mode || '').toUpperCase())}</b></div>
+            <div><span>CARRIER</span><b>${escapeHtml(q.carrier || '-')}</b></div>
+            <div><span>GRAND TOTAL</span><b>${formatINR(total)}</b></div>
+        </div>
+        <div style="margin-top:12px; border-top:1px solid var(--border); padding-top:8px;">
+            <h4 style="font-size:0.8rem; margin-bottom:6px;">📋 Charge Lines</h4>
+            <div class="v11-inv-table-wrap">
+                <table class="v11-inv-table">
+                    <thead><tr><th>Charge</th><th>Basis</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
+                    <tbody>${linesHtml}</tbody>
+                    <tfoot><tr><td colspan="4">GRAND TOTAL</td><td><strong>${formatINR(total)}</strong></td></tr></tfoot>
+                </table>
+            </div>
+        </div>
+        <input type="hidden" id="v91-inv-amount" value="${total}">
+        <input type="hidden" id="v91-inv-charge-lines" value='${JSON.stringify(lines)}'>
+    `;
+}
+
+// ---------- Save Invoice ----------
+function saveInvoiceFromQuote() {
+    const ref = document.getElementById('v91-inv-quote')?.value.trim();
+    const found = findQuote(ref);
+    if (!found) return alert('Please select a valid Quote Ref.');
+    const q = found.data;
+    const lines = JSON.parse(document.getElementById('v91-inv-charge-lines')?.value || '[]');
+    let total = parseFloat(document.getElementById('v91-inv-amount')?.value) || 0;
+    if (!total) total = lines.reduce((a, l) => a + l.total, 0);
+
+    db.invoices = Array.isArray(db.invoices) ? db.invoices : [];
+    const now = new Date();
+    const no = `INV-${now.getFullYear().toString().slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}-${String(db.invoices.length + 1).padStart(5, '0')}`;
+
+    db.invoices.push({
+        id: no,
+        invoiceNo: no,
+        quoteRef: q.quoteNumber || ref,
+        customer: q.client || '',
+        client: q.client || '',
+        mode: found.mode.toUpperCase(),
+        pol: q.pol || '',
+        pod: q.pod || '',
+        carrier: q.carrier || '',
+        amount: total,
+        total: total,
+        received: 0,
+        status: 'ISSUED',
+        invoiceDate: document.getElementById('v91-inv-date')?.value || now.toISOString().slice(0, 10),
+        dueDate: document.getElementById('v91-inv-due')?.value || '',
+        paymentTerms: document.getElementById('v91-inv-terms')?.value || '15 Days',
+        chargeLines: lines,
+        createdAt: now.toISOString()
+    });
+
+    saveDB();
+    document.getElementById('v91InvoiceModal')?.classList.remove('show');
+    renderInvoiceTab();
+    alert(`✅ Invoice ${no} generated from ${q.quoteNumber || ref}.`);
+}
+
+// ---------- Render Invoice List ----------
+function renderInvoiceTab() {
+    const tbody = document.getElementById('invoice-list');
+    if (!tbody) return;
+    db.invoices = Array.isArray(db.invoices) ? db.invoices : [];
+
+    // Update KPI cards
+    const total = db.invoices.reduce((a, x) => a + (parseFloat(x.amount || x.total) || 0), 0);
+    const issued = db.invoices.filter(x => String(x.status || '').toUpperCase() === 'ISSUED').length;
+    const paid = db.invoices.filter(x => String(x.status || '').toUpperCase() === 'PAID').length;
+    const outstanding = db.invoices.reduce((a, x) => {
+        const amt = parseFloat(x.amount || x.total) || 0;
+        const rec = parseFloat(x.received || x.paid) || 0;
+        return a + Math.max(0, amt - rec);
+    }, 0);
+
+    document.getElementById('invoice-kpi-total').textContent = db.invoices.length;
+    document.getElementById('invoice-kpi-issued').textContent = issued;
+    document.getElementById('invoice-kpi-paid').textContent = paid;
+    document.getElementById('invoice-kpi-outstanding').textContent = formatINR(outstanding);
+
+    // Build table rows
+    if (db.invoices.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" class="v9-empty">No invoices yet. Click "+ New Invoice" to generate one.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = db.invoices.slice().reverse().map((x, idx) => {
+        const realIdx = db.invoices.length - 1 - idx;
+        const statusClass = String(x.status || '').toUpperCase() === 'PAID' ? 'v9-status-final' : 'v9-status-draft';
+        return `
+            <tr>
+                <td style="text-align:center;"><input type="checkbox" class="invoice-row-check" data-idx="${realIdx}" onchange="updateInvoiceSelection()"></td>
+                <td><strong class="v9-ref">${escapeHtml(x.invoiceNo || x.id || '-')}</strong></td>
+                <td>${escapeHtml(x.quoteRef || '-')}</td>
+                <td><strong>${escapeHtml(x.customer || x.client || '-')}</strong></td>
+                <td><span class="v9-service ${String(x.mode || '').toLowerCase()}">${escapeHtml(x.mode || '-')}</span></td>
+                <td>${escapeHtml(x.pol || '-')}</td>
+                <td>${escapeHtml(x.pod || '-')}</td>
+                <td><strong>${formatINR(x.amount || x.total)}</strong></td>
+                <td>${fmtDate(x.invoiceDate || x.date)}</td>
+                <td><span class="${statusClass}">${escapeHtml(x.status || 'ISSUED')}</span></td>
+                <td>
+                    <div class="v9-row-actions">
+                        <button onclick="openInvoicePreviewV11('${escapeHtml(x.invoiceNo || x.id)}')" title="Preview">👁</button>
+                        <button onclick="emailInvoiceV11('${escapeHtml(x.invoiceNo || x.id)}')" title="Email">✉</button>
+                        <button onclick="deleteInvoiceV11('${escapeHtml(x.invoiceNo || x.id)}')" class="danger" title="Delete">×</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    // Sync selection count
+    updateInvoiceSelection();
+}
+
+
+// ---------- Preview Invoice ----------
+function toggleAllInvoices(checked) {
+    document.querySelectorAll('.invoice-row-check').forEach(cb => cb.checked = checked);
+    updateInvoiceSelection();
+}
+
+// ---------- Update Selection Count ----------
+function updateInvoiceSelection() {
+    const count = document.querySelectorAll('.invoice-row-check:checked').length;
+    const el = document.getElementById('v11-invoice-selected');
+    if (el) el.textContent = count + ' selected';
+}
+
+
+
+// ---------- Build Invoice Preview HTML (same as Quote Preview) ----------
+function buildInvoicePreviewHTML(data, compact = false) {
+    const company = db.companyName || 'GATEWAY EXIM';
+    const address = db.companyAddress || '';
+    const userName = getLoggedInUserName() || db.defaultUser || 'N/A';
+
+    const lines = data.chargeLines || [];
+    let grandTotal = 0;
+    let chargeRows = '';
+
+    // Compact mode: smaller fonts, padding, and fixed width
+    const isCompact = compact;
+    const baseFont = isCompact ? '9px' : '0.78rem';
+    const headingSize = isCompact ? '10px' : '0.90rem';
+    const titleFont = isCompact ? '14px' : '1.2rem';
+    const thPadding = isCompact ? '2px 5px' : '4px 7px';
+    const tdPadding = isCompact ? '2px 5px' : '4px 7px';
+    const containerPadding = isCompact ? '2px' : '10px';
+    const headerHeight = isCompact ? '22px' : '32px';
+    const tableWidth = isCompact ? '13cm' : '100%';
+
+    // Build charge rows
+    if (lines.length) {
+        chargeRows = lines.map((l, i) => {
+            const total = l.total || 0;
+            grandTotal += total;
+            const basisDisplay = l.basis || 'Normal';
+            return `
+                <tr>
+                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;width:10%;font-size:${baseFont};">${i+1}</td>
+                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;width:25%;font-weight:100;font-size:${baseFont};">${escapeHtml(l.name)}</td>
+                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;width:10%;font-size:${baseFont};">${escapeHtml(l.currency || 'INR')}</td>
+                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;width:15%;font-size:${baseFont};">${Number(l.rate || 0).toLocaleString('en-IN')}</td>
+                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;width:10%;font-size:${baseFont};">${escapeHtml(basisDisplay)}</td>
+                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;width:29%;font-weight:100;font-size:${baseFont};">${formatINR(total)}</td>
+                </tr>
+            `;
+        }).join('');
+    } else {
+        chargeRows = `<tr><td colspan="6" style="padding:12px;text-align:center;color:#94a3b8;font-size:${baseFont};">No charges found</td></tr>`;
+        grandTotal = parseFloat(data.amount || data.total) || 0;
+    }
+
+    // Detail rows
+    const detailRows = [
+        ['Invoice No.', escapeHtml(data.invoiceNo || data.id || '-'), 'Status', escapeHtml(data.status || 'ISSUED')],
+        ['Customer', escapeHtml(data.customer || data.client || '-'), 'Mode', escapeHtml(data.mode || '-')],
+        ['POL', escapeHtml(data.pol || '-'), 'POD', escapeHtml(data.pod || '-')],
+        ['Carrier', escapeHtml(data.carrier || '-'), 'Invoice Date', fmtDate(data.invoiceDate)],
+        ['Quote Ref', escapeHtml(data.quoteRef || '-'), 'Due Date', fmtDate(data.dueDate)],
+        ['Payment Terms', escapeHtml(data.paymentTerms || '-'), '', '']
+    ];
+
+    let detailHtml = `<table style="width:100%;border-collapse:collapse;font-size:${baseFont};table-layout:fixed;">
+        <thead>
+            <tr><th colspan="4" style="border:1px solid #1e3a8a;padding:${thPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;height:${headerHeight};">Invoice Details</th></tr>
+        </thead>
+        <tbody>`;
+    detailRows.forEach((row, idx) => {
+        const bg = idx % 2 === 0 ? '#f1f5f9' : 'white';
+        detailHtml += `<tr style="background:${bg};">
+            <td style="border:1px solid #d1d5db;padding:${tdPadding};font-weight:700;width:20%;font-size:${baseFont};">${row[0]}</td>
+            <td style="border:1px solid #d1d5db;padding:${tdPadding};width:30%;font-size:${baseFont};">${row[1]}</td>
+            <td style="border:1px solid #d1d5db;padding:${tdPadding};font-weight:700;width:20%;font-size:${baseFont};">${row[2]}</td>
+            <td style="border:1px solid #d1d5db;padding:${tdPadding};width:30%;font-size:${baseFont};">${row[3]}</td>
+        </tr>`;
+    });
+    detailHtml += `</tbody></table>`;
+
+    // Charges table
+    let chargeHtml = `<table style="width:100%;border-collapse:collapse;font-size:${baseFont};margin-top:6px;table-layout:fixed;">
+        <thead>
+            <tr><th colspan="6" style="border:1px solid #1e3a8a;padding:${thPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;height:${headerHeight};">CHARGES BREAKDOWN</th></tr>
+            <tr>
+                <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:10%;">Sr.</th>
+                <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:25%;">Charge</th>
+                <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:10%;">Curr</th>
+                <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:15%;">Rate</th>
+                <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:10%;">Basis</th>
+                <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:29%;">Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${chargeRows}
+        </tbody>
+        <tfoot>
+            <tr style="font-weight:700;background:#e6f7e6;">
+                <td colspan="5" style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;width:71%;font-size:${baseFont};">Grand Total</td>
+                <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;width:29%;font-size:${baseFont};">${formatINR(grandTotal)}</td>
+            </tr>
+        </tfoot>
+    </table>`;
+
+    // Container style: fixed width for compact, full width for normal
+    const containerStyle = isCompact
+        ? `width:13cm; margin:0 auto; padding:${containerPadding}; box-sizing:border-box; background:#ffffff; color:#1a1a1a; font-family:'Segoe UI',Arial,sans-serif;`
+        : `max-width:100%; margin:0 auto; padding:${containerPadding}; box-sizing:border-box; background:#ffffff; color:#1a1a1a; font-family:'Segoe UI',Arial,sans-serif;`;
+
+    return `
+        <div id="invoice-preview-container" style="${containerStyle}">
+            <!-- Company Header -->
+            <div style="border-bottom:2px solid #1e3a8a;padding-bottom:4px;margin-bottom:6px;">
+                <div style="font-size:${isCompact ? '12px' : '0.9rem'};font-weight:700;color:#1e3a8a;">${escapeHtml(company)}</div>
+                <div style="font-size:${isCompact ? '8px' : '0.65rem'};color:#64748b;">${escapeHtml(address)}</div>
+            </div>
+
+            <!-- Title -->
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+                <div style="text-align:left;">
+                    <div style="font-size:${titleFont};color:#1e3a8a;font-weight:800;letter-spacing:1px;">🧾 INVOICE</div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-family:'Courier New',monospace;color:#d97706;font-weight:700;font-size:${isCompact ? '10px' : '0.85rem'};background:#fffbeb;padding:2px 8px;border-radius:4px;">${escapeHtml(data.invoiceNo || data.id || 'DRAFT')}</div>
+                </div>
+            </div>
+
+            ${detailHtml}
+            ${chargeHtml}
+
+            <!-- Footer -->
+            <div style="margin-top:6px;font-size:${isCompact ? '8px' : '0.68rem'};color:#64748b;text-align:center;border-top:1px solid #e2e8f0;padding-top:6px;">
+                <p style="margin:2px 0;">This is a system-generated invoice.</p>
+                <p style="margin:2px 0;">Generated on ${new Date().toLocaleString('en-IN')}</p>
+                <div style="font-size:${isCompact ? '7px' : '0.65rem'};color:#64748b;margin-top:2px;">Prepared By: ${escapeHtml(userName)}</div>
+            </div>
+        </div>
+    `;
+}
+
+// ---------- Copy Invoice Tables (Compact) ----------
+function copyInvoiceTables() {
+    const data = window._previewInvoiceData;
+    if (!data) {
+        alert('No invoice data available. Please open a preview first.');
+        return;
+    }
+
+    // Compact mode with fixed width (13cm) and smaller fonts
+    const compactHtml = buildInvoicePreviewHTML(data, true);
+
+    if (navigator.clipboard && navigator.clipboard.write) {
+        const blobHTML = new Blob([compactHtml], { type: 'text/html' });
+        const blobPlain = new Blob([data.invoiceNo || 'Invoice'], { type: 'text/plain' });
+        const clipboardItem = new ClipboardItem({
+            'text/html': blobHTML,
+            'text/plain': blobPlain
+        });
+        navigator.clipboard.write([clipboardItem])
+            .then(() => alert('✅ Invoice copied with formatting (fixed width).'))
+            .catch(() => fallbackCopyText(compactHtml));
+    } else {
+        fallbackCopyText(compactHtml);
+    }
+}
+
+// ---------- Invoice Preview (Uses new format) ----------
+function openInvoicePreviewV11(no) {
+    const x = (db.invoices || []).find(i => (i.invoiceNo || i.id) === no);
+    if (!x) return alert('Invoice not found.');
+
+    window._previewInvoiceData = x;
+
+    // Normal preview – full width, normal font
+    const html = buildInvoicePreviewHTML(x, false);
+
+    document.getElementById('v11-inv-title').textContent = `Invoice Preview — ${x.invoiceNo || x.id}`;
+    document.getElementById('v11-inv-preview-body').innerHTML = `
+        <div style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-info" onclick="copyInvoiceTables()">📋 Copy Tables (Compact)</button>
+        </div>
+        ${html}
+    `;
+    document.getElementById('v11-inv-preview-body').style.background = 'white';
+    document.getElementById('v11InvoicePreview').classList.add('show');
+}
+
+
+
+// ---------- Email Invoice ----------
+function emailInvoiceV11(no) {
+    const x = (db.invoices || []).find(i => (i.invoiceNo || i.id) === no);
+    if (!x) return alert('Invoice not found.');
+    const subject = `Invoice ${x.invoiceNo || x.id} — ${x.quoteRef || ''}`;
+    const body = `Dear Customer,%0D%0A%0D%0APlease find invoice ${x.invoiceNo || x.id} against Quote ${x.quoteRef || '-'}.%0D%0AAmount: ${x.amount || x.total || 0}%0D%0A%0D%0ARegards,%0D%0AGATEWAY EXIM`;
+    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${body}`;
+}
+
+// ---------- Delete Invoice ----------
+function deleteInvoiceV11(no) {
+    if (!confirm(`Delete invoice ${no}?`)) return;
+    const idx = (db.invoices || []).findIndex(i => (i.invoiceNo || i.id) === no);
+    if (idx === -1) return alert('Invoice not found.');
+    db.invoices.splice(idx, 1);
+    saveDB();
+    renderInvoiceTab();
+    alert('Invoice deleted.');
+}
+
+// ---------- Auto-render when tab is switched ----------
+// Override switchToTab to include Invoice
+const originalSwitchTab = window.switchToTab;
+window.switchToTab = function(tab) {
+    if (originalSwitchTab) originalSwitchTab(tab);
+    setTimeout(() => {
+        if (tab === 'invoice') renderInvoiceTab();
+    }, 50);
+};
+
+// ---------- Initialise ----------
+document.addEventListener('DOMContentLoaded', function() {
+    if (!db.invoices) db.invoices = [];
+    setTimeout(() => {
+        const panel = document.getElementById('invoice');
+        if (panel && panel.classList.contains('active')) renderInvoiceTab();
+    }, 300);
+});
+
+// ---------- EXCEPTIONS ----------
+function renderDSRExceptions() {
+    const all = db.shipments || [];
+    const search = (document.getElementById('exception-search')?.value || '').toLowerCase();
+    const sev = document.getElementById('exception-severity')?.value || '';
+    const owner = document.getElementById('exception-owner')?.value || '';
+    const items = [];
+    all.forEach((s, idx) => {
+        const r = riskFor(s);
+        if (r.severity === 'LOW' && r.reasons.length === 0) return;
+        r.reasons.forEach(reason => items.push({
+            idx,
+            job: s.jobNo || s.code || '-',
+            customer: shipmentCustomer(s),
+            exception: reason,
+            severity: r.severity,
+            score: r.score,
+            due: s.eta || s.etd || '',
+            owner: s.sales || s.owner || s.assignedTo || '-'
+        }));
+    });
+    const owners = [...new Set(items.map(x => x.owner).filter(x => x && x !== '-'))].sort();
+    const oe = document.getElementById('exception-owner');
+    if (oe) { const cur = oe.value; oe.innerHTML = '<option value="">All Owners</option>' + owners.map(x => `<option ${x === cur ? 'selected' : ''}>${escapeHtml(x)}</option>`).join(''); }
+    const filtered = items.filter(x => (!search || `${x.job} ${x.customer} ${x.exception}`.toLowerCase().includes(search)) && (!sev || x.severity === sev) && (!owner || x.owner === owner));
+    const critical = items.filter(x => x.severity === 'CRITICAL').length;
+    const high = items.filter(x => x.severity === 'HIGH').length;
+    const med = items.filter(x => x.severity === 'MEDIUM').length;
+    const k = document.getElementById('exception-kpis');
+    if (k) k.innerHTML = `
+        <div class="feature-kpi danger"><span>🔴 Critical</span><strong>${critical}</strong></div>
+        <div class="feature-kpi warn"><span>🟠 High</span><strong>${high}</strong></div>
+        <div class="feature-kpi"><span>🟡 Medium</span><strong>${med}</strong></div>
+        <div class="feature-kpi"><span>📌 Total</span><strong>${items.length}</strong></div>
+    `;
+    const body = document.getElementById('exception-detail');
+    if (body) body.innerHTML = filtered.slice(0, 1000).map(x => `
+        <tr>
+            <td><span class="risk-pill risk-${x.severity.toLowerCase()}">${x.score}</span></td>
+            <td><a class="v11-job-link" onclick="openJobFromReport('${escapeHtml(x.job)}')">${escapeHtml(x.job)}</a></td>
+            <td>${escapeHtml(x.customer)}</td>
+            <td>${escapeHtml(x.exception)}</td>
+            <td><span class="feature-status ${x.severity.toLowerCase()}">${x.severity}</span></td>
+            <td>${fmtDate(x.due)}</td>
+            <td>${escapeHtml(x.owner)}</td>
+            <td><button class="btn btn-sm btn-info" onclick="openShipmentTimeline(${x.idx})">View</button></td>
+        </tr>
+    `).join('') || '<tr><td colspan="8" class="report-empty">No open exceptions.</td></tr>';
+}
+
+function clearExceptionFilters() {
+    document.getElementById('exception-search').value = '';
+    document.getElementById('exception-severity').value = '';
+    document.getElementById('exception-owner').value = '';
+    renderDSRExceptions();
+}
+
+function exportDSRExceptionsExcel() {
+    if (typeof XLSX === 'undefined') return alert('Excel library is not loaded.');
+    const out = [];
+    (db.shipments || []).forEach(s => {
+        const r = riskFor(s);
+        r.reasons.forEach(reason => out.push({
+            'Job': s.jobNo || s.code || '',
+            'Customer': shipmentCustomer(s),
+            'Risk Score': r.score,
+            'Severity': r.severity,
+            'Exception': reason,
+            'Owner': s.sales || s.owner || s.assignedTo || '',
+            'ETA': s.eta || '',
+            'ETD': s.etd || ''
+        }));
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(out), 'Exceptions');
+    XLSX.writeFile(wb, `DSR_Exceptions_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+// ---------- CUT-OFF CALENDAR ----------
+function renderCutoffCalendar() {
+    const from = document.getElementById('cutoff-from')?.value || '';
+    const to = document.getElementById('cutoff-to')?.value || '';
+    const type = document.getElementById('cutoff-type')?.value || '';
+    const source = db.shipments || [];
+    let rows = [];
+    source.forEach((s, idx) => {
+        const map = [
+            ['SI', s.siCutoff || s.siDeadline || s.siDate],
+            ['VGM', s.vgmCutoff || s.vgmDeadline || s.vgmDate],
+            ['CY', s.cyCutoff || s.cyDeadline || s.cyDate],
+            ['GATE', s.gateCutoff || s.gateDeadline || s.gateDate]
+        ];
+        map.forEach(([t, d]) => {
+            if (!d) return;
+            const ds = dateOnly(d);
+            if (type && type !== t) return;
+            if (from && ds < from) return;
+            if (to && ds > to) return;
+            rows.push({
+                date: ds,
+                type: t,
+                job: s.jobNo || s.code || '-',
+                customer: shipmentCustomer(s),
+                vessel: s.vessel || s.flight || '-',
+                route: `${s.pol || '-'} → ${s.pod || '-'}`,
+                owner: s.sales || s.owner || '-',
+                idx
+            });
+        });
+    });
+    rows.sort((a, b) => a.date.localeCompare(b.date));
+    const today = dateOnly(new Date());
+    const k = document.getElementById('cutoff-kpis');
+    if (k) k.innerHTML = `
+        <div class="feature-kpi danger"><span>🔴 Overdue</span><strong>${rows.filter(x => x.date < today).length}</strong></div>
+        <div class="feature-kpi warn"><span>🟠 Today</span><strong>${rows.filter(x => x.date === today).length}</strong></div>
+        <div class="feature-kpi good"><span>🟢 Upcoming</span><strong>${rows.filter(x => x.date > today).length}</strong></div>
+        <div class="feature-kpi"><span>📌 Total</span><strong>${rows.length}</strong></div>
+    `;
+    const body = document.getElementById('cutoff-detail');
+    if (body) body.innerHTML = rows.map(x => `
+        <tr>
+            <td>${fmtDate(x.date)}</td>
+            <td><strong>${x.type}</strong></td>
+            <td><a class="v11-job-link" onclick="openJobFromReport('${escapeHtml(x.job)}')">${escapeHtml(x.job)}</a></td>
+            <td>${escapeHtml(x.customer)}</td>
+            <td>${escapeHtml(x.vessel)}</td>
+            <td>${escapeHtml(x.route)}</td>
+            <td><span class="feature-status ${x.date < today ? 'critical' : x.date === today ? 'high' : 'low'}">${x.date < today ? 'OVERDUE' : x.date === today ? 'TODAY' : 'UPCOMING'}</span></td>
+            <td>${escapeHtml(x.owner)}</td>
+        </tr>
+    `).join('') || '<tr><td colspan="8" class="report-empty">No cut-offs available in the selected range.</td></tr>';
+}
+
+function clearCutoffFilters() {
+    document.getElementById('cutoff-from').value = '';
+    document.getElementById('cutoff-to').value = '';
+    document.getElementById('cutoff-type').value = '';
+    renderCutoffCalendar();
+}
+
+function printCutoffCalendar() { window.print(); }
+
+// ---------- CONTAINER TRACKER ----------
+function renderContainerTracker() {
+    const search = (document.getElementById('container-search')?.value || '').toLowerCase();
+    const status = document.getElementById('container-status')?.value || '';
+    let rows = [];
+    (db.shipments || []).forEach(s => {
+        containersFor(s).forEach(c => {
+            if ((!search || `${c.containerNo} ${c.job} ${c.customer} ${c.sealNo}`.toLowerCase().includes(search)) &&
+                (!status || c.status === status)) {
+                rows.push(c);
+            }
+        });
+    });
+    const released = rows.filter(x => x.status === 'RELEASED').length;
+    const gated = rows.filter(x => x.status === 'GATED IN').length;
+    const loaded = rows.filter(x => x.status === 'LOADED').length;
+    const del = rows.filter(x => ['DELIVERED', 'EMPTY RETURNED'].includes(x.status)).length;
+    const k = document.getElementById('container-kpis');
+    if (k) k.innerHTML = `
+        <div class="feature-kpi"><span>📦 Containers</span><strong>${rows.length}</strong></div>
+        <div class="feature-kpi warn"><span>🚧 Gated In</span><strong>${gated}</strong></div>
+        <div class="feature-kpi"><span>🚢 Loaded</span><strong>${loaded}</strong></div>
+        <div class="feature-kpi good"><span>✅ Completed</span><strong>${del}</strong></div>
+    `;
+    const body = document.getElementById('container-detail');
+    if (body) body.innerHTML = rows.map(x => `
+        <tr>
+            <td><strong>${escapeHtml(x.containerNo)}</strong></td>
+            <td>${escapeHtml(x.job)}</td>
+            <td>${escapeHtml(x.customer)}</td>
+            <td>${escapeHtml(x.type)}</td>
+            <td>${escapeHtml(x.sealNo)}</td>
+            <td>${escapeHtml(x.vgm)}</td>
+            <td><span class="feature-status ${['DELIVERED', 'EMPTY RETURNED'].includes(x.status) ? 'low' : x.status === 'GATED IN' ? 'high' : 'medium'}">${escapeHtml(x.status)}</span></td>
+            <td>${fmtDate(x.etd)}</td>
+            <td>${fmtDate(x.eta)}</td>
+            <td><button class="btn btn-sm btn-info" onclick="openShipmentTimeline(${(db.shipments || []).indexOf(x.raw)})">Timeline</button></td>
+        </tr>
+    `).join('') || '<tr><td colspan="10" class="report-empty">No container records.</td></tr>';
+}
+
+function clearContainerFilters() {
+    document.getElementById('container-search').value = '';
+    document.getElementById('container-status').value = '';
+    renderContainerTracker();
+}
+
+function exportContainerTrackerExcel() {
+    if (typeof XLSX === 'undefined') return alert('Excel library is not loaded.');
+    const out = [];
+    (db.shipments || []).forEach(s => {
+        containersFor(s).forEach(c => {
+            out.push({
+                'Container': c.containerNo,
+                'Job': c.job,
+                'Customer': c.customer,
+                'Mode': c.mode,
+                'Type': c.type,
+                'Seal': c.sealNo,
+                'VGM': c.vgm,
+                'Status': c.status,
+                'ETD': c.etd || '',
+                'ETA': c.eta || ''
+            });
+        });
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(out), 'Containers');
+    XLSX.writeFile(wb, `Container_Tracker_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+// ---------- SALES REPORT ----------
+function renderSalesReport() {
+    const rows = quoteRows();
+    const from = document.getElementById('sales-report-from')?.value || '';
+    const to = document.getElementById('sales-report-to')?.value || '';
+    const mode = document.getElementById('sales-report-mode')?.value || '';
+    const status = document.getElementById('sales-report-status')?.value || '';
+    const shipper = document.getElementById('sales-report-shipper')?.value || '';
+    // Populate shipper filter
+    const select = document.getElementById('sales-report-shipper');
+    if (select) {
+        const cur = select.value;
+        const shippers = [...new Set(rows.map(r => r.client || r.shipper).filter(Boolean))].sort();
+        select.innerHTML = '<option value="">All Shippers</option>' + shippers.map(s => `<option value="${escapeHtml(s)}" ${s === cur ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('');
+    }
+    const filtered = rows.filter(r =>
+        (!mode || r.__mode === mode.toUpperCase()) &&
+        (!status || (r.followUpStatus || 'PENDING') === status) &&
+        (!shipper || (r.client || r.shipper || '') === shipper) &&
+        inRange(r.createdAt || r.date || r.quoteDate, from, to)
+    );
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    const revenue = filtered.reduce((a, r) => a + num(r.totalSellINR), 0);
+    const margin = filtered.reduce((a, r) => a + num(r.marginINR), 0);
+    const won = filtered.filter(r => r.followUpStatus === 'WON').length;
+    set('sales-r-total', filtered.length);
+    set('sales-r-won', won);
+    set('sales-r-conv', (filtered.length ? (won / filtered.length * 100).toFixed(1) : 0) + '%');
+    set('sales-r-revenue', formatINR(revenue));
+    set('sales-r-margin', formatINR(margin));
+
+    const cm = {}, rm = {};
+    filtered.forEach(r => {
+        const client = r.client || r.shipper || 'Unknown';
+        cm[client] = (cm[client] || 0) + num(r.totalSellINR);
+        const route = `${r.pol || '?'} → ${r.pod || '?'}`;
+        rm[route] = (rm[route] || 0) + 1;
+    });
+    // Render bars (requires existing barList function; if not, provide fallback)
+    if (typeof renderBars === 'function') {
+        renderBars('sales-client-report', cm, v => formatINR(v));
+        renderBars('sales-route-report', rm);
+    } else {
+        // Fallback: simple lists
+        const cl = document.getElementById('sales-client-report');
+        if (cl) cl.innerHTML = Object.entries(cm).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, v]) => `<div>${escapeHtml(k)}: ${formatINR(v)}</div>`).join('');
+        const rl = document.getElementById('sales-route-report');
+        if (rl) rl.innerHTML = Object.entries(rm).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, v]) => `<div>${escapeHtml(k)}: ${v}</div>`).join('');
+    }
+    const detail = document.getElementById('sales-detail-report');
+    if (detail) detail.innerHTML = filtered.slice(0, 500).map(r => `
+        <tr>
+            <td><strong>${escapeHtml(r.quoteNumber || '-')}</strong></td>
+            <td><strong>${escapeHtml((r.__mode || '').toUpperCase())}</strong></td>
+            <td><strong>${escapeHtml(r.client || r.shipper || '-')}</strong></td>
+            <td>${escapeHtml(r.pol || '-')}</td>
+            <td>${escapeHtml(r.pod || '-')}</td>
+            <td><strong>${escapeHtml(r.followUpStatus || 'PENDING')}</strong></td>
+            <td><strong>${formatINR(r.totalSellINR)}</strong></td>
+            <td><strong>${formatINR(r.marginINR)}</strong></td>
+            <td>${escapeHtml(r.validityDate || '-')}</td>
+        </tr>
+    `).join('') || '<tr><td colspan="9" class="report-empty">No records</td></tr>';
+}
+
+function clearSalesReportFilters() {
+    ['sales-report-from', 'sales-report-to'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+    document.getElementById('sales-report-mode').value = '';
+    document.getElementById('sales-report-status').value = '';
+    document.getElementById('sales-report-shipper').value = '';
+    renderSalesReport();
+}
+
+function exportSalesReportExcel() {
+    if (typeof XLSX === 'undefined') return alert('Excel library is not loaded.');
+    const rows = quoteRows();
+    const from = document.getElementById('sales-report-from')?.value || '';
+    const to = document.getElementById('sales-report-to')?.value || '';
+    const mode = document.getElementById('sales-report-mode')?.value || '';
+    const status = document.getElementById('sales-report-status')?.value || '';
+    const shipper = document.getElementById('sales-report-shipper')?.value || '';
+    const filtered = rows.filter(r =>
+        (!mode || r.__mode === mode.toUpperCase()) &&
+        (!status || (r.followUpStatus || 'PENDING') === status) &&
+        (!shipper || (r.client || r.shipper || '') === shipper) &&
+        inRange(r.createdAt || r.date || r.quoteDate, from, to)
+    );
+    if (!filtered.length) return alert('No sales records.');
+    const out = filtered.map(r => ({
+        'Quote': r.quoteNumber || '',
+        'Mode': (r.__mode || '').toUpperCase(),
+        'Client': r.client || r.shipper || '',
+        'POL': r.pol || '',
+        'POD': r.pod || '',
+        'Status': r.followUpStatus || 'PENDING',
+        'Revenue INR': num(r.totalSellINR),
+        'Margin INR': num(r.marginINR),
+        'Validity': r.validityDate || ''
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(out), 'Sales Report');
+    XLSX.writeFile(wb, `Sales_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+// ---------- OPERATIONS REPORT ----------
+function renderOperationsReport() {
+    const all = db.shipments || [];
+    const from = document.getElementById('ops-report-from')?.value || '';
+    const to = document.getElementById('ops-report-to')?.value || '';
+    const mode = document.getElementById('ops-report-mode')?.value || '';
+    const cargo = document.getElementById('ops-report-cargo')?.value || '';
+    const rows = all.filter(s =>
+        (!mode || shipmentMode(s) === mode) &&
+        (!cargo || s.cargoStatus === cargo) &&
+        inRange(s.date || s.createdAt, from, to)
+    );
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    const transit = rows.filter(s => norm(s.cargoStatus) === 'IN TRANSIT').length;
+    const docs = rows.filter(s => s.docsStatus && !['TAX INVOICE SEND', 'INVOICE APPROVED'].includes(s.docsStatus)).length;
+    const del = rows.filter(s => ['DELIVERED', 'COMPLETED'].includes(norm(s.cargoStatus))).length;
+    set('ops-r-total', rows.length);
+    set('ops-r-transit', transit);
+    set('ops-r-docs', docs);
+    set('ops-r-delivered', del);
+    set('ops-r-ontime', '-');
+
+    // Cargo status bars
+    const cm = {}, dm = {};
+    rows.forEach(s => {
+        cm[s.cargoStatus || 'Not Set'] = (cm[s.cargoStatus || 'Not Set'] || 0) + 1;
+        dm[s.docsStatus || 'Not Set'] = (dm[s.docsStatus || 'Not Set'] || 0) + 1;
+    });
+    if (typeof renderBars === 'function') { renderBars('ops-cargo-report', cm); renderBars('ops-docs-report', dm); }
+    else {
+        const c = document.getElementById('ops-cargo-report');
+        if (c) c.innerHTML = Object.entries(cm).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div>${escapeHtml(k)}: ${v}</div>`).join('');
+        const d = document.getElementById('ops-docs-report');
+        if (d) d.innerHTML = Object.entries(dm).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div>${escapeHtml(k)}: ${v}</div>`).join('');
+    }
+
+    const detail = document.getElementById('ops-detail-report');
+    if (detail) detail.innerHTML = rows.slice(0, 500).map(s => `
+        <tr>
+            <td><a class="v11-job-link" onclick="openJobFromReport('${escapeHtml(s.jobNo || s.code || '-')}')">${escapeHtml(s.jobNo || s.code || '-')}</a></td>
+            <td>${escapeHtml(shipmentMode(s))}</td>
+            <td>${escapeHtml(shipmentCustomer(s))}</td>
+            <td>${escapeHtml(s.pol || '-')} → ${escapeHtml(s.pod || '-')}</td>
+            <td>${escapeHtml(shipmentCarrier(s))}</td>
+            <td>${fmtDate(s.etd)}</td>
+            <td>${fmtDate(s.eta)}</td>
+            <td><span class="v9-validity ${norm(s.cargoStatus) === 'IN TRANSIT' ? 'warning' : norm(s.cargoStatus) === 'DELIVERED' ? 'expired' : ''}">${escapeHtml(s.cargoStatus || '-')}</span></td>
+            <td><span class="v9-validity">${escapeHtml(s.docsStatus || '-')}</span></td>
+        </tr>
+    `).join('') || '<tr><td colspan="9" class="report-empty">No records</td></tr>';
+}
+
+function clearOperationsReportFilters() {
+    ['ops-report-from', 'ops-report-to'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+    document.getElementById('ops-report-mode').value = '';
+    document.getElementById('ops-report-cargo').value = '';
+    renderOperationsReport();
+}
+
+function exportOperationsReportExcel() {
+    if (typeof XLSX === 'undefined') return alert('Excel library is not loaded.');
+    const all = db.shipments || [];
+    const from = document.getElementById('ops-report-from')?.value || '';
+    const to = document.getElementById('ops-report-to')?.value || '';
+    const mode = document.getElementById('ops-report-mode')?.value || '';
+    const cargo = document.getElementById('ops-report-cargo')?.value || '';
+    const rows = all.filter(s =>
+        (!mode || shipmentMode(s) === mode) &&
+        (!cargo || s.cargoStatus === cargo) &&
+        inRange(s.date || s.createdAt, from, to)
+    );
+    if (!rows.length) return alert('No operations records.');
+    const out = rows.map(s => ({
+        'Job No.': s.jobNo || s.code || '',
+        'Mode': shipmentMode(s),
+        'Shipper': shipmentCustomer(s),
+        'POL': s.pol || '',
+        'POD': s.pod || '',
+        'Liner': shipmentCarrier(s),
+        'ETD': s.etd || '',
+        'ETA': s.eta || '',
+        'Cargo Status': s.cargoStatus || '',
+        'Docs Status': s.docsStatus || '',
+        'MBL': s.mblNo || '',
+        'HBL': s.hblNo || '',
+        'Container': s.containerNo || ''
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(out), 'Operations');
+    XLSX.writeFile(wb, `Operations_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+// ---------- PROFITABILITY ----------
+function renderProfitabilityReport() {
+    const all = db.shipments || [];
+    const from = document.getElementById('profit-from')?.value || '';
+    const to = document.getElementById('profit-to')?.value || '';
+    const mode = document.getElementById('profit-mode')?.value || '';
+    const search = (document.getElementById('profit-search')?.value || '').toLowerCase();
+
+    const rows = all.filter(s =>
+        (!mode || shipmentMode(s) === mode) &&
+        inRange(s.date || s.createdAt, from, to) &&
+        (!search || `${s.jobNo || s.code || ''} ${shipmentCustomer(s)} ${s.pol || ''} ${s.pod || ''}`.toLowerCase().includes(search))
+    );
+
+    let estSell = 0, estCost = 0, actSell = 0, actCost = 0;
+    const cm = {}, rm = {};
+
+    rows.forEach(s => {
+        // Estimate and actual values – use your existing fields or fallback
+        const estS = num(s.estimatedSellINR || s.estimatedSell || s.quoteSellINR || s.totalSellINR || 0);
+        const estC = num(s.estimatedCostINR || s.estimatedCost || s.quoteBuyINR || s.totalBuyINR || 0);
+        const actS = num(s.actualSellINR || s.actualSell || s.sellINR || s.totalSellINR || 0);
+        const actC = num(s.actualCostINR || s.actualCost || s.costINR || s.buyINR || s.totalBuyINR || 0);
+
+        estSell += estS;
+        estCost += estC;
+        actSell += actS;
+        actCost += actC;
+
+        const key = shipmentCustomer(s);
+        cm[key] = (cm[key] || 0) + (actS - actC);
+
+        const route = `${s.pol || '-'} → ${s.pod || '-'}`;
+        rm[route] = (rm[route] || 0) + (actS - actC);
+    });
+
+    const totalProfit = (actSell || actCost) ? (actSell - actCost) : (estSell - estCost);
+    const margin = (actSell || actCost) ? (actSell ? totalProfit / actSell * 100 : 0) : (estSell ? totalProfit / estSell * 100 : 0);
+    const variance = (actSell || actCost) ? (actSell - actCost) - (estSell - estCost) : 0;
+
+    // Update KPI cards – place inside #profit-kpis
+    const kpiContainer = document.getElementById('profit-kpis');
+    if (kpiContainer) {
+        kpiContainer.innerHTML = `
+            <div class="feature-kpi"><span>📦 Shipments</span><strong>${rows.length}</strong></div>
+            <div class="feature-kpi"><span>Estimated Sell</span><strong>${formatINR(estSell)}</strong></div>
+            <div class="feature-kpi"><span>Estimated Cost</span><strong>${formatINR(estCost)}</strong></div>
+            <div class="feature-kpi good"><span>💰 Profit</span><strong>${formatINR(totalProfit)}</strong></div>
+            <div class="feature-kpi"><span>📈 Margin</span><strong>${margin.toFixed(1)}%</strong></div>
+            <div class="feature-kpi ${variance < 0 ? 'danger' : ''}"><span>↕ Variance</span><strong>${formatINR(variance)}</strong></div>
+        `;
+    }
+
+    // Render customer and route profitability (with fallback)
+    if (typeof renderBars === 'function') {
+        renderBars('profit-customer-report', cm, v => formatINR(v));
+        renderBars('profit-route-report', rm, v => formatINR(v));
+    } else {
+        const c = document.getElementById('profit-customer-report');
+        if (c) c.innerHTML = Object.entries(cm).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, v]) => `<div>${escapeHtml(k)}: ${formatINR(v)}</div>`).join('');
+        const r = document.getElementById('profit-route-report');
+        if (r) r.innerHTML = Object.entries(rm).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, v]) => `<div>${escapeHtml(k)}: ${formatINR(v)}</div>`).join('');
+    }
+
+    // Detail table
+    const detail = document.getElementById('profit-detail');
+    if (detail) {
+        detail.innerHTML = rows.slice(0, 500).map(s => {
+            const estS = num(s.estimatedSellINR || s.estimatedSell || s.quoteSellINR || s.totalSellINR || 0);
+            const estC = num(s.estimatedCostINR || s.estimatedCost || s.quoteBuyINR || s.totalBuyINR || 0);
+            const actS = num(s.actualSellINR || s.actualSell || s.sellINR || s.totalSellINR || 0);
+            const actC = num(s.actualCostINR || s.actualCost || s.costINR || s.buyINR || s.totalBuyINR || 0);
+            const profit = actS - actC;
+            const estProfit = estS - estC;
+            const variance = (actS || actC) ? profit - estProfit : 0;
+            return `<tr>
+                <td><a class="v11-job-link" onclick="openJobFromReport('${escapeHtml(s.jobNo || s.code || '-')}')">${escapeHtml(s.jobNo || s.code || '-')}</a></td>
+                <td>${escapeHtml(shipmentCustomer(s))}</td>
+                <td>${shipmentMode(s)}</td>
+                <td>${escapeHtml(s.pol || '-')} → ${escapeHtml(s.pod || '-')}</td>
+                <td>${formatINR(estS)}</td>
+                <td>${formatINR(estC)}</td>
+                <td>${actS ? formatINR(actS) : '-'}</td>
+                <td>${actC ? formatINR(actC) : '-'}</td>
+                <td>${formatINR(profit)}</td>
+                <td>${profit ? (profit / (actS || 1) * 100).toFixed(1) : 0}%</td>
+                <td>${(actS || actC) ? formatINR(variance) : '-'}</td>
+            </tr>`;
+        }).join('') || '<tr><td colspan="11" class="report-empty">No profitability data.</td></tr>';
+    }
+}
+
+function clearProfitFilters() {
+    ['profit-from', 'profit-to', 'profit-search'].forEach(id => {
+        const e = document.getElementById(id);
+        if (e) e.value = '';
+    });
+    const mode = document.getElementById('profit-mode');
+    if (mode) mode.value = '';
+    renderProfitabilityReport();
+}
+
+function exportProfitabilityExcel() {
+    if (typeof XLSX === 'undefined') return alert('Excel library is not loaded.');
+    const all = db.shipments || [];
+    const out = all.map(s => {
+        const estS = num(s.estimatedSellINR || s.estimatedSell || s.quoteSellINR || s.totalSellINR || 0);
+        const estC = num(s.estimatedCostINR || s.estimatedCost || s.quoteBuyINR || s.totalBuyINR || 0);
+        const actS = num(s.actualSellINR || s.actualSell || s.sellINR || s.totalSellINR || 0);
+        const actC = num(s.actualCostINR || s.actualCost || s.costINR || s.buyINR || s.totalBuyINR || 0);
+        return {
+            'Job': s.jobNo || s.code || '',
+            'Customer': shipmentCustomer(s),
+            'Mode': shipmentMode(s),
+            'POL': s.pol || '',
+            'POD': s.pod || '',
+            'Estimated Sell': estS,
+            'Estimated Cost': estC,
+            'Actual Sell': actS || '',
+            'Actual Cost': actC || '',
+            'Profit': actS - actC,
+            'Margin %': actS ? ((actS - actC) / actS * 100).toFixed(2) : 0,
+            'Variance': (actS || actC) ? ((actS - actC) - (estS - estC)) : ''
+        };
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(out), 'Profitability');
+    XLSX.writeFile(wb, `Profitability_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+// ---------- CUSTOMER 360 ----------
+function renderCustomer360() {
+    const search = (document.getElementById('customer360-search')?.value || '').toLowerCase();
+    const mode = document.getElementById('customer360-mode')?.value || '';
+    const qs = quoteRows();
+    const ss = db.shipments || [];
+    const map = {};
+    const key = (v) => String(v || 'Unknown').trim() || 'Unknown';
+    qs.forEach(r => {
+        const k = key(r.client || r.customer);
+        if (mode && norm(r.__mode) !== norm(mode)) return;
+        if (!map[k]) map[k] = { q: 0, w: 0, s: 0, revenue: 0, profit: 0, last: '' };
+        map[k].q++;
+        if (norm(r.followUpStatus) === 'WON') map[k].w++;
+        map[k].revenue += num(r.totalSellINR);
+        map[k].profit += num(r.marginINR);
+        map[k].last = r.updatedAt || r.createdAt || r.date || map[k].last;
+    });
+    ss.forEach(s => {
+        const k = key(shipmentCustomer(s));
+        if (mode && shipmentMode(s) !== mode) return;
+        if (!map[k]) map[k] = { q: 0, w: 0, s: 0, revenue: 0, profit: 0, last: '' };
+        map[k].s++;
+        const p = {
+            sell: num(s.actualSellINR || s.actualSell || s.sellINR || s.totalSellINR || 0),
+            cost: num(s.actualCostINR || s.actualCost || s.costINR || s.buyINR || s.totalBuyINR || 0)
+        };
+        map[k].revenue += p.sell;
+        map[k].profit += (p.sell - p.cost);
+        map[k].last = s.lastModified || s.createdAt || s.date || map[k].last;
+    });
+    let rows = Object.entries(map).map(([customer, v]) => ({ customer, ...v }))
+        .filter(x => !search || x.customer.toLowerCase().includes(search))
+        .sort((a, b) => b.revenue - a.revenue);
+    const body = document.getElementById('customer360-detail');
+    if (body) body.innerHTML = rows.map(x => {
+        const score = 50 + Math.min(20, x.q * 2) + Math.min(15, x.s * 1.5) + (x.profit > 0 ? 15 : 0);
+        return `<tr>
+            <td><strong>${escapeHtml(x.customer)}</strong></td>
+            <td>${x.q}</td>
+            <td>${x.w}</td>
+            <td>${x.s}</td>
+            <td>${formatINR(x.revenue)}</td>
+            <td>${formatINR(x.profit)}</td>
+            <td>${x.q ? (x.w / x.q * 100).toFixed(1) : 0}%</td>
+            <td>${fmtDate(x.last)}</td>
+            <td><span class="feature-status ${score >= 70 ? 'low' : score >= 45 ? 'medium' : 'high'}">${score}</span></td>
+            <td><button class="btn btn-sm btn-info" onclick="openCustomer360('${encodeURIComponent(x.customer)}')">Open</button></td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="10" class="report-empty">No customer data.</td></tr>';
+    window._customerRows = rows;
+}
+
+function openCustomer360(name) {
+    const customer = decodeURIComponent(name);
+    const qs = quoteRows().filter(r => String(r.client || r.customer || '').trim() === customer);
+    const ss = (db.shipments || []).filter(s => shipmentCustomer(s) === customer);
+    const drawer = document.getElementById('customer360-drawer');
+    if (!drawer) return;
+    drawer.classList.add('show');
+    drawer.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center"><h3>👤 ${escapeHtml(customer)}</h3><button class="btn btn-sm btn-clear" onclick="this.parentElement.parentElement.classList.remove('show')">Close</button></div>
+        <div class="report-kpi-grid">
+            <div class="feature-kpi"><span>Quotes</span><strong>${qs.length}</strong></div>
+            <div class="feature-kpi"><span>Won</span><strong>${qs.filter(r => r.followUpStatus === 'WON').length}</strong></div>
+            <div class="feature-kpi"><span>Shipments</span><strong>${ss.length}</strong></div>
+            <div class="feature-kpi good"><span>Profit</span><strong>${formatINR(ss.reduce((a, s) => a + (num(s.actualSellINR || s.sellINR || 0) - num(s.actualCostINR || s.buyINR || 0)), 0))}</strong></div>
+        </div>
+        <h4>Recent Shipments</h4>
+        <div class="report-table-wrap"><table class="report-table"><thead><tr><th>Job</th><th>Route</th><th>Carrier</th><th>ETD</th><th>ETA</th><th>Status</th></tr></thead><tbody>${ss.slice(-20).reverse().map(s => `
+            <tr>
+                <td><a class="v11-job-link" onclick="openJobFromReport('${escapeHtml(s.jobNo || s.code || '-')}')">${escapeHtml(s.jobNo || s.code || '-')}</a></td>
+                <td>${escapeHtml(s.pol || '-')} → ${escapeHtml(s.pod || '-')}</td>
+                <td>${escapeHtml(shipmentCarrier(s))}</td>
+                <td>${fmtDate(s.etd)}</td>
+                <td>${fmtDate(s.eta)}</td>
+                <td>${escapeHtml(s.cargoStatus || '-')}</td>
+            </tr>
+        `).join('') || '<tr><td colspan="6">No shipments</td></tr>'}</tbody></table></div>
+    `;
+}
+
+function clearCustomer360() {
+    document.getElementById('customer360-search').value = '';
+    document.getElementById('customer360-mode').value = '';
+    renderCustomer360();
+}
+
+function exportCustomer360Excel() {
+    if (typeof XLSX === 'undefined') return alert('Excel library is not loaded.');
+    const rows = window._customerRows || [];
+    const out = rows.map(x => ({
+        'Customer': x.customer,
+        'Quotes': x.q,
+        'Won': x.w,
+        'Shipments': x.s,
+        'Revenue': x.revenue,
+        'Profit': x.profit,
+        'Conversion %': x.q ? (x.w / x.q * 100).toFixed(2) : 0,
+        'Last Activity': x.last,
+        'Score': 50 + Math.min(20, x.q * 2) + Math.min(15, x.s * 1.5) + (x.profit > 0 ? 15 : 0)
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(out), 'Customer 360');
+    XLSX.writeFile(wb, `Customer_360_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+// ---------- CARRIER PERFORMANCE ----------
+function renderCarrierPerformance() {
+    const from = document.getElementById('carrier-from')?.value || '';
+    const to = document.getElementById('carrier-to')?.value || '';
+    const search = (document.getElementById('carrier-search')?.value || '').toLowerCase();
+    const all = db.shipments || [];
+    const map = {};
+
+    all.filter(s => inRange(s.date || s.createdAt, from, to)).forEach(s => {
+        const c = shipmentCarrier(s);
+        if (!map[c]) map[c] = { ship: 0, containers: 0, routes: new Set(), del: 0, transit: 0, delay: [], profit: 0 };
+        const m = map[c];
+        m.ship++;
+        m.containers += containersFor(s).length;
+        m.routes.add(`${s.pol || '-'} → ${s.pod || '-'}`);
+        if (['DELIVERED', 'COMPLETED'].includes(norm(s.cargoStatus))) m.del++;
+        if (norm(s.cargoStatus) === 'IN TRANSIT') m.transit++;
+        m.profit += num(s.actualSellINR || s.sellINR || 0) - num(s.actualCostINR || s.buyINR || 0);
+        if (s.plannedEta && s.eta) {
+            const a = new Date(s.eta), b = new Date(s.plannedEta);
+            if (!isNaN(a) && !isNaN(b)) m.delay.push(Math.round((a - b) / 864e5));
+        }
+    });
+
+    let rows = Object.entries(map).map(([carrier, v]) => ({
+        carrier,
+        ...v,
+        avgDelay: v.delay.length ? v.delay.reduce((a, b) => a + b, 0) / v.delay.length : 0,
+        routes: v.routes.size
+    })).filter(x => !search || `${x.carrier} ${[...x.routes].join(' ')}`.toLowerCase().includes(search))
+      .sort((a, b) => b.ship - a.ship);
+
+    const kpiContainer = document.getElementById('carrier-kpis');
+    if (kpiContainer) {
+        kpiContainer.innerHTML = `
+            <div class="feature-kpi"><span>🚢 Carriers</span><strong>${rows.length}</strong></div>
+            <div class="feature-kpi"><span>📦 Shipments</span><strong>${rows.reduce((a, x) => a + x.ship, 0)}</strong></div>
+            <div class="feature-kpi"><span>Container</span><strong>${rows.reduce((a, x) => a + x.containers, 0)}</strong></div>
+            <div class="feature-kpi good"><span>💰 Profit</span><strong>${formatINR(rows.reduce((a, x) => a + x.profit, 0))}</strong></div>
+        `;
+    }
+
+    const body = document.getElementById('carrier-detail');
+    if (body) {
+        body.innerHTML = rows.map(x => {
+            const perf = Math.max(0, 100 - Math.max(0, x.avgDelay) * 5);
+            return `<tr>
+                <td><strong>${escapeHtml(x.carrier)}</strong></td>
+                <td>${x.ship}</td>
+                <td>${x.containers}</td>
+                <td>${x.routes}</td>
+                <td>${x.del}</td>
+                <td>${x.transit}</td>
+                <td>${x.avgDelay ? x.avgDelay.toFixed(1) + ' d' : '-'}</td>
+                <td>${formatINR(x.profit)}</td>
+                <td><div class="mini-progress"><span style="width:${perf}%"></span></div><small>${perf.toFixed(0)}%</small></td>
+            </tr>`;
+        }).join('') || '<tr><td colspan="9" class="report-empty">No carrier data.</td></tr>';
+    }
+}
+
+function clearCarrierFilters() {
+    ['carrier-from', 'carrier-to', 'carrier-search'].forEach(id => {
+        const e = document.getElementById(id);
+        if (e) e.value = '';
+    });
+    renderCarrierPerformance();
+}
+
+function exportCarrierPerformanceExcel() {
+    if (typeof XLSX === 'undefined') return alert('Excel library is not loaded.');
+    const from = document.getElementById('carrier-from')?.value || '';
+    const to = document.getElementById('carrier-to')?.value || '';
+    const all = db.shipments || [];
+    const map = {};
+
+    all.filter(s => inRange(s.date || s.createdAt, from, to)).forEach(s => {
+        const c = shipmentCarrier(s);
+        if (!map[c]) map[c] = { ship: 0, containers: 0, routes: new Set(), del: 0, transit: 0, delay: [], profit: 0 };
+        const m = map[c];
+        m.ship++;
+        m.containers += containersFor(s).length;
+        m.routes.add(`${s.pol || '-'} → ${s.pod || '-'}`);
+        if (['DELIVERED', 'COMPLETED'].includes(norm(s.cargoStatus))) m.del++;
+        if (norm(s.cargoStatus) === 'IN TRANSIT') m.transit++;
+        m.profit += num(s.actualSellINR || s.sellINR || 0) - num(s.actualCostINR || s.buyINR || 0);
+        if (s.plannedEta && s.eta) {
+            const a = new Date(s.eta), b = new Date(s.plannedEta);
+            if (!isNaN(a) && !isNaN(b)) m.delay.push(Math.round((a - b) / 864e5));
+        }
+    });
+
+    const out = Object.entries(map).map(([carrier, v]) => ({
+        'Carrier': carrier,
+        'Shipments': v.ship,
+        'Containers': v.containers,
+        'Routes': v.routes.size,
+        'Delivered': v.del,
+        'In Transit': v.transit,
+        'Avg Delay Days': v.delay.length ? v.delay.reduce((a, b) => a + b, 0) / v.delay.length : 0,
+        'Profit': v.profit
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(out), 'Carrier Performance');
+    XLSX.writeFile(wb, `Carrier_Performance_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+// ---------- RECEIVABLES ----------
+function renderReceivables() {
+    const search = (document.getElementById('receivable-search')?.value || '').toLowerCase();
+    const age = document.getElementById('receivable-age')?.value || '';
+    db.invoices = Array.isArray(db.invoices) ? db.invoices : [];
+
+    let rows = db.invoices.map(x => {
+        const amount = num(x.amount || x.total);
+        const received = num(x.received || x.paid);
+        const outstanding = Math.max(0, amount - received);
+        const due = x.dueDate || x.due || x.invoiceDueDate || '';
+        let ageDays = 0;
+        let bucket = '-';
+        if (due) {
+            ageDays = Math.max(0, Math.floor((Date.now() - new Date(due).getTime()) / 864e5));
+            if (ageDays <= 30) bucket = '0-30';
+            else if (ageDays <= 60) bucket = '31-60';
+            else if (ageDays <= 90) bucket = '61-90';
+            else bucket = '90+';
+        }
+        return { ...x, customer: x.customer || x.client || '-', invoice: x.invoiceNo || x.id || '-', amount, received, outstanding, ageDays, bucket };
+    }).filter(x => {
+        const matchSearch = !search || `${x.customer} ${x.invoice}`.toLowerCase().includes(search);
+        const matchAge = !age || x.bucket === age;
+        return matchSearch && matchAge;
+    });
+
+    const total = rows.reduce((a, x) => a + x.amount, 0);
+    const received = rows.reduce((a, x) => a + x.received, 0);
+    const outstanding = rows.reduce((a, x) => a + x.outstanding, 0);
+    const over90 = rows.filter(x => x.bucket === '90+').reduce((a, x) => a + x.outstanding, 0);
+
+    const kpiContainer = document.getElementById('receivable-kpis');
+    if (kpiContainer) {
+        kpiContainer.innerHTML = `
+            <div class="feature-kpi"><span>🧾 Invoices</span><strong>${rows.length}</strong></div>
+            <div class="feature-kpi"><span>Billed</span><strong>${formatINR(total)}</strong></div>
+            <div class="feature-kpi good"><span>Received</span><strong>${formatINR(received)}</strong></div>
+            <div class="feature-kpi warn"><span>Outstanding</span><strong>${formatINR(outstanding)}</strong></div>
+            <div class="feature-kpi danger"><span>90+ Days</span><strong>${formatINR(over90)}</strong></div>
+        `;
+    }
+
+    const body = document.getElementById('receivable-detail');
+    if (body) {
+        body.innerHTML = rows.map(x => `
+            <tr>
+                <td>${escapeHtml(x.customer)}</td>
+                <td>${escapeHtml(x.invoice)}</td>
+                <td>${fmtDate(x.date || x.invoiceDate)}</td>
+                <td>${fmtDate(x.dueDate)}</td>
+                <td>${formatINR(x.amount)}</td>
+                <td>${formatINR(x.received)}</td>
+                <td>${formatINR(x.outstanding)}</td>
+                <td>${x.ageDays} d</td>
+                <td><span class="feature-status ${x.outstanding === 0 ? 'low' : x.ageDays > 90 ? 'critical' : x.ageDays > 30 ? 'high' : 'medium'}">${x.outstanding === 0 ? 'PAID' : x.bucket}</span></td>
+            </tr>
+        `).join('') || '<tr><td colspan="9" class="report-empty">No invoice data found.</td></tr>';
+    }
+}
+
+function clearReceivableFilters() {
+    const search = document.getElementById('receivable-search');
+    if (search) search.value = '';
+    const age = document.getElementById('receivable-age');
+    if (age) age.value = '';
+    renderReceivables();
+}
+
+function exportReceivablesExcel() {
+    if (typeof XLSX === 'undefined') return alert('Excel library is not loaded.');
+    db.invoices = Array.isArray(db.invoices) ? db.invoices : [];
+
+    const out = db.invoices.map(x => {
+        const amount = num(x.amount || x.total);
+        const received = num(x.received || x.paid);
+        const outstanding = Math.max(0, amount - received);
+        const due = x.dueDate || x.due || x.invoiceDueDate || '';
+        let ageDays = 0;
+        let ageing = '-';
+        if (due) {
+            ageDays = Math.max(0, Math.floor((Date.now() - new Date(due).getTime()) / 864e5));
+            if (ageDays <= 30) ageing = '0-30';
+            else if (ageDays <= 60) ageing = '31-60';
+            else if (ageDays <= 90) ageing = '61-90';
+            else ageing = '90+';
+        }
+        return {
+            'Customer': x.customer || x.client || '-',
+            'Invoice': x.invoiceNo || x.id || '-',
+            'Date': x.date || x.invoiceDate || '',
+            'Due Date': due,
+            'Amount': amount,
+            'Received': received,
+            'Outstanding': outstanding,
+            'Age Days': ageDays,
+            'Ageing': ageing
+        };
+    });
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(out), 'Receivables');
+    XLSX.writeFile(wb, `Receivables_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+// ---------- REFRESH ALL NEW MODULES ----------
+function refreshAllV11() {
+    try { renderInvoiceTab(); } catch (e) {}
+    try { renderDSRExceptions(); } catch (e) {}
+    try { renderCutoffCalendar(); } catch (e) {}
+    try { renderContainerTracker(); } catch (e) {}
+    try { renderSalesReport(); } catch (e) {}
+    try { renderOperationsReport(); } catch (e) {}
+    try { renderProfitabilityReport(); } catch (e) {}
+    try { renderCustomer360(); } catch (e) {}
+    try { renderCarrierPerformance(); } catch (e) {}
+    try { renderReceivables(); } catch (e) {}
+}
+
+// ---------- SWITCH TAB HANDLING ----------
+// Override switchToTab to call the appropriate render functions for new tabs
+const originalSwitch = window.switchToTab;
+window.switchToTab = function(tab) {
+    if (originalSwitch) originalSwitch(tab);
+    setTimeout(() => {
+        switch (tab) {
+            case 'invoice': renderInvoiceTab(); break;
+            case 'dsr-exceptions': renderDSRExceptions(); break;
+            case 'cutoff-calendar': renderCutoffCalendar(); break;
+            case 'container-tracker': renderContainerTracker(); break;
+            case 'salesreport': renderSalesReport(); break;
+            case 'opsreport': renderOperationsReport(); break;
+            case 'profitreport': renderProfitabilityReport(); break;
+            case 'customer360': renderCustomer360(); break;
+            case 'carrierreport': renderCarrierPerformance(); break;
+            case 'receivables': renderReceivables(); break;
+        }
+    }, 50);
+};
+
+// ---------- OVERRIDE SETFOLLOWUPSTATUS FOR WON ----------
+const originalSetFollowUp = window.setFollowUpStatus;
+window.setFollowUpStatus = function(target, mode, idx, status) {
+    if (status === 'WON') {
+        const rec = db[target]?.[mode]?.[idx];
+        if (rec) {
+            rec.followUpStatus = 'WON';
+            rec.followUpUpdated = new Date().toISOString();
+            rec.lastModified = new Date().toISOString();
+            saveDB();
+            if (typeof renderRecords === 'function') renderRecords(target);
+            if (typeof renderFollowups === 'function') renderFollowups();
+            // Show WON bridge
+            showWon(target, mode, idx);
+            return;
+        }
+    }
+    if (originalSetFollowUp) originalSetFollowUp(target, mode, idx, status);
+};
+
+function showWon(target, mode, idx) {
+    const rec = db[target]?.[mode]?.[idx];
+    if (!rec) return;
+    let modal = document.getElementById('v91WonModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'v91WonModal';
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="v9-won-modal">
+                <div class="modal-header"><div><h3>🏆 Quote Won — Create DSR</h3><small>Customer, route, carrier and references will be auto-fetched.</small></div><button class="btn btn-clear" onclick="document.getElementById('v91WonModal').classList.remove('show')">×</button></div>
+                <div id="v91WonBody" class="v91-invoice-body"></div>
+                <div class="v91-invoice-actions"><button class="btn btn-clear" onclick="document.getElementById('v91WonModal').classList.remove('show')">Not Now</button><button class="btn btn-success" id="v91WonOpen">🚢 Open DSR with Auto Data</button></div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+    const rr = rec.requestRef || rec.rateRequestRef || '';
+    document.getElementById('v91WonBody').innerHTML = `
+        <div class="v91-invoice-summary">
+            <div><span>QUOTE REF</span><b>${escapeHtml(rec.quoteNumber || '-')}</b></div>
+            <div><span>REQUEST REF</span><b>${escapeHtml(rr || '-')}</b></div>
+            <div><span>CUSTOMER</span><b>${escapeHtml(rec.client || '-')}</b></div>
+            <div><span>MODE</span><b>${escapeHtml(mode.toUpperCase())}</b></div>
+            <div><span>ROUTE</span><b>${escapeHtml(rec.pol || '-')} → ${escapeHtml(rec.pod || '-')}</b></div>
+            <div><span>CARRIER</span><b>${escapeHtml(rec.carrier || '-')}</b></div>
+        </div>
+        <div class="dsr-ref-sync-note">✓ When DSR opens, Quote Ref + Request Ref will already be available. Remaining operational fields can be reviewed before Save.</div>
+    `;
+    document.getElementById('v91WonOpen').onclick = function() {
+        modal.classList.remove('show');
+        setTimeout(() => {
+            if (typeof addShipmentFromQuote === 'function') addShipmentFromQuote(target, mode, idx);
+            else alert('Shipment conversion function not available.');
+        }, 100);
+    };
+    modal.classList.add('show');
+}
+
+// ---------- INITIALISE ON DOM READY ----------
+document.addEventListener('DOMContentLoaded', function() {
+    if (!db.invoices) db.invoices = [];
+    // Render invoice tab if it's the active tab on load
+    setTimeout(() => {
+        const panel = document.getElementById('invoice');
+        if (panel && panel.classList.contains('active')) renderInvoiceTab();
+    }, 300);
+});
+
 
 // ==================== INIT ====================
 function init() {
@@ -13092,11 +14708,6 @@ function bulkImportDefaultCharges(input) {
     input.value = '';
 }
 
-function updateSelectedCount() {
-    const count = document.querySelectorAll('.dc-checkbox:checked, .cc-checkbox:checked').length;
-    const el = document.getElementById('selected-count');
-    if (el) el.textContent = count + ' selected';
-}
 
 function bulkDeleteSelectedLocal() {
     const selected = document.querySelectorAll('.dc-checkbox:checked, .cc-checkbox:checked');
@@ -14157,8 +15768,8 @@ function buildRateRequestCompactEmailHTML(data) {
     if (format === 'seaWithShipper') {
         rows = rows.concat([
             ['SHIPPER', data.shipper || '-'],
-            ['POL', data.pol || '-'],
             ['FORWARDER', data.forwarder || company],
+			['POL', data.pol || '-'],         
             ['POD', data.pod || '-'],
             ['INVENTORY', data.inventory || '-'],
             ['COMMODITY', data.commodity || '-'],
@@ -14169,8 +15780,8 @@ function buildRateRequestCompactEmailHTML(data) {
         ]);
     } else if (format === 'seaWithoutShipper') {
         rows = rows.concat([
-            ['POL', data.pol || '-'],
             ['FORWARDER', data.forwarder || company],
+			['POL', data.pol || '-'],            
             ['POD', data.pod || '-'],
             ['INVENTORY', data.inventory || '-'],
             ['COMMODITY', data.commodity || '-'],
@@ -14201,7 +15812,7 @@ function buildRateRequestCompactEmailHTML(data) {
         </tr>
     `).join('');
 
-    let html = `<div style="font-family:'Aptos','Segoe UI',Arial,sans-serif;max-width:17cm;min-width:13cm;width:auto;margin:0 auto;background:#ffffff;padding:4px;box-sizing:border-box;color:#1a1a1a;font-size:10px;">
+    let html = `<div style="font-family:'Aptos','Segoe UI',Arial,sans-serif;max-width:17cm;min-width:6cm;width:auto;margin:0 auto;background:#ffffff;padding:4px;box-sizing:border-box;color:#1a1a1a;font-size:10px;">
         <p style="margin:0 0 4px 0;font-size:13px;line-height:1.4;">Dear Sir/Madam,</p>
         <br>
         <p style="margin:0 0 10px 0;font-size:13px;line-height:1.4;">Good Day !</p>
@@ -14646,15 +16257,41 @@ function renderEnhancedRates() {
     const paginationEl = document.getElementById('rates-pagination');
     if (!container) return;
 
-    // --- Get filter values ---
+    // ===== FIX: REMOVE all existing toolbars in the rates tab =====
+    document.querySelectorAll('#rates .rates-action-bar').forEach(el => el.remove());
+
+    // ===== Create the toolbar fresh (if not exists) =====
+    let toolbarEl = document.getElementById('rates-toolbar');
+    if (!toolbarEl) {
+        toolbarEl = document.createElement('div');
+        toolbarEl.id = 'rates-toolbar';
+        toolbarEl.className = 'rates-action-bar';
+        toolbarEl.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; margin:8px 0; align-items:center;';
+        toolbarEl.innerHTML = `
+            <span style="font-weight:600; font-size:0.8rem; color:var(--text-light); margin-right:8px;">Actions:</span>
+            <button class="btn btn-sm btn-preview" onclick="ratesBulkAction('preview')">👁 Preview</button>
+            <button class="btn btn-sm btn-pdf" onclick="ratesBulkAction('pdf')">📄 PDF</button>
+            <button class="btn btn-sm btn-email" onclick="ratesBulkAction('email')">📧 Email</button>
+            <button class="btn btn-sm btn-success" onclick="ratesBulkAction('convert')">🚢 Convert to Shipment</button>
+            <button class="btn btn-sm btn-duplicate" onclick="ratesBulkAction('duplicate')">📋 Duplicate</button>
+            <button class="btn btn-sm btn-draft" onclick="ratesBulkAction('edit')">✏️ Edit</button>
+            <button class="btn btn-sm btn-clear" onclick="ratesBulkAction('delete')">🗑️ Delete</button>
+            <span style="margin-left:auto; font-size:0.75rem; color:var(--text-light);" id="rates-selected-count">0 selected</span>
+        `;
+        const filterRow = document.querySelector('#rates .filter-row');
+        if (filterRow) filterRow.after(toolbarEl);
+        else container.before(toolbarEl);
+    }
+
+    // ===== Get filter values =====
     const searchText = (document.getElementById('rates-search-text')?.value || '').toLowerCase();
     const searchQN = (document.getElementById('rates-search-qn')?.value || '').toLowerCase();
-    const searchDate = document.getElementById('rates-search-date')?.value || ''; // ✅ NEW
+    const searchDate = document.getElementById('rates-search-date')?.value || '';
     const statusFilter = document.getElementById('rates-status-filter')?.value || '';
     const modeFilter = document.getElementById('rates-mode-filter')?.value || '';
     const userFilter = document.getElementById('rates-user-filter')?.value || '';
 
-    // --- Collect all quotes from SEA, AIR, LCL ---
+    // ===== Collect all quotes =====
     let allQuotes = [];
     ['sea', 'air', 'lcl'].forEach(mode => {
         (db.rates[mode] || []).forEach((quote, idx) => {
@@ -14667,39 +16304,33 @@ function renderEnhancedRates() {
         });
     });
 
-    // --- Populate User Filter dropdown dynamically ---
+    // ===== Populate user filter dropdown =====
     const userSelect = document.getElementById('rates-user-filter');
     if (userSelect) {
         const users = [...new Set(allQuotes.map(q => q.sales || q.createdBy || db.defaultUser || 'Unknown'))].filter(Boolean);
         const currentVal = userSelect.value;
-        userSelect.innerHTML = '<option value="">All Users</option>' + 
+        userSelect.innerHTML = '<option value="">All Users</option>' +
             users.map(u => `<option value="${u}" ${u === currentVal ? 'selected' : ''}>${u}</option>`).join('');
     }
 
-    // --- Apply filters ---
+    // ===== Apply filters =====
     let filtered = allQuotes.filter(q => {
-        // Search by text
         if (searchText) {
             const searchable = `${q.quoteNumber||''} ${q.client||''} ${q.pol||''} ${q.pod||''}`.toLowerCase();
             if (!searchable.includes(searchText)) return false;
         }
-        // Search by Quote Number
         if (searchQN && !(q.quoteNumber||'').toLowerCase().includes(searchQN)) return false;
-        // ✅ Search by Date
         if (searchDate) {
             const d = new Date(q.timestamp).toISOString().split('T')[0];
             if (d !== searchDate) return false;
         }
-        // Status
         if (statusFilter && (q.followUpStatus || 'PENDING') !== statusFilter) return false;
-        // Mode
         if (modeFilter && q._modeLabel !== modeFilter) return false;
-        // User
         if (userFilter && (q.sales || q.createdBy || db.defaultUser) !== userFilter) return false;
         return true;
     });
 
-    // --- Sort ---
+    // ===== Sort =====
     const sortKey = ratesSortColumn;
     const sortOrder = ratesSortOrder === 'asc' ? 1 : -1;
     filtered.sort((a, b) => {
@@ -14715,10 +16346,10 @@ function renderEnhancedRates() {
         return sortOrder * valA.localeCompare(valB);
     });
 
-    // --- Update Counters ---
+    // ===== Update counters =====
     updateRatesCounters(allQuotes, filtered);
 
-    // --- Pagination ---
+    // ===== Pagination =====
     const perPage = 10;
     const total = filtered.length;
     const totalPages = Math.ceil(total / perPage) || 1;
@@ -14737,7 +16368,7 @@ function renderEnhancedRates() {
         return;
     }
 
-    // --- Build HTML for each quote row ---
+    // ===== Build table =====
     let html = `
     <div class="rates-table-wrapper">
         <table class="rates-enhanced-table" id="rates-table">
@@ -14814,10 +16445,11 @@ function renderEnhancedRates() {
     html += `</tbody></table></div>`;
     container.innerHTML = html;
 
-    // --- Update sort arrows ---
+    // ===== Update sort arrows and selection count =====
     updateSortArrows();
+    updateSelectedCount();
 
-    // --- Pagination ---
+    // ===== Pagination footer =====
     if (totalPages <= 1) {
         paginationEl.innerHTML = '';
     } else {
@@ -14826,8 +16458,6 @@ function renderEnhancedRates() {
         pagHtml += `<button class="page-btn" onclick="changeRatesPage(${page + 1})" ${page === totalPages ? 'disabled' : ''}>Next ›</button>`;
         paginationEl.innerHTML = pagHtml;
     }
-
-    updateSelectedCount();
 }
 
 function updateSortArrows() {
@@ -14902,35 +16532,57 @@ function ratesBulkAction(action) {
         alert('Please select at least one quote.');
         return;
     }
-    if (action === 'preview') {
-        const q = selected[0];
-        previewSavedRecord('rates', q._mode, q._idx);
-    } else if (action === 'pdf') {
-        const q = selected[0];
-        downloadSavedPDF('rates', q._mode, q._idx);
-    } else if (action === 'email') {
-        const q = selected[0];
-        emailSavedQuote('rates', q._mode, q._idx);
-    } else if (action === 'duplicate') {
-        selected.forEach(q => {
-            duplicateQuote('rates', q._mode, q._idx);
-        });
-        alert(`Duplicated ${selected.length} quote(s).`);
-    } else if (action === 'edit') {
-        const q = selected[0];
-        editRecord('rates', q._mode, q._idx);
-    } else if (action === 'delete') {
-        if (!confirm(`Delete ${selected.length} selected quote(s)?`)) return;
-        // Delete in reverse order to avoid index shifting
-        const toDelete = selected.map(q => ({ mode: q._mode, idx: q._idx })).reverse();
-        toDelete.forEach(({ mode, idx }) => {
-            if (idx < db.rates[mode].length) {
-                db.rates[mode].splice(idx, 1);
-            }
-        });
-        saveDB();
-        renderRecords('rates');
-        alert('Selected quotes deleted.');
+
+    switch(action) {
+        case 'preview':
+            previewSavedRecord('rates', selected[0]._mode, selected[0]._idx);
+            break;
+        case 'pdf':
+            downloadSavedPDF('rates', selected[0]._mode, selected[0]._idx);
+            break;
+        case 'email':
+            emailSavedQuote('rates', selected[0]._mode, selected[0]._idx);
+            break;
+        case 'duplicate':
+            if (!confirm(`Duplicate ${selected.length} selected quote(s)?`)) return;
+            selected.forEach(q => duplicateQuote('rates', q._mode, q._idx));
+            renderRecords('rates');
+            alert(`Duplicated ${selected.length} quote(s).`);
+            break;
+        case 'edit':
+            editRecord('rates', selected[0]._mode, selected[0]._idx);
+            break;
+        case 'delete':
+            if (!confirm(`Delete ${selected.length} selected quote(s)? This cannot be undone.`)) return;
+            const toDelete = selected.map(q => ({ mode: q._mode, idx: q._idx })).sort((a, b) => b.idx - a.idx);
+            toDelete.forEach(({ mode, idx }) => {
+                if (idx < db.rates[mode].length) db.rates[mode].splice(idx, 1);
+            });
+            saveDB();
+            renderRecords('rates');
+            alert('Selected quotes deleted.');
+            break;
+        case 'convert':
+            if (!confirm(`Convert ${selected.length} selected quote(s) to shipments?`)) return;
+            let converted = 0, skipped = 0;
+            selected.forEach(q => {
+                if (q.convertedToShipment) {
+                    skipped++;
+                    return;
+                }
+                try {
+                    addShipmentFromQuote('rates', q._mode, q._idx, true); // true = no modal
+                    converted++;
+                } catch(e) {
+                    console.error('Conversion error:', e);
+                    skipped++;
+                }
+            });
+            alert(`✅ Converted ${converted} quotes to shipments.\n⏭️ ${skipped} skipped (already converted or errors).`);
+            renderRecords('rates');
+            break;
+        default:
+            alert('Unknown action.');
     }
 }
 
@@ -14988,7 +16640,9 @@ function renderEnhancedDrafts() {
 
     let container = document.getElementById('drafts-list-container');
     let paginationEl = document.getElementById('drafts-pagination');
+    let toolbarEl = document.getElementById('drafts-toolbar');
 
+    // If elements don't exist, create them
     if (!container) {
         container = document.createElement('div');
         container.id = 'drafts-list-container';
@@ -14996,14 +16650,33 @@ function renderEnhancedDrafts() {
         if (filterRow) filterRow.after(container);
         else draftsPanel.appendChild(container);
     }
-
     if (!paginationEl) {
         paginationEl = document.createElement('div');
         paginationEl.id = 'drafts-pagination';
         paginationEl.className = 'pagination';
         container.after(paginationEl);
     }
+    if (!toolbarEl) {
+        toolbarEl = document.createElement('div');
+        toolbarEl.id = 'drafts-toolbar';
+        toolbarEl.className = 'rates-action-bar';
+        toolbarEl.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; margin:8px 0; align-items:center;';
+        toolbarEl.innerHTML = `
+            <span style="font-weight:600; font-size:0.8rem; color:var(--text-light); margin-right:8px;">Actions:</span>
+            <button class="btn btn-sm btn-preview" onclick="draftsBulkAction('preview')">👁 Preview</button>
+            <button class="btn btn-sm btn-pdf" onclick="draftsBulkAction('pdf')">📄 PDF</button>
+            <button class="btn btn-sm btn-email" onclick="draftsBulkAction('email')">📧 Email</button>
+            <button class="btn btn-sm btn-duplicate" onclick="draftsBulkAction('duplicate')">📋 Duplicate</button>
+            <button class="btn btn-sm btn-draft" onclick="draftsBulkAction('edit')">✏️ Edit</button>
+            <button class="btn btn-sm btn-clear" onclick="draftsBulkAction('delete')">🗑️ Delete</button>
+            <span style="margin-left:auto; font-size:0.75rem; color:var(--text-light);" id="drafts-selected-count">0 selected</span>
+        `;
+        const filterRow = draftsPanel.querySelector('.filter-row');
+        if (filterRow) filterRow.after(toolbarEl);
+        else draftsPanel.prepend(toolbarEl);
+    }
 
+    // Remove old list items
     ['drafts-sea-list', 'drafts-air-list', 'drafts-lcl-list'].forEach(id => {
         const old = document.getElementById(id);
         if (old) old.remove();
@@ -15070,15 +16743,16 @@ function renderEnhancedDrafts() {
     if (total === 0) {
         container.innerHTML = '<p style="color:var(--text-light);padding:20px;text-align:center;">No drafts found.</p>';
         paginationEl.innerHTML = '';
+        updateDraftsSelectedCount();
         return;
     }
 
-    // Build table with fixed widths
     let html = `
     <div class="rates-table-wrapper">
         <table class="rates-enhanced-table">
             <thead>
                 <tr>
+                    <th style="width:5%"checkbox" id="drafts-select-all" onchange="toggleAllDraftsCheckboxes()" /></th>
                     <th style="width:12%;" data-sort="quoteNumber" onclick="sortDrafts('quoteNumber')">QUOTE REF <span class="sort-arrow"></span></th>
                     <th style="width:15%;" data-sort="client" onclick="sortDrafts('client')">CUSTOMER <span class="sort-arrow"></span></th>
                     <th style="width:14%;" data-sort="pol" onclick="sortDrafts('pol')">ORIGIN <span class="sort-arrow"></span></th>
@@ -15086,7 +16760,6 @@ function renderEnhancedDrafts() {
                     <th style="width:8%;" data-sort="_modeLabel" onclick="sortDrafts('_modeLabel')">SERVICE <span class="sort-arrow"></span></th>
                     <th style="width:12%;" data-sort="validityDate" onclick="sortDrafts('validityDate')">VALID TILL <span class="sort-arrow"></span></th>
                     <th style="width:10%;" data-sort="timestamp" onclick="sortDrafts('timestamp')">CREATED ON <span class="sort-arrow"></span></th>
-                    <th style="width:15%;">ACTIONS</th>
                 </tr>
             </thead>
             <tbody>
@@ -15119,6 +16792,7 @@ function renderEnhancedDrafts() {
 
         html += `
             <tr style="background:${rowBg};">
+                <td style="text-align:center;"><input type="checkbox" class="drafts-row-checkbox" data-mode="${d._mode}" data-idx="${d._idx}" onchange="updateDraftsSelectedCount()" /></td>
                 <td><strong>${d.quoteNumber || 'N/A'}</strong></td>
                 <td>${d.client || '-'}</td>
                 <td>${d.pol || '-'}</td>
@@ -15126,13 +16800,6 @@ function renderEnhancedDrafts() {
                 <td><span class="service-badge">${service}</span></td>
                 <td>${validityDisplay}</td>
                 <td>${createdDisplay}</td>
-                <td>
-                    <button class="btn btn-sm btn-preview" onclick="editRecord('drafts','${d._mode}',${d._idx})" title="Edit">✏️</button>
-                    <button class="btn btn-sm btn-preview" onclick="previewSavedRecord('drafts','${d._mode}',${d._idx})" title="Preview">👁</button>
-                    <button class="btn btn-sm btn-pdf" onclick="downloadSavedPDF('drafts','${d._mode}',${d._idx})" title="PDF">📄</button>
-                    <button class="btn btn-sm btn-duplicate" onclick="duplicateQuote('drafts','${d._mode}',${d._idx})" title="Duplicate">📋</button>
-                    <button class="btn btn-sm btn-clear" onclick="deleteRecord('drafts','${d._mode}',${d._idx})" title="Delete">×</button>
-                </td>
             </tr>
         `;
     });
@@ -15141,6 +16808,7 @@ function renderEnhancedDrafts() {
     container.innerHTML = html;
 
     updateDraftsSortArrows();
+    updateDraftsSelectedCount();
 
     if (totalPages <= 1) {
         paginationEl.innerHTML = '';
@@ -15151,6 +16819,74 @@ function renderEnhancedDrafts() {
         paginationEl.innerHTML = pagHtml;
     }
 }
+
+// ===== DRAFTS BULK ACTIONS =====
+
+function toggleAllDraftsCheckboxes() {
+    const checked = document.getElementById('drafts-select-all').checked;
+    document.querySelectorAll('.drafts-row-checkbox').forEach(cb => cb.checked = checked);
+    updateDraftsSelectedCount();
+}
+
+function updateDraftsSelectedCount() {
+    const checked = document.querySelectorAll('.drafts-row-checkbox:checked').length;
+    const el = document.getElementById('drafts-selected-count');
+    if (el) el.textContent = checked + ' selected';
+}
+
+function getSelectedDrafts() {
+    const selected = [];
+    document.querySelectorAll('.drafts-row-checkbox:checked').forEach(cb => {
+        const mode = cb.dataset.mode;
+        const idx = parseInt(cb.dataset.idx);
+        if (mode && !isNaN(idx)) {
+            selected.push({ mode, idx });
+        }
+    });
+    return selected;
+}
+
+function draftsBulkAction(action) {
+    const selected = getSelectedDrafts();
+    if (selected.length === 0) {
+        alert('Please select at least one draft.');
+        return;
+    }
+
+    if (action === 'preview') {
+        const first = selected[0];
+        previewSavedRecord('drafts', first.mode, first.idx);
+    } else if (action === 'pdf') {
+        const first = selected[0];
+        downloadSavedPDF('drafts', first.mode, first.idx);
+    } else if (action === 'email') {
+        const first = selected[0];
+        emailSavedQuote('drafts', first.mode, first.idx);
+    } else if (action === 'duplicate') {
+        if (!confirm(`Duplicate ${selected.length} selected draft(s)?`)) return;
+        selected.forEach(({ mode, idx }) => {
+            duplicateQuote('drafts', mode, idx);
+        });
+        renderRecords('drafts');
+        alert(`Duplicated ${selected.length} draft(s).`);
+    } else if (action === 'edit') {
+        const first = selected[0];
+        editRecord('drafts', first.mode, first.idx);
+    } else if (action === 'delete') {
+        if (!confirm(`Delete ${selected.length} selected draft(s)? This cannot be undone.`)) return;
+        // Sort indices in reverse to avoid shifting
+        const toDelete = selected.map(s => ({ mode: s.mode, idx: s.idx })).sort((a, b) => b.idx - a.idx);
+        toDelete.forEach(({ mode, idx }) => {
+            if (idx < db.drafts[mode].length) {
+                db.drafts[mode].splice(idx, 1);
+            }
+        });
+        saveDB();
+        renderRecords('drafts');
+        alert('Selected drafts deleted.');
+    }
+}
+
 
 function updateDraftsCounters(allDrafts, filtered) {
     const countersEl = document.getElementById('drafts-counters');
@@ -15205,6 +16941,7 @@ function renderEnhancedRRDrafts() {
 
     let container = document.getElementById('rrdrafts-list-container');
     let paginationEl = document.getElementById('rrdrafts-pagination');
+    let toolbarEl = document.getElementById('rrdrafts-toolbar');
 
     if (!container) {
         container = document.createElement('div');
@@ -15213,12 +16950,29 @@ function renderEnhancedRRDrafts() {
         if (filterRow) filterRow.after(container);
         else rrPanel.appendChild(container);
     }
-
     if (!paginationEl) {
         paginationEl = document.createElement('div');
         paginationEl.id = 'rrdrafts-pagination';
         paginationEl.className = 'pagination';
         container.after(paginationEl);
+    }
+    if (!toolbarEl) {
+        toolbarEl = document.createElement('div');
+        toolbarEl.id = 'rrdrafts-toolbar';
+        toolbarEl.className = 'rates-action-bar';
+        toolbarEl.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; margin:8px 0; align-items:center;';
+        toolbarEl.innerHTML = `
+            <span style="font-weight:600; font-size:0.8rem; color:var(--text-light); margin-right:8px;">Actions:</span>
+            <button class="btn btn-sm btn-preview" onclick="rrBulkAction('preview')">👁 Preview</button>
+            <button class="btn btn-sm btn-quoted" onclick="rrBulkAction('convert')">📤 Quote</button>
+            <button class="btn btn-sm btn-duplicate" onclick="rrBulkAction('duplicate')">📋 Duplicate</button>
+            <button class="btn btn-sm btn-draft" onclick="rrBulkAction('edit')">✏️ Edit</button>
+            <button class="btn btn-sm btn-clear" onclick="rrBulkAction('delete')">🗑️ Delete</button>
+            <span style="margin-left:auto; font-size:0.75rem; color:var(--text-light);" id="rrdrafts-selected-count">0 selected</span>
+        `;
+        const filterRow = rrPanel.querySelector('.filter-row');
+        if (filterRow) filterRow.after(toolbarEl);
+        else rrPanel.prepend(toolbarEl);
     }
 
     const oldList = document.getElementById('rrdrafts-list');
@@ -15277,22 +17031,22 @@ function renderEnhancedRRDrafts() {
     if (total === 0) {
         container.innerHTML = '<p style="color:var(--text-light);padding:20px;text-align:center;">No RR drafts found.</p>';
         paginationEl.innerHTML = '';
+        updateRRSelectedCount();
         return;
     }
 
-    // Build table with fixed widths
     let html = `
     <div class="rates-table-wrapper">
         <table class="rates-enhanced-table">
             <thead>
                 <tr>
+                    <th style="width:5%;"><input type="checkbox" id="rrdrafts-select-all" onchange="toggleAllRRCheckboxes()" /></th>
                     <th style="width:14%;" data-sort="quoteNumber" onclick="sortRR('quoteNumber')">QUOTE REF <span class="sort-arrow"></span></th>
                     <th style="width:16%;" data-sort="shipper" onclick="sortRR('shipper')">SHIPPER <span class="sort-arrow"></span></th>
                     <th style="width:14%;" data-sort="pol" onclick="sortRR('pol')">POL <span class="sort-arrow"></span></th>
                     <th style="width:14%;" data-sort="pod" onclick="sortRR('pod')">POD <span class="sort-arrow"></span></th>
                     <th style="width:10%;" data-sort="mode" onclick="sortRR('mode')">MODE <span class="sort-arrow"></span></th>
                     <th style="width:12%;" data-sort="timestamp" onclick="sortRR('timestamp')">CREATED ON <span class="sort-arrow"></span></th>
-                    <th style="width:20%;">ACTIONS</th>
                 </tr>
             </thead>
             <tbody>
@@ -15312,19 +17066,13 @@ function renderEnhancedRRDrafts() {
 
         html += `
             <tr style="background:${rowBg};">
+                <td style="text-align:center;"><input type="checkbox" class="rr-row-checkbox" data-idx="${rr._idx}" onchange="updateRRSelectedCount()" /></td>
                 <td><strong>${rr.quoteNumber || 'N/A'}</strong></td>
                 <td>${rr.shipper || rr.forwarder || '-'}</td>
                 <td>${rr.pol || '-'}</td>
                 <td>${rr.pod || '-'}</td>
                 <td><span class="service-badge">${modeIcon} ${modeDisplay}</span></td>
                 <td>${createdDisplay}</td>
-                <td>
-                    <button class="btn btn-sm btn-preview" onclick="editRecord('drafts','rr',${rr._idx})" title="Edit">✏️</button>
-                    <button class="btn btn-sm btn-preview" onclick="previewRateRequestDraft('drafts','rr',${rr._idx})" title="Preview">👁</button>
-                    <button class="btn btn-sm btn-quoted" onclick="convertRRToQuote('drafts','rr',${rr._idx})" title="Convert to Quote">📤</button>
-                    <button class="btn btn-sm btn-duplicate" onclick="duplicateQuote('drafts','rr',${rr._idx})" title="Duplicate">📋</button>
-                    <button class="btn btn-sm btn-clear" onclick="deleteRecord('drafts','rr',${rr._idx})" title="Delete">×</button>
-                </td>
             </tr>
         `;
     });
@@ -15333,6 +17081,7 @@ function renderEnhancedRRDrafts() {
     container.innerHTML = html;
 
     updateRRSortArrows();
+    updateRRSelectedCount();
 
     if (totalPages <= 1) {
         paginationEl.innerHTML = '';
@@ -15343,6 +17092,72 @@ function renderEnhancedRRDrafts() {
         paginationEl.innerHTML = pagHtml;
     }
 }
+
+// ===== RR DRAFTS BULK ACTIONS =====
+
+function toggleAllRRCheckboxes() {
+    const checked = document.getElementById('rrdrafts-select-all').checked;
+    document.querySelectorAll('.rr-row-checkbox').forEach(cb => cb.checked = checked);
+    updateRRSelectedCount();
+}
+
+function updateRRSelectedCount() {
+    const checked = document.querySelectorAll('.rr-row-checkbox:checked').length;
+    const el = document.getElementById('rrdrafts-selected-count');
+    if (el) el.textContent = checked + ' selected';
+}
+
+function getSelectedRR() {
+    const selected = [];
+    document.querySelectorAll('.rr-row-checkbox:checked').forEach(cb => {
+        const idx = parseInt(cb.dataset.idx);
+        if (!isNaN(idx)) selected.push(idx);
+    });
+    return selected;
+}
+
+function rrBulkAction(action) {
+    const indices = getSelectedRR();
+    if (indices.length === 0) {
+        alert('Please select at least one RR draft.');
+        return;
+    }
+
+    if (action === 'preview') {
+        const first = indices[0];
+        previewRateRequestDraft('drafts', 'rr', first);
+    } else if (action === 'convert') {
+        if (!confirm(`Convert ${indices.length} selected RR draft(s) to quotes?`)) return;
+        indices.forEach(idx => {
+            convertRRToQuote('drafts', 'rr', idx);
+        });
+        renderRecords('rrdrafts');
+        alert(`Converted ${indices.length} RR draft(s).`);
+    } else if (action === 'duplicate') {
+        if (!confirm(`Duplicate ${indices.length} selected RR draft(s)?`)) return;
+        indices.forEach(idx => {
+            duplicateQuote('drafts', 'rr', idx);
+        });
+        renderRecords('rrdrafts');
+        alert(`Duplicated ${indices.length} RR draft(s).`);
+    } else if (action === 'edit') {
+        const first = indices[0];
+        editRecord('drafts', 'rr', first);
+    } else if (action === 'delete') {
+        if (!confirm(`Delete ${indices.length} selected RR draft(s)? This cannot be undone.`)) return;
+        // Sort descending to avoid shifting
+        const sorted = indices.sort((a, b) => b - a);
+        sorted.forEach(idx => {
+            if (idx < db.drafts.rr.length) {
+                db.drafts.rr.splice(idx, 1);
+            }
+        });
+        saveDB();
+        renderRecords('rrdrafts');
+        alert('Selected RR drafts deleted.');
+    }
+}
+
 
 function updateRRCounters(allRR, filtered) {
     const countersEl = document.getElementById('rrdrafts-counters');
