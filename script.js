@@ -9548,45 +9548,38 @@ function buildInvoicePreviewHTML(data, compact = false) {
     const company = db.companyName || 'GATEWAY EXIM';
     const address = db.companyAddress || '';
     const userName = getLoggedInUserName() || db.defaultUser || 'N/A';
+    const modeLabel = data.mode || 'INVOICE';
 
     const lines = data.chargeLines || [];
     let grandTotal = 0;
     let chargeRows = '';
 
-    // Compact mode: smaller fonts, padding, and fixed width
-    const isCompact = compact;
-    const baseFont = isCompact ? '9px' : '0.78rem';
-    const headingSize = isCompact ? '10px' : '0.90rem';
-    const titleFont = isCompact ? '14px' : '1.2rem';
-    const thPadding = isCompact ? '2px 5px' : '4px 7px';
-    const tdPadding = isCompact ? '2px 5px' : '4px 7px';
-    const containerPadding = isCompact ? '2px' : '10px';
-    const headerHeight = isCompact ? '22px' : '32px';
-    const tableWidth = isCompact ? '13cm' : '100%';
-
-    // Build charge rows
+    // ---- Build charge rows (same as quote preview) ----
     if (lines.length) {
         chargeRows = lines.map((l, i) => {
             const total = l.total || 0;
             grandTotal += total;
             const basisDisplay = l.basis || 'Normal';
+            // Determine if this is a "Freight" type for highlighting (optional)
+            const isFreight = l.name.toUpperCase().includes('FREIGHT');
+            const rowStyle = isFreight ? 'background:#fee2e2;font-weight:700;color:#dc2626;' : '';
             return `
-                <tr>
-                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;width:10%;font-size:${baseFont};">${i+1}</td>
-                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;width:25%;font-weight:100;font-size:${baseFont};">${escapeHtml(l.name)}</td>
-                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;width:10%;font-size:${baseFont};">${escapeHtml(l.currency || 'INR')}</td>
-                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;width:15%;font-size:${baseFont};">${Number(l.rate || 0).toLocaleString('en-IN')}</td>
-                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;width:10%;font-size:${baseFont};">${escapeHtml(basisDisplay)}</td>
-                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;width:29%;font-weight:100;font-size:${baseFont};">${formatINR(total)}</td>
+                <tr style="${rowStyle}">
+                    <td style="border:1px solid #d1d5db;padding:4px 7px;text-align:center;width:10%;">${i+1}</td>
+                    <td style="border:1px solid #d1d5db;padding:4px 7px;text-align:left;width:25%;font-weight:600;">${escapeHtml(l.name)}</td>
+                    <td style="border:1px solid #d1d5db;padding:4px 7px;text-align:center;width:10%;">${escapeHtml(l.currency || 'INR')}</td>
+                    <td style="border:1px solid #d1d5db;padding:4px 7px;text-align:right;width:15%;">${Number(l.rate || 0).toLocaleString('en-IN')}</td>
+                    <td style="border:1px solid #d1d5db;padding:4px 7px;text-align:center;width:10%;">${escapeHtml(basisDisplay)}</td>
+                    <td style="border:1px solid #d1d5db;padding:4px 7px;text-align:right;width:29%;font-weight:600;">${formatINR(total)}</td>
                 </tr>
             `;
         }).join('');
     } else {
-        chargeRows = `<tr><td colspan="6" style="padding:12px;text-align:center;color:#94a3b8;font-size:${baseFont};">No charges found</td></tr>`;
+        chargeRows = `<tr><td colspan="6" style="padding:20px;text-align:center;color:#94a3b8;">No charges found</td></tr>`;
         grandTotal = parseFloat(data.amount || data.total) || 0;
     }
 
-    // Detail rows
+    // ---- Customer & Shipment Details (same as quote preview) ----
     const detailRows = [
         ['Invoice No.', escapeHtml(data.invoiceNo || data.id || '-'), 'Status', escapeHtml(data.status || 'ISSUED')],
         ['Customer', escapeHtml(data.customer || data.client || '-'), 'Mode', escapeHtml(data.mode || '-')],
@@ -9596,33 +9589,159 @@ function buildInvoicePreviewHTML(data, compact = false) {
         ['Payment Terms', escapeHtml(data.paymentTerms || '-'), '', '']
     ];
 
-    let detailHtml = `<table style="width:100%;border-collapse:collapse;font-size:${baseFont};table-layout:fixed;">
+    // ---- Use EXACT same styles as buildPreviewHTML ----
+    const baseFont = compact ? '0.65rem' : '0.78rem';
+    const headingSize = compact ? '0.75rem' : '0.90rem';
+    const titleFont = compact ? '1rem' : '1.2rem';
+    const thPadding = compact ? '2px 5px' : '4px 7px';
+    const tdPadding = compact ? '2px 5px' : '4px 7px';
+    const containerPadding = compact ? '4px' : '10px';
+    const headerHeight = compact ? '28px' : '32px';
+    const maxWidth = compact ? '1cm' : '100%';
+
+    // ---- Details table (identical to quote preview) ----
+    let detailHtml = `
+        <table style="width:100%;border-collapse:collapse;font-size:${baseFont};">
+            <thead>
+                <tr><th colspan="4" style="border:1px solid #1e3a8a;padding:${thPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;height:${headerHeight};">Customer & Shipment Details</th></tr>
+            </thead>
+            <tbody>
+    `;
+    detailRows.forEach((row, idx) => {
+        const bg = idx % 2 === 0 ? '#f1f5f9' : 'white';
+        // Skip empty columns
+        const hasThirdCol = row[2] && row[3];
+        detailHtml += `<tr style="background:${bg};">
+            <td style="border:1px solid #d1d5db;padding:${tdPadding};font-weight:700;width:20%;">${row[0]}</td>
+            <td style="border:1px solid #d1d5db;padding:${tdPadding};width:30%;">${row[1]}</td>
+            ${hasThirdCol ? `<td style="border:1px solid #d1d5db;padding:${tdPadding};font-weight:700;width:20%;">${row[2]}</td><td style="border:1px solid #d1d5db;padding:${tdPadding};width:30%;">${row[3]}</td>` : `<td colspan="2" style="border:1px solid #d1d5db;padding:${tdPadding};"></td>`}
+        </tr>`;
+    });
+    detailHtml += `</tbody></table>`;
+
+    // ---- Charges table (identical to quote preview) ----
+    let chargeHtml = `
+        <table style="width:100%;border-collapse:collapse;font-size:${baseFont};margin-top:8px;">
+            <thead>
+                <tr><th colspan="6" style="border:1px solid #1e3a8a;padding:${thPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;height:${headerHeight};">Freight & Carrier Charges</th></tr>
+                <tr>
+                    <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:10%;">Sr. No</th>
+                    <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:25%;">Charge Type</th>
+                    <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:10%;">Currency</th>
+                    <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:15%;">Sell Amount</th>
+                    <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:10%;">Basis</th>
+                    <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:29%;">INR Equivalent</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${chargeRows}
+            </tbody>
+            <tfoot>
+                <tr style="font-weight:700;background:#e6f7e6;">
+                    <td colspan="5" style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;font-size:${baseFont};">Grand Total</td>
+                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;font-size:${baseFont};">${formatINR(grandTotal)}</td>
+                </tr>
+            </tfoot>
+        </table>
+    `;
+
+    // ---- Final assembly (identical to quote preview) ----
+    return `
+        <div style="background:#ffffff;color:#1a1a1a;font-family:'Segoe UI',Arial,sans-serif;max-width:${maxWidth};margin:0 auto;padding:${containerPadding};box-sizing:border-box;">
+            <div style="border-bottom:2px solid #1e3a8a;padding-bottom:6px;margin-bottom:8px;">
+                <div style="font-size:${compact ? '0.8rem' : '0.9rem'};font-weight:700;color:#1e3a8a;">${escapeHtml(company)}</div>
+                <div style="font-size:${compact ? '0.55rem' : '0.65rem'};color:#64748b;">${escapeHtml(address)}</div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+                <div style="text-align:left;">
+                    <div style="font-size:${titleFont};color:#1e3a8a;font-weight:800;letter-spacing:1px;">🧾 INVOICE</div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-family:'Courier New',monospace;color:#d97706;font-weight:700;font-size:${compact ? '0.7rem' : '0.85rem'};background:#fffbeb;padding:4px 10px;border-radius:4px;">${escapeHtml(data.invoiceNo || data.id || 'DRAFT')}</div>
+                </div>
+            </div>
+            ${detailHtml}
+            ${chargeHtml}
+            <div style="margin-top:8px;font-size:${compact ? '0.55rem' : '0.68rem'};color:#64748b;text-align:center;border-top:1px solid #e2e8f0;padding-top:10px;">
+                <p style="margin:2px 0;">This is a system-generated invoice.</p>
+                <p style="margin:2px 0;">Generated on ${new Date().toLocaleString('en-IN')}</p>
+                <div style="font-size:${compact ? '0.5rem' : '0.65rem'};color:#64748b;margin-top:2px;">Prepared By: ${escapeHtml(userName)}</div>
+            </div>
+        </div>
+    `;
+}
+
+// ---------- Build Invoice Compact HTML (same as SEA Quote) ----------
+function buildInvoiceCompactHTML(data) {
+    const company = db.companyName || 'GATEWAY EXIM';
+    const address = db.companyAddress || '';
+    const userName = getLoggedInUserName() || db.defaultUser || 'N/A';
+    const validityDisplay = data.validityDate ? new Date(data.validityDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+
+    const lines = data.chargeLines || [];
+    let grandTotal = 0;
+    let chargeRows = '';
+
+    if (lines.length) {
+        chargeRows = lines.map((l, i) => {
+            const total = l.total || 0;
+            grandTotal += total;
+            const basisDisplay = l.basis || 'Normal';
+            const isFreight = l.name.toUpperCase() === 'FREIGHT' || l.name.toUpperCase() === 'AIR FREIGHT';
+            const rowStyle = isFreight ? 'background:#fee2e2;font-weight:700;color:#dc2626;' : '';
+            return `
+                <tr style="${rowStyle}">
+                    <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:center;font-size:10px;line-height:1.4;vertical-align:middle;width:10%;">${i+1}</td>
+                    <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:left;font-size:10px;line-height:1.4;vertical-align:middle;width:30%;">${escapeHtml(l.name)}</td>
+                    <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:center;font-size:10px;line-height:1.4;vertical-align:middle;width:10%;">${escapeHtml(l.currency || 'INR')}</td>
+                    <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:center;font-size:10px;line-height:1.4;vertical-align:middle;width:15%;">${Number(l.rate || 0).toLocaleString('en-IN')}</td>
+                    <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:center;font-size:10px;line-height:1.4;vertical-align:middle;width:10%;">${escapeHtml(basisDisplay)}</td>
+                    <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:right;font-size:10px;line-height:1.4;vertical-align:middle;width:29%;font-weight:600;">${formatINR(total)}</td>
+                </tr>
+            `;
+        }).join('');
+    } else {
+        chargeRows = `<tr><td colspan="6" style="padding:8px;text-align:center;color:#94a3b8;font-size:10px;">No charges found</td></tr>`;
+        grandTotal = parseFloat(data.amount || data.total) || 0;
+    }
+
+    // ---- Customer Details (same 4-column layout) ----
+    const detailRows = [
+        ['Invoice No.', escapeHtml(data.invoiceNo || data.id || '-'), 'Status', escapeHtml(data.status || 'ISSUED')],
+        ['Customer', escapeHtml(data.customer || data.client || '-'), 'Mode', escapeHtml(data.mode || '-')],
+        ['POL', escapeHtml(data.pol || '-'), 'POD', escapeHtml(data.pod || '-')],
+        ['Carrier', escapeHtml(data.carrier || '-'), 'Invoice Date', fmtDate(data.invoiceDate)],
+        ['Quote Ref', escapeHtml(data.quoteRef || '-'), 'Due Date', fmtDate(data.dueDate)],
+        ['Payment Terms', escapeHtml(data.paymentTerms || '-'), '', '']
+    ];
+
+    let detailHtml = `<table style="width:15cm;min-width:15cm;max-width:100%;border-collapse:collapse;margin-top:0;font-size:10px;">
         <thead>
-            <tr><th colspan="4" style="border:1px solid #1e3a8a;padding:${thPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;height:${headerHeight};">Invoice Details</th></tr>
+            <tr><th colspan="4" style="border:1px solid #1e3a8a;padding:4px 8px;text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:12px;line-height:1.4;vertical-align:middle;">Invoice Details</th></tr>
         </thead>
         <tbody>`;
     detailRows.forEach((row, idx) => {
         const bg = idx % 2 === 0 ? '#f1f5f9' : 'white';
         detailHtml += `<tr style="background:${bg};">
-            <td style="border:1px solid #d1d5db;padding:${tdPadding};font-weight:700;width:20%;font-size:${baseFont};">${row[0]}</td>
-            <td style="border:1px solid #d1d5db;padding:${tdPadding};width:30%;font-size:${baseFont};">${row[1]}</td>
-            <td style="border:1px solid #d1d5db;padding:${tdPadding};font-weight:700;width:20%;font-size:${baseFont};">${row[2]}</td>
-            <td style="border:1px solid #d1d5db;padding:${tdPadding};width:30%;font-size:${baseFont};">${row[3]}</td>
+            <th style="border:1px solid #d1d5db;padding:4px 8px;text-align:left;background:#d2e5f7;font-weight:700;width:20%;font-size:10px;">${row[0]}</th>
+            <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:left;width:30%;font-size:10px;">${row[1]}</td>
+            <th style="border:1px solid #d1d5db;padding:4px 8px;text-align:left;background:#d2e5f7;font-weight:700;width:20%;font-size:10px;">${row[2]}</th>
+            <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:left;width:30%;font-size:10px;">${row[3]}</td>
         </tr>`;
     });
-    detailHtml += `</tbody></table>`;
+    detailHtml += `</tbody></table><br>`;
 
-    // Charges table
-    let chargeHtml = `<table style="width:100%;border-collapse:collapse;font-size:${baseFont};margin-top:6px;table-layout:fixed;">
+    // ---- Charges Table ----
+    let chargeHtml = `<table style="width:15cm;min-width:15cm;max-width:100%;border-collapse:collapse;margin-top:0;font-size:10px;">
         <thead>
-            <tr><th colspan="6" style="border:1px solid #1e3a8a;padding:${thPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;height:${headerHeight};">CHARGES BREAKDOWN</th></tr>
+            <tr><th colspan="6" style="border:1px solid #1e3a8a;padding:4px 8px;text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:12px;line-height:1.4;vertical-align:middle;">CHARGES BREAKDOWN</th></tr>
             <tr>
-                <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:10%;">Sr.</th>
-                <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:25%;">Charge</th>
-                <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:10%;">Curr</th>
-                <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:15%;">Rate</th>
-                <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:10%;">Basis</th>
-                <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:29%;">Amount</th>
+                <th style="border:1px solid #d1d5db;padding:4px 8px;text-align:center;background:#3896d9;color:white;font-weight:700;font-size:10px;width:10%;">Sr. No</th>
+                <th style="border:1px solid #d1d5db;padding:4px 8px;text-align:left;background:#3896d9;color:white;font-weight:700;font-size:10px;width:30%;">Charge Type</th>
+                <th style="border:1px solid #d1d5db;padding:4px 8px;text-align:right;background:#3896d9;color:white;font-weight:700;font-size:10px;width:10%;">Currency</th>
+                <th style="border:1px solid #d1d5db;padding:4px 8px;text-align:right;background:#3896d9;color:white;font-weight:700;font-size:10px;width:15%;">Rate</th>
+                <th style="border:1px solid #d1d5db;padding:4px 8px;text-align:center;background:#3896d9;color:white;font-weight:700;font-size:10px;width:10%;">Basis</th>
+                <th style="border:1px solid #d1d5db;padding:4px 8px;text-align:right;background:#3896d9;color:white;font-weight:700;font-size:10px;width:29%;">Amount</th>
             </tr>
         </thead>
         <tbody>
@@ -9630,46 +9749,22 @@ function buildInvoicePreviewHTML(data, compact = false) {
         </tbody>
         <tfoot>
             <tr style="font-weight:700;background:#e6f7e6;">
-                <td colspan="5" style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;width:71%;font-size:${baseFont};">Grand Total</td>
-                <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;width:29%;font-size:${baseFont};">${formatINR(grandTotal)}</td>
+                <td colspan="5" style="border:1px solid #d1d5db;padding:4px 8px;text-align:right;font-size:10px;width:71%;">Grand Total</td>
+                <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:right;font-size:10px;width:29%;">${formatINR(grandTotal)}</td>
             </tr>
         </tfoot>
     </table>`;
 
-    // Container style: fixed width for compact, full width for normal
-    const containerStyle = isCompact
-        ? `width:13cm; margin:0 auto; padding:${containerPadding}; box-sizing:border-box; background:#ffffff; color:#1a1a1a; font-family:'Segoe UI',Arial,sans-serif;`
-        : `max-width:100%; margin:0 auto; padding:${containerPadding}; box-sizing:border-box; background:#ffffff; color:#1a1a1a; font-family:'Segoe UI',Arial,sans-serif;`;
-
-    return `
-        <div id="invoice-preview-container" style="${containerStyle}">
-            <!-- Company Header -->
-            <div style="border-bottom:2px solid #1e3a8a;padding-bottom:4px;margin-bottom:6px;">
-                <div style="font-size:${isCompact ? '12px' : '0.9rem'};font-weight:700;color:#1e3a8a;">${escapeHtml(company)}</div>
-                <div style="font-size:${isCompact ? '8px' : '0.65rem'};color:#64748b;">${escapeHtml(address)}</div>
-            </div>
-
-            <!-- Title -->
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
-                <div style="text-align:left;">
-                    <div style="font-size:${titleFont};color:#1e3a8a;font-weight:800;letter-spacing:1px;">🧾 INVOICE</div>
-                </div>
-                <div style="text-align:right;">
-                    <div style="font-family:'Courier New',monospace;color:#d97706;font-weight:700;font-size:${isCompact ? '10px' : '0.85rem'};background:#fffbeb;padding:2px 8px;border-radius:4px;">${escapeHtml(data.invoiceNo || data.id || 'DRAFT')}</div>
-                </div>
-            </div>
-
-            ${detailHtml}
-            ${chargeHtml}
-
-            <!-- Footer -->
-            <div style="margin-top:6px;font-size:${isCompact ? '8px' : '0.68rem'};color:#64748b;text-align:center;border-top:1px solid #e2e8f0;padding-top:6px;">
-                <p style="margin:2px 0;">This is a system-generated invoice.</p>
-                <p style="margin:2px 0;">Generated on ${new Date().toLocaleString('en-IN')}</p>
-                <div style="font-size:${isCompact ? '7px' : '0.65rem'};color:#64748b;margin-top:2px;">Prepared By: ${escapeHtml(userName)}</div>
-            </div>
-        </div>
-    `;
+    // ---- Final Assembly (same as quote compact) ----
+    return `<div style="max-width:17cm;min-width:15cm;width:auto;margin:0 auto;font-family:'Aptos','Segoe UI',Arial,sans-serif;background:#ffffff;padding:4px;box-sizing:border-box;color:#1a1a1a;font-size:10px;">
+        <p style="margin:0 0 4px 0;font-size:13px;line-height:1.4;">Dear Sir / Madam,</p>
+        <br>
+        <p style="margin:0 0 10px 0;font-size:13px;line-height:1.4;">Good day !</p>
+        <div style="font-size:13px;font-weight:800;color:#1e3a8a;">🧾 INVOICE / ${escapeHtml(data.invoiceNo || data.id || 'DRAFT')}</div>
+        <br>
+        ${detailHtml}
+        ${chargeHtml}
+    </div>`;
 }
 
 // ---------- Copy Invoice Tables (Compact) ----------
@@ -9679,9 +9774,7 @@ function copyInvoiceTables() {
         alert('No invoice data available. Please open a preview first.');
         return;
     }
-
-    // Compact mode with fixed width (13cm) and smaller fonts
-    const compactHtml = buildInvoicePreviewHTML(data, true);
+    const compactHtml = buildInvoiceCompactHTML(data);
 
     if (navigator.clipboard && navigator.clipboard.write) {
         const blobHTML = new Blob([compactHtml], { type: 'text/html' });
@@ -9691,7 +9784,7 @@ function copyInvoiceTables() {
             'text/plain': blobPlain
         });
         navigator.clipboard.write([clipboardItem])
-            .then(() => alert('✅ Invoice copied with formatting (fixed width).'))
+            .then(() => alert('✅ Invoice tables copied with formatting.'))
             .catch(() => fallbackCopyText(compactHtml));
     } else {
         fallbackCopyText(compactHtml);
@@ -9703,17 +9796,19 @@ function openInvoicePreviewV11(no) {
     const x = (db.invoices || []).find(i => (i.invoiceNo || i.id) === no);
     if (!x) return alert('Invoice not found.');
 
+    // Store data for copy function
     window._previewInvoiceData = x;
 
-    // Normal preview – full width, normal font
-    const html = buildInvoicePreviewHTML(x, false);
+    // Build preview with the same format as Quote Preview (full HTML)
+    const fullHtml = buildInvoicePreviewHTML(x); // Keep the existing full preview builder if you want
 
+    // For the modal, we show the full preview with copy button
     document.getElementById('v11-inv-title').textContent = `Invoice Preview — ${x.invoiceNo || x.id}`;
     document.getElementById('v11-inv-preview-body').innerHTML = `
         <div style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">
             <button class="btn btn-info" onclick="copyInvoiceTables()">📋 Copy Tables (Compact)</button>
         </div>
-        ${html}
+        ${fullHtml}
     `;
     document.getElementById('v11-inv-preview-body').style.background = 'white';
     document.getElementById('v11InvoicePreview').classList.add('show');
@@ -17578,4 +17673,80 @@ function ratesheetBulkAction(action) {
         default:
             alert('Unknown action');
     }
+}
+
+
+// ============================================================
+// REPORTING MENU (exactly like Measurement)
+// ============================================================
+// ============================================================
+// REPORTING MENU (exactly like Measurement)
+// ============================================================
+
+function showReportingMenu() {
+    const menu = document.getElementById('reporting-menu');
+    const content = document.getElementById('reporting-content');
+    if (menu) menu.style.display = 'block';
+    if (content) content.style.display = 'none';
+    document.querySelectorAll('#reporting .report-panel').forEach(p => {
+        p.style.display = 'none';
+        p.classList.remove('active');
+    });
+}
+
+function switchReportTab(reportId) {
+    const menu = document.getElementById('reporting-menu');
+    const content = document.getElementById('reporting-content');
+    if (menu) menu.style.display = 'none';
+    if (content) content.style.display = 'block';
+    document.querySelectorAll('#reporting .report-panel').forEach(p => {
+        p.style.display = 'none';
+        p.classList.remove('active');
+    });
+    const panel = document.getElementById(`report-panel-${reportId}`);
+    if (panel) {
+        panel.style.display = 'block';
+        panel.classList.add('active');
+        // Auto-render the report
+        switch (reportId) {
+            case 'salesreport': renderSalesReport(); break;
+            case 'opsreport': renderOperationsReport(); break;
+            case 'dashboard': renderDashboard(); break;
+            case 'profitreport': renderProfitabilityReport(); break;
+            case 'customer360': renderCustomer360(); break;
+            case 'dsr-exceptions': renderDSRExceptions(); break;
+            case 'cutoff-calendar': renderCutoffCalendar(); break;
+            case 'container-tracker': renderContainerTracker(); break;
+            case 'carrierreport': renderCarrierPerformance(); break;
+        }
+    }
+}
+
+// Override switchToTab – show Reporting menu when Reporting is opened
+const originalSwitchToTab = window.switchToTab;
+window.switchToTab = function(tab) {
+    if (originalSwitchToTab) originalSwitchToTab(tab);
+    if (tab === 'reporting') {
+        setTimeout(showReportingMenu, 50);
+    }
+};
+
+let currentLocalTab = 'sea';
+
+function switchLocalTab(mode) {
+    currentLocalTab = mode;
+
+    // Update sub-tab buttons
+    document.querySelectorAll('.local-sub-tabs .master-tab').forEach(t => t.classList.remove('active'));
+    const activeBtn = document.querySelector(`.local-sub-tabs .master-tab[data-local="${mode}"]`);
+    if (activeBtn) activeBtn.classList.add('active');
+
+    // Update content panels
+    document.querySelectorAll('.local-content-panel').forEach(p => p.classList.remove('active'));
+    const targetPanel = document.getElementById(`local-${mode}-content`);
+    if (targetPanel) targetPanel.classList.add('active');
+
+    // Render the appropriate charges
+    renderDefaultChargesMaster(mode);
+    renderCarrierChargesMaster(mode === 'sea' ? 'sealcl' : mode);
 }
