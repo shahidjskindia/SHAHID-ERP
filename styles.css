@@ -4995,3 +4995,58 @@ th[data-sort]:hover {
     font-size: .65rem;
     font-weight: 900;
 }
+
+
+
+/* ============================================================
+   REPORTING MENU (like Measurement)
+   ============================================================ */
+
+#reporting .form-section {
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+#reporting .form-section:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+    border-color: var(--primary-light);
+}
+#reporting .form-section:active {
+    transform: translateY(0);
+}
+
+#reporting .report-panel {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+#reporting .report-panel.active {
+    display: block;
+}
+
+@media (max-width: 768px) {
+    #reporting .form-section {
+        padding: 12px !important;
+    }
+    #reporting .form-section div:first-child {
+        font-size: 1.5rem !important;
+    }
+    #reporting .form-section div:last-child {
+        font-size: 0.75rem !important;
+    }
+}
+
+/* ---- Local Charges Sub-Tabs ---- */
+.local-sub-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 8px;
+}
+.local-content-panel {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+.local-content-panel.active {
+    display: block;
+}
