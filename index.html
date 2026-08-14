@@ -76,11 +76,9 @@
                     <button class="tab-btn-vertical" data-tab="dsr" type="button">🚢 Shipment List</button>
                     <button class="tab-btn-vertical" data-tab="bldraft" type="button">📄 BL Draft</button>
 					<button class="tab-btn-vertical" data-tab="invoice" type="button">🧾 Invoice</button>
-					<button class="tab-btn-vertical" data-tab="dsr-exceptions" type="button">⚠️ Exceptions</button>
-					<button class="tab-btn-vertical" data-tab="cutoff-calendar" type="button">⏱️ Cut-off Calendar</button>
-					<button class="tab-btn-vertical" data-tab="container-tracker" type="button">📦 Container Tracker</button>
                 </div>
             </div>
+			
             <!-- REPORTS -->
             <div class="nav-category">
                 <div class="nav-category-header" onclick="toggleCategory('reports')">
@@ -88,16 +86,14 @@
                 </div>
                 <div class="nav-category-items" id="cat-reports">
 					<button class="tab-btn-vertical" data-tab="planner" type="button">📅 Planner</button>
-                    <button class="tab-btn-vertical" data-tab="dashboard" type="button">📊 Dashboard</button>
-					<button class="tab-btn-vertical" data-tab="salesreport" type="button">💰 Sales Report</button>
-					<button class="tab-btn-vertical" data-tab="opsreport" type="button">🚚 Operations Report</button>
-					<button class="tab-btn-vertical" data-tab="profitreport" type="button">💵 Profitability</button>
-					<button class="tab-btn-vertical" data-tab="customer360" type="button">👤 Customer 360</button>
-					<button class="tab-btn-vertical" data-tab="carrierreport" type="button">🚢 Carrier Performance</button>
-					<button class="tab-btn-vertical" data-tab="receivables" type="button">💳 Receivables</button>
-                    <button class="tab-btn-vertical" data-tab="measurement" type="button">📏 Measurement</button>
+                    <button class="tab-btn-vertical" data-tab="receivables" type="button">💳 Receivables</button>
+					<button class="tab-btn-vertical" data-tab="reporting" type="button">📊 Reporting</button>
+					<button class="tab-btn-vertical" data-tab="measurement" type="button">📏 Measurement</button>
                 </div>
             </div>
+			
+			
+			
             <!-- ADMIN -->
             <div class="nav-category">
                 <div class="nav-category-header" onclick="toggleCategory('admin')">
@@ -105,9 +101,7 @@
                 </div>
                 <div class="nav-category-items" id="cat-admin">
                     <button class="tab-btn-vertical" data-tab="database" type="button">🗄️ Database</button>
-                    <button class="tab-btn-vertical" data-tab="sealocal" type="button">🚢 Sea Local Charges</button>
-                    <button class="tab-btn-vertical" data-tab="airlocal" type="button">✈️ Air Local Charges</button>
-                    <button class="tab-btn-vertical" data-tab="lcllocal" type="button">📦 LCL Local Charges</button>
+					<button class="tab-btn-vertical" data-tab="localcharges" type="button">📋 Local Charges</button> 
                 </div>
             </div>
         </nav>
@@ -894,6 +888,210 @@
                 </div>
             </div>
 			
+			
+						<!-- ===== REPORTING (exactly like Measurement) ===== -->
+			<div class="tab-panel" id="reporting">
+				<div class="tab-heading"><h2>📊 Reporting Command Center</h2></div>
+
+				<!-- MAIN MENU - Card Grid -->
+				<div id="reporting-menu" style="display:block;">
+					<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:12px;">
+						<div class="form-section" style="cursor:pointer;text-align:center;padding:20px;" onclick="switchReportTab('salesreport')">
+							<div style="font-size:2rem;">💰</div>
+							<div style="font-weight:700;">Sales Report</div>
+						</div>
+						<div class="form-section" style="cursor:pointer;text-align:center;padding:20px;" onclick="switchReportTab('opsreport')">
+							<div style="font-size:2rem;">🚚</div>
+							<div style="font-weight:700;">Operations Report</div>
+						</div>
+						<div class="form-section" style="cursor:pointer;text-align:center;padding:20px;" onclick="switchReportTab('dashboard')">
+							<div style="font-size:2rem;">📊</div>
+							<div style="font-weight:700;">Dashboard & Analytics</div>
+						</div>
+						<div class="form-section" style="cursor:pointer;text-align:center;padding:20px;" onclick="switchReportTab('profitreport')">
+							<div style="font-size:2rem;">💵</div>
+							<div style="font-weight:700;">Profitability Intelligence</div>
+						</div>
+						<div class="form-section" style="cursor:pointer;text-align:center;padding:20px;" onclick="switchReportTab('customer360')">
+							<div style="font-size:2rem;">👤</div>
+							<div style="font-weight:700;">Customer 360</div>
+						</div>
+						<div class="form-section" style="cursor:pointer;text-align:center;padding:20px;" onclick="switchReportTab('dsr-exceptions')">
+							<div style="font-size:2rem;">⚠️</div>
+							<div style="font-weight:700;">Shipment Exception Center</div>
+						</div>
+						<div class="form-section" style="cursor:pointer;text-align:center;padding:20px;" onclick="switchReportTab('cutoff-calendar')">
+							<div style="font-size:2rem;">⏱️</div>
+							<div style="font-weight:700;">Cut‑off Calendar</div>
+						</div>
+						<div class="form-section" style="cursor:pointer;text-align:center;padding:20px;" onclick="switchReportTab('container-tracker')">
+							<div style="font-size:2rem;">📦</div>
+							<div style="font-weight:700;">Container Tracker</div>
+						</div>
+						<div class="form-section" style="cursor:pointer;text-align:center;padding:20px;" onclick="switchReportTab('carrierreport')">
+							<div style="font-size:2rem;">🚢</div>
+							<div style="font-weight:700;">Carrier Performance</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- CONTENT AREA (sub-panels, hidden by default) -->
+				<div id="reporting-content" style="display:none; margin-top:12px;">
+					<div style="margin-bottom:12px;">
+						<button class="btn btn-clear" onclick="showReportingMenu()">⬅ Back to Menu</button>
+					</div>
+
+					<!-- ===== SALES REPORT ===== -->
+					<div class="report-panel" id="report-panel-salesreport">
+						<div class="tab-heading"><div><h2>💰 Sales Report</h2><div class="module-subtitle">Quotation performance, conversion, revenue and margin</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderSalesReport()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportSalesReportExcel()">📊 Excel</button></div></div>
+						<div class="report-filter-bar">
+							<input type="date" id="sales-report-from" onchange="renderSalesReport()">
+							<input type="date" id="sales-report-to" onchange="renderSalesReport()">
+							<select id="sales-report-mode" onchange="renderSalesReport()"><option value="">All Modes</option><option value="sea">SEA</option><option value="air">AIR</option><option value="lcl">LCL</option></select>
+							<select id="sales-report-status" onchange="renderSalesReport()"><option value="">All Follow-up</option><option value="WON">WON</option><option value="LOST">LOST</option><option value="PENDING">PENDING</option></select>
+							<select id="sales-report-shipper" onchange="renderSalesReport()"><option value="">All Shippers</option></select>
+							<button class="btn btn-clear btn-sm" onclick="clearSalesReportFilters()">Clear</button>
+						</div>
+						<div class="report-kpi-grid">
+							<div class="report-kpi"><span>Total Quotes</span><strong id="sales-r-total">0</strong></div>
+							<div class="report-kpi"><span>Won</span><strong id="sales-r-won">0</strong></div>
+							<div class="report-kpi"><span>Conversion</span><strong id="sales-r-conv">0%</strong></div>
+							<div class="report-kpi"><span>Revenue</span><strong id="sales-r-revenue">₹ 0</strong></div>
+							<div class="report-kpi"><span>Margin</span><strong id="sales-r-margin">₹ 0</strong></div>
+						</div>
+						<div class="report-grid-2">
+							<div class="form-section"><h3>🏆 Client Performance</h3><div id="sales-client-report"></div></div>
+							<div class="form-section"><h3>🛣️ Route Performance</h3><div id="sales-route-report"></div></div>
+						</div>
+						<div class="form-section"><h3>📋 Quote Performance Detail</h3><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Quote</th><th>Mode</th><th>Client</th><th>POL</th><th>POD</th><th>Status</th><th>Sell</th><th>Margin</th><th>Validity</th></tr></thead><tbody id="sales-detail-report"></tbody></table></div></div>
+					</div>
+
+					<!-- ===== OPERATIONS REPORT ===== -->
+					<div class="report-panel" id="report-panel-opsreport">
+						<div class="tab-heading"><div><h2>🚚 Operations Report</h2><div class="module-subtitle">Shipment milestones, document control and delivery performance</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderOperationsReport()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportOperationsReportExcel()">📊 Excel</button></div></div>
+						<div class="report-filter-bar">
+							<input type="date" id="ops-report-from" onchange="renderOperationsReport()">
+							<input type="date" id="ops-report-to" onchange="renderOperationsReport()">
+							<select id="ops-report-mode" onchange="renderOperationsReport()"><option value="">All Modes</option><option value="SEA">SEA</option><option value="AIR">AIR</option></select>
+							<select id="ops-report-cargo" onchange="renderOperationsReport()"><option value="">All Cargo Status</option></select>
+							<button class="btn btn-clear btn-sm" onclick="clearOperationsReportFilters()">Clear</button>
+						</div>
+						<div class="report-kpi-grid">
+							<div class="report-kpi"><span>Total Shipments</span><strong id="ops-r-total">0</strong></div>
+							<div class="report-kpi"><span>In Transit</span><strong id="ops-r-transit">0</strong></div>
+							<div class="report-kpi"><span>Docs Pending</span><strong id="ops-r-docs">0</strong></div>
+							<div class="report-kpi"><span>Delivered</span><strong id="ops-r-delivered">0</strong></div>
+							<div class="report-kpi"><span>On‑Time ETA</span><strong id="ops-r-ontime">-</strong></div>
+						</div>
+						<div class="report-grid-2">
+							<div class="form-section"><h3>📦 Cargo Status</h3><div id="ops-cargo-report"></div></div>
+							<div class="form-section"><h3>📄 Documentation Status</h3><div id="ops-docs-report"></div></div>
+						</div>
+						<div class="form-section"><h3>🧭 Shipment Detail</h3><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Job</th><th>Mode</th><th>Shipper</th><th>Route</th><th>Liner</th><th>ETD</th><th>ETA</th><th>Cargo</th><th>Docs</th></tr></thead><tbody id="ops-detail-report"></tbody></table></div></div>
+					</div>
+
+					<!-- ===== DASHBOARD ===== -->
+					<div class="report-panel" id="report-panel-dashboard">
+						<div class="tab-heading"><h2>📊 Dashboard & Analytics</h2></div>
+						<div class="counters">
+							<div class="counter-card" style="border-color:#10b981;"><div class="counter-label">💰 Total Revenue</div><div class="counter-value" id="dash-total-revenue">₹ 0</div></div>
+							<div class="counter-card" style="border-color:#8b5cf6;"><div class="counter-label">📈 Total Margin</div><div class="counter-value" id="dash-total-margin">₹ 0</div></div>
+							<div class="counter-card" style="border-color:#3b82f6;"><div class="counter-label">📊 Total Quotes</div><div class="counter-value" id="dash-total-quotes">0</div></div>
+							<div class="counter-card" style="border-color:#10b981;"><div class="counter-label">✅ Conversion Rate</div><div class="counter-value" id="dash-conversion">0%</div></div>
+							<div class="counter-card" style="border-color:#f59e0b;"><div class="counter-label">⚠️ Expiring Soon (3d)</div><div class="counter-value" id="dash-expiring">0</div></div>
+							<div class="counter-card" style="border-color:#ef4444;"><div class="counter-label">❌ Expired Quotes</div><div class="counter-value" id="dash-expired">0</div></div>
+						</div>
+						<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+							<div class="form-section"><h3>🏆 Top 10 Clients</h3><ul style="list-style:none;max-height:300px;overflow-y:auto;" id="dash-top-clients"></ul></div>
+							<div class="form-section"><h3>🛣️ Top 10 Routes</h3><ul style="list-style:none;max-height:300px;overflow-y:auto;" id="dash-top-routes"></ul></div>
+						</div>
+					</div>
+
+					<!-- ===== PROFITABILITY ===== -->
+					<div class="report-panel" id="report-panel-profitreport">
+						<div class="tab-heading"><div><h2>💵 Profitability Intelligence</h2><div class="module-subtitle">Estimated vs actual shipment profitability</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderProfitabilityReport()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportProfitabilityExcel()">📊 Excel</button></div></div>
+						<div class="report-filter-bar">
+							<input type="date" id="profit-from" onchange="renderProfitabilityReport()">
+							<input type="date" id="profit-to" onchange="renderProfitabilityReport()">
+							<select id="profit-mode" onchange="renderProfitabilityReport()"><option value="">All Modes</option><option>SEA</option><option>AIR</option><option>LCL</option></select>
+							<input id="profit-search" class="search-box" placeholder="Customer / Job / Route" oninput="renderProfitabilityReport()">
+							<button class="btn btn-clear btn-sm" onclick="clearProfitFilters()">Clear</button>
+						</div>
+						<div class="report-kpi-grid" id="profit-kpis"></div>
+						<div class="report-grid-2">
+							<div class="form-section"><h3>👤 Customer Profitability</h3><div id="profit-customer-report"></div></div>
+							<div class="form-section"><h3>🛣️ Route Profitability</h3><div id="profit-route-report"></div></div>
+						</div>
+						<div class="form-section"><h3>📋 Shipment Profit Detail</h3><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Job</th><th>Customer</th><th>Mode</th><th>Route</th><th>Est Sell</th><th>Est Cost</th><th>Actual Sell</th><th>Actual Cost</th><th>Profit</th><th>Margin %</th><th>Variance</th></tr></thead><tbody id="profit-detail"></tbody></table></div></div>
+					</div>
+
+					<!-- ===== CUSTOMER 360 ===== -->
+					<div class="report-panel" id="report-panel-customer360">
+						<div class="tab-heading"><div><h2>👤 Customer 360</h2><div class="module-subtitle">Quotes + shipments + revenue + profitability + activity</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderCustomer360()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportCustomer360Excel()">📊 Excel</button></div></div>
+						<div class="report-filter-bar">
+							<input id="customer360-search" class="search-box" placeholder="Search customer" oninput="renderCustomer360()">
+							<select id="customer360-mode" onchange="renderCustomer360()"><option value="">All Modes</option><option>SEA</option><option>AIR</option><option>LCL</option></select>
+							<button class="btn btn-clear btn-sm" onclick="clearCustomer360()">Clear</button>
+						</div>
+						<div class="form-section">
+							<div class="report-table-wrap"><table class="report-table"><thead><tr><th>Customer</th><th>Quotes</th><th>Won</th><th>Shipments</th><th>Revenue</th><th>Profit</th><th>Conversion</th><th>Last Activity</th><th>Score</th><th>Open</th></tr></thead><tbody id="customer360-detail"></tbody></table></div>
+						</div>
+						<div id="customer360-drawer" class="feature-drawer"></div>
+					</div>
+
+					<!-- ===== EXCEPTION CENTER ===== -->
+					<div class="report-panel" id="report-panel-dsr-exceptions">
+						<div class="tab-heading"><div><h2>⚠️ Shipment Exception Center</h2><div class="module-subtitle">Operational exceptions, risk scoring and action ownership</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderDSRExceptions()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportDSRExceptionsExcel()">📊 Excel</button></div></div>
+						<div class="report-kpi-grid" id="exception-kpis"></div>
+						<div class="report-filter-bar">
+							<input id="exception-search" class="search-box" placeholder="Search Job / Customer / Exception" oninput="renderDSRExceptions()">
+							<select id="exception-severity" onchange="renderDSRExceptions()"><option value="">All Severity</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option></select>
+							<select id="exception-owner" onchange="renderDSRExceptions()"><option value="">All Owners</option></select>
+							<button class="btn btn-clear btn-sm" onclick="clearExceptionFilters()">Clear</button>
+						</div>
+						<div class="form-section"><h3>🚨 Open Exceptions</h3><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Risk</th><th>Job</th><th>Customer</th><th>Exception</th><th>Severity</th><th>Due</th><th>Owner</th><th>Action</th></tr></thead><tbody id="exception-detail"></tbody></table></div></div>
+					</div>
+
+					<!-- ===== CUT-OFF CALENDAR ===== -->
+					<div class="report-panel" id="report-panel-cutoff-calendar">
+						<div class="tab-heading"><div><h2>⏱️ Cut‑off Calendar</h2><div class="module-subtitle">SI / VGM / CY / Gate cut‑off control</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderCutoffCalendar()">↻ Refresh</button><button class="btn btn-preview btn-sm" onclick="printCutoffCalendar()">🖨 Print</button></div></div>
+						<div class="report-filter-bar">
+							<input type="date" id="cutoff-from" onchange="renderCutoffCalendar()">
+							<input type="date" id="cutoff-to" onchange="renderCutoffCalendar()">
+							<select id="cutoff-type" onchange="renderCutoffCalendar()"><option value="">All Cut‑offs</option><option value="SI">SI</option><option value="VGM">VGM</option><option value="CY">CY</option><option value="GATE">GATE</option></select>
+							<button class="btn btn-clear btn-sm" onclick="clearCutoffFilters()">Clear</button>
+						</div>
+						<div class="report-kpi-grid" id="cutoff-kpis"></div>
+						<div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Due</th><th>Type</th><th>Job</th><th>Customer</th><th>Vessel / Flight</th><th>Route</th><th>Status</th><th>Owner</th></tr></thead><tbody id="cutoff-detail"></tbody></table></div></div>
+					</div>
+
+					<!-- ===== CONTAINER TRACKER ===== -->
+					<div class="report-panel" id="report-panel-container-tracker">
+						<div class="tab-heading"><div><h2>📦 Container Tracker</h2><div class="module-subtitle">Container lifecycle and milestone control</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderContainerTracker()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportContainerTrackerExcel()">📊 Excel</button></div></div>
+						<div class="report-filter-bar">
+							<input id="container-search" class="search-box" placeholder="Container / Job / Seal / Customer" oninput="renderContainerTracker()">
+							<select id="container-status" onchange="renderContainerTracker()"><option value="">All Lifecycle Status</option><option>RELEASED</option><option>PICKED UP</option><option>STUFFED</option><option>GATED IN</option><option>LOADED</option><option>DEPARTED</option><option>ARRIVED</option><option>DELIVERED</option><option>EMPTY RETURNED</option></select>
+							<button class="btn btn-clear btn-sm" onclick="clearContainerFilters()">Clear</button>
+						</div>
+						<div class="report-kpi-grid" id="container-kpis"></div>
+						<div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Container</th><th>Job</th><th>Customer</th><th>Type</th><th>Seal</th><th>VGM</th><th>Status</th><th>ETD</th><th>ETA</th><th>Action</th></tr></thead><tbody id="container-detail"></tbody></table></div></div>
+					</div>
+
+					<!-- ===== CARRIER PERFORMANCE ===== -->
+					<div class="report-panel" id="report-panel-carrierreport">
+						<div class="tab-heading"><div><h2>🚢 Carrier Performance</h2><div class="module-subtitle">Carrier volume, route usage, reliability and profitability</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderCarrierPerformance()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportCarrierPerformanceExcel()">📊 Excel</button></div></div>
+						<div class="report-filter-bar">
+							<input type="date" id="carrier-from" onchange="renderCarrierPerformance()">
+							<input type="date" id="carrier-to" onchange="renderCarrierPerformance()">
+							<input id="carrier-search" class="search-box" placeholder="Search carrier / route" oninput="renderCarrierPerformance()">
+							<button class="btn btn-clear btn-sm" onclick="clearCarrierFilters()">Clear</button>
+						</div>
+						<div class="report-kpi-grid" id="carrier-kpis"></div>
+						<div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Carrier</th><th>Shipments</th><th>Containers</th><th>Routes</th><th>Delivered</th><th>In Transit</th><th>Avg Delay</th><th>Profit</th><th>Performance</th></tr></thead><tbody id="carrier-detail"></tbody></table></div></div>
+					</div>
+
+				</div><!-- /reporting-content -->
+			</div>		
 			
 			
             <!-- ===== MEASUREMENT ===== -->
@@ -2051,6 +2249,114 @@
 			</div>
 			
 			
+			<!-- ===== LOCAL CHARGES (UNIFIED) ===== -->
+			<div class="tab-panel" id="localcharges">
+				<div class="tab-heading">
+					<h2>📋 Local Charges Management</h2>
+					<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+						<button class="btn btn-sm btn-danger" onclick="bulkDeleteSelectedLocal()">🗑️ Delete Selected</button>
+						<span id="selected-count" style="font-size:0.8rem; color:var(--text-light);">0 selected</span>
+						<button class="btn btn-export btn-sm" onclick="bulkExportDefaultCharges()">📤 Export Default</button>
+						<button class="btn btn-export btn-sm" onclick="bulkExportCarrierCharges()">📤 Export Carrier</button>
+						<button class="btn btn-import btn-sm" onclick="document.getElementById('bulk-import-default-file').click()">📥 Import Default</button>
+						<input type="file" id="bulk-import-default-file" accept=".xlsx" style="display:none;" onchange="bulkImportDefaultCharges(this)" />
+						<button class="btn btn-import btn-sm" onclick="document.getElementById('bulk-import-carrier-file').click()">📥 Import Carrier</button>
+						<input type="file" id="bulk-import-carrier-file" accept=".xlsx" style="display:none;" onchange="bulkImportCarrierCharges(this)" />
+					</div>
+				</div>
+
+				<!-- SUB-TABS (Sea / Air / LCL) -->
+				<div class="local-sub-tabs">
+					<button class="master-tab active" data-local="sea" onclick="switchLocalTab('sea')">🚢 SEA</button>
+					<button class="master-tab" data-local="air" onclick="switchLocalTab('air')">✈️ AIR</button>
+					<button class="master-tab" data-local="lcl" onclick="switchLocalTab('lcl')">📦 LCL</button>
+				</div>
+
+				<!-- ===== SEA CONTENT ===== -->
+				<div id="local-sea-content" class="local-content-panel active">
+					<div id="sealocal-content">
+						<div class="db-section">
+							<div class="db-header">📋 Default Charges</div>
+							<div class="db-body">
+								<div class="filter-row">
+									<input type="text" id="dc-sea-search" class="search-box" placeholder="🔍 Search..." oninput="renderDefaultChargesMaster('sea')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+									<select id="dc-sea-filter-pol" onchange="renderDefaultChargesMaster('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">All POLs</option></select>
+									<button class="btn btn-quoted" type="button" onclick="openAddDefaultChargeModal('sea')">+ Add</button>
+								</div>
+								<div class="table-wrap" id="dc-sea-master-table"></div>
+							</div>
+						</div>
+						<div class="db-section">
+							<div class="db-header">🚢 Carrier-Specific Charges</div>
+							<div class="db-body">
+								<div class="filter-row">
+									<input type="text" id="cc-sealcl-search" class="search-box" placeholder="🔍 Search Carrier / POL..." oninput="renderCarrierChargesMaster('sealcl')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+									<select id="cc-sealcl-filter-mode" onchange="renderCarrierChargesMaster('sealcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">All Modes</option><option value="sea">SEA</option><option value="lcl">LCL</option></select>
+									<button class="btn btn-quoted" type="button" onclick="openAddCarrierChargeModal('sealcl')">+ Add</button>
+								</div>
+								<div class="table-wrap" id="cc-sealcl-master-table"></div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- ===== AIR CONTENT ===== -->
+				<div id="local-air-content" class="local-content-panel">
+					<div id="airlocal-content">
+						<div class="db-section">
+							<div class="db-header">📋 Default Charges</div>
+							<div class="db-body">
+								<div class="filter-row">
+									<input type="text" id="dc-air-search" class="search-box" placeholder="🔍 Search..." oninput="renderDefaultChargesMaster('air')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+									<select id="dc-air-filter-pol" onchange="renderDefaultChargesMaster('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">All POLs</option></select>
+									<button class="btn btn-quoted" type="button" onclick="openAddDefaultChargeModal('air')">+ Add</button>
+								</div>
+								<div class="table-wrap" id="dc-air-master-table"></div>
+							</div>
+						</div>
+						<div class="db-section">
+							<div class="db-header">✈️ Carrier-Specific Charges</div>
+							<div class="db-body">
+								<div class="filter-row">
+									<input type="text" id="cc-air-search" class="search-box" placeholder="🔍 Search Carrier / POL..." oninput="renderCarrierChargesMaster('air')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+									<button class="btn btn-quoted" type="button" onclick="openAddCarrierChargeModal('air')">+ Add</button>
+								</div>
+								<div class="table-wrap" id="cc-air-master-table"></div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- ===== LCL CONTENT ===== -->
+				<div id="local-lcl-content" class="local-content-panel">
+					<div id="lcllocal-content">
+						<div class="db-section">
+							<div class="db-header">📋 Default Charges</div>
+							<div class="db-body">
+								<div class="filter-row">
+									<input type="text" id="dc-lcl-search" class="search-box" placeholder="🔍 Search..." oninput="renderDefaultChargesMaster('lcl')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+									<select id="dc-lcl-filter-pol" onchange="renderDefaultChargesMaster('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">All POLs</option></select>
+									<button class="btn btn-quoted" type="button" onclick="openAddDefaultChargeModal('lcl')">+ Add</button>
+								</div>
+								<div class="table-wrap" id="dc-lcl-master-table"></div>
+							</div>
+						</div>
+						<div class="db-section">
+							<div class="db-header">📦 Carrier-Specific Charges</div>
+							<div class="db-body">
+								<div class="filter-row">
+									<input type="text" id="cc-lcl-search" class="search-box" placeholder="🔍 Search Carrier / POL..." oninput="renderCarrierChargesMaster('lcl')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+									<button class="btn btn-quoted" type="button" onclick="openAddCarrierChargeModal('lcl')">+ Add</button>
+								</div>
+								<div class="table-wrap" id="cc-lcl-master-table"></div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			
+			
             <!-- ===== DATABASE ===== -->
             <div class="tab-panel" id="database">
                 <div class="tab-heading"><h2>🗄️ Database Management</h2></div>
@@ -2193,6 +2499,9 @@
                         <table class="master-table" id="exchange-table"></table>
                     </div>
                 </div>
+				
+				
+				
 						
                 <!-- Master Data Management -->
                 <div class="db-section">
@@ -2292,137 +2601,6 @@
                 </div>
             </div>
 
-			<!-- ===== SEA LOCAL CHARGES ===== -->
-			<div class="tab-panel" id="sealocal">
-				<div class="tab-heading">
-					<h2>🚢 Sea Local Charges</h2>				
-					<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-					<div style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
-						<button class="btn btn-sm btn-danger" onclick="bulkDeleteSelectedLocal()">🗑️ Delete Selected</button>
-						<span id="selected-count" style="font-size:0.8rem; color:var(--text-light);">0 selected</span>
-					</div>						
-						<button class="btn btn-export btn-sm" onclick="bulkExportDefaultCharges()">📤 Export Default</button>
-						<button class="btn btn-export btn-sm" onclick="bulkExportCarrierCharges()">📤 Export Carrier</button>
-						<button class="btn btn-import btn-sm" onclick="document.getElementById('bulk-import-default-file').click()">📥 Import Default</button>
-						<input type="file" id="bulk-import-default-file" accept=".xlsx" style="display:none;" onchange="bulkImportDefaultCharges(this)" />
-						<button class="btn btn-import btn-sm" onclick="document.getElementById('bulk-import-carrier-file').click()">📥 Import Carrier</button>
-						<input type="file" id="bulk-import-carrier-file" accept=".xlsx" style="display:none;" onchange="bulkImportCarrierCharges(this)" />
-					</div>
-				</div>
-				<div id="sealocal-content">
-					<!-- Default Charges -->
-					<div class="db-section">
-						<div class="db-header">📋 Default Charges</div>
-						<div class="db-body">
-							<div class="filter-row">
-								<input type="text" id="dc-sea-search" class="search-box" placeholder="🔍 Search..." oninput="renderDefaultChargesMaster('sea')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
-								<select id="dc-sea-filter-carrier" onchange="renderDefaultChargesMaster('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">All Carriers</option></select>
-								<select id="dc-sea-filter-pol" onchange="renderDefaultChargesMaster('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">All POLs</option></select>
-								<button class="btn btn-quoted" type="button" onclick="openAddDefaultChargeModal('sea')">+ Add</button>
-							</div>
-							<div class="table-wrap" id="dc-sea-master-table"></div>
-						</div>
-					</div>
-					<!-- Carrier-Specific Charges -->
-					<div class="db-section">
-						<div class="db-header">🚢 Carrier-Specific Charges</div>
-						<div class="db-body">
-							<div class="filter-row">
-								<input type="text" id="cc-sealcl-search" class="search-box" placeholder="🔍 Search Carrier / POL..." oninput="renderCarrierChargesMaster('sealcl')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
-								<select id="cc-sealcl-filter-mode" onchange="renderCarrierChargesMaster('sealcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">All Modes</option><option value="sea">SEA</option><option value="lcl">LCL</option></select>
-								<button class="btn btn-quoted" type="button" onclick="openAddCarrierChargeModal('sealcl')">+ Add</button>
-							</div>
-							<div class="table-wrap" id="cc-sealcl-master-table"></div>
-						</div>
-					</div>
-				</div>
-			</div>
-
-			<!-- ===== AIR LOCAL CHARGES ===== -->
-			<div class="tab-panel" id="airlocal">
-				<div class="tab-heading">
-					<h2>✈️ Air Local Charges</h2>
-					<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-					<div style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
-						<button class="btn btn-sm btn-danger" onclick="bulkDeleteSelectedLocal()">🗑️ Delete Selected</button>
-						<span id="selected-count" style="font-size:0.8rem; color:var(--text-light);">0 selected</span>
-					</div>						
-						<button class="btn btn-export btn-sm" onclick="bulkExportDefaultCharges()">📤 Export Default</button>
-						<button class="btn btn-export btn-sm" onclick="bulkExportCarrierCharges()">📤 Export Carrier</button>
-						<button class="btn btn-import btn-sm" onclick="document.getElementById('bulk-import-carrier-file').click()">📥 Import Carrier</button>
-						<input type="file" id="bulk-import-carrier-file" accept=".xlsx" style="display:none;" onchange="bulkImportCarrierCharges(this)" />
-					</div>
-				</div>
-				<div id="airlocal-content">
-					<!-- Default Charges -->
-					<div class="db-section">
-						<div class="db-header">📋 Default Charges</div>
-						<div class="db-body">
-							<div class="filter-row">
-								<input type="text" id="dc-air-search" class="search-box" placeholder="🔍 Search..." oninput="renderDefaultChargesMaster('air')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
-								<select id="dc-air-filter-pol" onchange="renderDefaultChargesMaster('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">All POLs</option></select>
-								<button class="btn btn-quoted" type="button" onclick="openAddDefaultChargeModal('air')">+ Add</button>
-							</div>
-							<div class="table-wrap" id="dc-air-master-table"></div>
-						</div>
-					</div>
-					<!-- Carrier-Specific Charges -->
-					<div class="db-section">
-						<div class="db-header">✈️ Carrier-Specific Charges</div>
-						<div class="db-body">
-							<div class="filter-row">
-								<input type="text" id="cc-air-search" class="search-box" placeholder="🔍 Search Carrier / POL..." oninput="renderCarrierChargesMaster('air')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
-								<button class="btn btn-quoted" type="button" onclick="openAddCarrierChargeModal('air')">+ Add</button>
-							</div>
-							<div class="table-wrap" id="cc-air-master-table"></div>
-						</div>
-					</div>
-				</div>
-			</div>
-			<!-- ===== LCL LOCAL CHARGES ===== -->
-			<div class="tab-panel" id="lcllocal">
-				<div class="tab-heading">
-					<h2>📦 LCL Local Charges</h2>					
-					<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-					<div style="display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;">
-						<button class="btn btn-sm btn-danger" onclick="bulkDeleteSelectedLocal()">🗑️ Delete Selected</button>
-						<span id="selected-count" style="font-size:0.8rem; color:var(--text-light);">0 selected</span>
-					</div>						
-						<button class="btn btn-export btn-sm" onclick="bulkExportDefaultCharges()">📤 Export Default</button>
-						<button class="btn btn-export btn-sm" onclick="bulkExportCarrierCharges()">📤 Export Carrier</button>
-						<button class="btn btn-import btn-sm" onclick="document.getElementById('bulk-import-carrier-file').click()">📥 Import Carrier</button>
-						<input type="file" id="bulk-import-carrier-file" accept=".xlsx" style="display:none;" onchange="bulkImportCarrierCharges(this)" />
-					</div>
-				</div>
-				<div id="lcllocal-content">
-					<!-- Default Charges -->
-					<div class="db-section">
-						<div class="db-header">📋 Default Charges</div>
-						<div class="db-body">
-							<div class="filter-row">
-								<input type="text" id="dc-lcl-search" class="search-box" placeholder="🔍 Search..." oninput="renderDefaultChargesMaster('lcl')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
-								<select id="dc-lcl-filter-pol" onchange="renderDefaultChargesMaster('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">All POLs</option></select>
-								<button class="btn btn-quoted" type="button" onclick="openAddDefaultChargeModal('lcl')">+ Add</button>
-							</div>
-							<div class="table-wrap" id="dc-lcl-master-table"></div>
-						</div>
-					</div>
-					<!-- Carrier-Specific Charges -->
-					<div class="db-section">
-						<div class="db-header">📦 Carrier-Specific Charges</div>
-						<div class="db-body">
-							<div class="filter-row">
-								<input type="text" id="cc-lcl-search" class="search-box" placeholder="🔍 Search Carrier / POL..." oninput="renderCarrierChargesMaster('lcl')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
-								<button class="btn btn-quoted" type="button" onclick="openAddCarrierChargeModal('lcl')">+ Add</button>
-							</div>
-							<div class="table-wrap" id="cc-lcl-master-table"></div>
-						</div>
-					</div>
-				</div>
-			</div>
-
-        </div> <!-- end content-area -->
-    </div> <!-- end app-wrapper -->
 		<!-- Preview Modal -->
 		<div class="modal" id="previewModal">
 			<div class="modal-content" style="max-width:1000px;">
