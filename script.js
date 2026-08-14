@@ -4615,7 +4615,7 @@ function buildEmailHTML(data, mode) {
         ['POL', toUpper(data.pol), 'POD', toUpper(data.pod)],
         ['Commodity', toUpper(data.commodity), 'Weight (KGS)', data.weight || '-'],
         [mode === 'sea' ? 'Container' : 'Volume (CBM)', mode === 'sea' ? toUpper(data.container) : (data.volume || '-'), 'Transit Time', data.transit ? data.transit + ' Days' : '-'],
-        ['Validity Date', data.validityDate ? new Date(data.validityDate).toLocaleDateString('en-IN') : '-', 'Status', toUpper(data.status)]
+        ['Validity Date', data.validityDate ? new Date(data.validityDate).toLocaleDateString('en-IN') : '-', 'Exchange Rate (USD)', db.exchangeRates?.USD || 'N/A']
     ];
 
     let detailHtml = `<table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;font-family:Arial;font-size:11px;">
@@ -5291,7 +5291,7 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
 
     // ---- 1. Customer Details (inline widths) ----
 	const detailRows = [
-    ['Client', toUpper(data.client), 'Status', toUpper(data.status)],
+    ['Client', toUpper(data.client), 'Ex. Rates', `1 USD = ${(db.exchangeRates?.USD || 0).toFixed(2)} INR`],
     ['POL', toUpper(data.pol), 'POD', toUpper(data.pod)],
     ['Commodity', toUpper(data.commodity), (mode === 'sea' ? 'Container' : 'Volume (CBM)'), mode === 'sea' ? toUpper(data.container) : (data.volume || '-')],
     ['Weight (KGS)', data.weight || '-', 'Incoterm', toUpper(data.incoterm)],
@@ -13113,7 +13113,7 @@ function buildCompactEmailHTML(data, mode) {
 
     // ---- 1. Customer Details (inline widths) ----
 	const detailRows = [
-		['Client', toUpper(data.client), 'Status', toUpper(data.status)],
+		['Client', toUpper(data.client), 'Ex. Rates', `1 USD = ${(db.exchangeRates?.USD || 0).toFixed(2)} INR`],
 		['POL', toUpper(data.pol), 'POD', toUpper(data.pod)],
 		['Commodity', toUpper(data.commodity), (mode === 'sea' ? 'Container' : 'Volume (CBM)'), mode === 'sea' ? toUpper(data.container) : (data.volume || '-')],
 		['Weight (KGS)', data.weight || '-', 'Incoterm', toUpper(data.incoterm)],
