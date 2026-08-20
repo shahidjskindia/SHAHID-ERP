@@ -774,6 +774,12 @@
 					<select id="rates-user-filter" onchange="renderRecords('rates')" style="flex:1;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
 						<option value="">All Users</option>
 					</select>
+					<select id="rates-quick-filter" onchange="setRatesQuickFilter(this.value)" style="flex:1;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+						<option value="">All Quotes</option>
+						<option value="total">📊 Total</option>
+						<option value="converted">📋 Converted</option>
+						<option value="expired">⏰ Expired</option>
+					</select>
 					<button class="btn btn-clear" type="button" onclick="clearRatesFilters()" style="height:36px;">Reset</button>
 				</div>
 
@@ -878,6 +884,9 @@
 								<div class="dropdown-item" onclick="openDsrModal('AIR')">
 									<span class="icon">✈️</span> AIR Shipment
 								</div>
+									<div class="dropdown-item" onclick="openDsrModal('LCL')">
+										<span class="icon">📦</span> LCL Shipment
+									</div>
 							</div>
 						</div>
 					</div>
@@ -932,8 +941,17 @@
 					<button class="btn btn-clear" type="button" onclick="clearDSRFilters()" style="height:36px;">Clear</button>
 				</div>
 
-				<!-- Shipment List -->
-				<div id="dsr-list"></div>
+                <!-- Shipment Action Bar -->
+                <div id="dsr-action-bar" class="rates-action-bar" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;align-items:center;">
+                    <span style="font-weight:600;font-size:0.8rem;color:var(--text-light);margin-right:8px;">Actions:</span>
+                    <button class="btn btn-sm btn-success" type="button" onclick="dsrAddNew()">＋ New Shipment</button>
+                    <button class="btn btn-sm btn-preview" type="button" onclick="renderShipments()">↻ Refresh</button>
+                    <button class="btn btn-sm btn-pdf" type="button" onclick="dsrPDF()">📄 PDF</button>
+                    <button class="btn btn-sm btn-export" type="button" onclick="exportDSRToExcel()">📊 Excel</button>
+                </div>
+
+                <!-- Shipment List -->
+                <div id="dsr-list"></div>
 				<div id="dsr-pagination" class="pagination"></div>
 			</div>
 
@@ -952,11 +970,20 @@
 								<div class="dropdown-item" onclick="openBLModal(null, null, 'AIR')">
 									<span class="icon">✈️</span> Air BL
 								</div>
+								<div class="dropdown-item" onclick="openBLModal(null, null, 'LCL')">
+									<span class="icon">📦</span> LCL BL
+								</div>
 							</div>
 						</div>
 					</div>
 				</div>
-				<div id="bldraft-list"></div>
+                <div id="bldraft-action-bar" class="rates-action-bar" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;align-items:center;">
+                    <span style="font-weight:600;font-size:0.8rem;color:var(--text-light);margin-right:8px;">Actions:</span>
+                    <button class="btn btn-sm btn-success" type="button" onclick="toggleBLModeChooser()">＋ New BL Draft</button>
+                    <button class="btn btn-sm btn-preview" type="button" onclick="renderBLDrafts()">↻ Refresh</button>
+                    <button class="btn btn-sm btn-export" type="button" onclick="exportBLDraftsToExcel()">📊 Excel</button>
+                </div>
+                <div id="bldraft-list"></div>
 			</div>
 
             <!-- ===== ACTION & EXCEPTION CENTER (NEW — does not modify existing modules) ===== -->
@@ -2175,9 +2202,17 @@
 				</div>
 
 				<!-- Toolbar -->
-				<div class="v11-management-toolbar">
+				<div class="v11-management-toolbar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
 					<button class="btn btn-sm btn-success" onclick="openInvoiceFromQuote()">＋ Generate from Quote</button>
 					<button class="btn btn-sm btn-preview" onclick="renderInvoiceTab()">↻ Refresh</button>
+					<span style="width:1px;height:24px;background:var(--border,#d1d5db);margin:0 2px;"></span>
+					<button class="btn btn-sm btn-preview" onclick="invoiceActionPreview()">👁 Preview</button>
+					<button class="btn btn-sm btn-info" onclick="invoiceActionEdit()">✏️ Edit</button>
+					<button class="btn btn-sm btn-info" onclick="invoiceActionCopyCompact()">📋 Copy Compact</button>
+					<button class="btn btn-sm btn-success" onclick="invoiceActionEmail()">📧 Open Email</button>
+					<button class="btn btn-sm btn-preview" onclick="invoiceActionPDF()">📄 PDF</button>
+					<button class="btn btn-sm btn-success" onclick="invoiceActionWhatsApp()">🟢 WhatsApp</button>
+					<button class="btn btn-sm btn-clear" onclick="invoiceActionDelete()">🗑 Delete</button>
 					<span id="v11-invoice-selected" class="v11-selected" style="margin-left:auto;">0 selected</span>
 				</div>
 
@@ -2195,8 +2230,8 @@
 								<th>POD</th>
 								<th>AMOUNT</th>
 								<th>DATE</th>
+                                <th>REMAINING DAYS</th>
 								<th>STATUS</th>
-								<th>ACTIONS</th>
 							</tr>
 						</thead>
 						<tbody id="invoice-list">
@@ -2235,7 +2270,7 @@
 			<div class="tab-panel" id="receivables">
 				<div class="tab-heading"><div><h2>💳 Receivables & Credit Control</h2><div class="module-subtitle">Outstanding, ageing and customer credit exposure</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderReceivables()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportReceivablesExcel()">📊 Excel</button></div></div>
 				<div class="report-filter-bar"><input id="receivable-search" class="search-box" placeholder="Customer / Invoice" oninput="renderReceivables()"><select id="receivable-age" onchange="renderReceivables()"><option value="">All Ageing</option><option value="0-30">0–30</option><option value="31-60">31–60</option><option value="61-90">61–90</option><option value="90+">90+</option></select><button class="btn btn-clear btn-sm" onclick="clearReceivableFilters()">Clear</button></div>
-				<div class="report-kpi-grid" id="receivable-kpis"></div><div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Customer</th><th>Invoice</th><th>Date</th><th>Due Date</th><th>Amount</th><th>Received</th><th>Outstanding</th><th>Age</th><th>Status</th></tr></thead><tbody id="receivable-detail"></tbody></table></div></div>
+				<div class="report-kpi-grid" id="receivable-kpis"></div><div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Customer</th><th>Invoice</th><th>Date</th><th>Due Date</th><th>Remaining Days</th><th>Amount</th><th>Received</th><th>Outstanding</th><th>Age</th><th>Status</th></tr></thead><tbody id="receivable-detail"></tbody></table></div></div>
 			</div>
 			
 			
