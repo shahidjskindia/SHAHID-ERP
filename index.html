@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SHAHID ERP - Freight Quotation System</title>
-    <link rel="stylesheet" href="styles.css" />
+    <title> Shahid ERP - Freight Quotation System</title>
+    <link rel="stylesheet" href="styles.css?v=SHAHID-FINAL-RS-FIX" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js">
     </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js">
@@ -19,8 +19,40 @@
     </script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js">
     </script>
+
+<style>
+/* SHAHID ERP NO-WRAP OUTPUT */
+.quote-preview table, .quote-preview table th, .quote-preview table td,
+.air-quote-preview table, .air-quote-preview table th, .air-quote-preview table td,
+.lcl-quote-preview table, .lcl-quote-preview table th, .lcl-quote-preview table td {
+  white-space:nowrap !important;
+  word-break:keep-all !important;
+  overflow-wrap:normal !important;
+}
+.quote-preview table th, .quote-preview table td,
+.air-quote-preview table th, .air-quote-preview table td,
+.lcl-quote-preview table th, .lcl-quote-preview table td {
+  font-size:11px !important;
+}
+</style>
+
+
+<style id="shahid-three-column-width-print">
+/* +2cm only when 3-carrier / 3-container comparison is active */
+.erp-three-column-wide { width:22cm !important; max-width:22cm !important; }
+@media print {
+  .erp-three-column-wide { width:22cm !important; max-width:22cm !important; }
+}
+</style>
+
+
+<style id="shahid-final-quotation-layout">
+.quote-preview,.air-quote-preview,.lcl-quote-preview{box-sizing:border-box!important;width:20cm!important;max-width:20cm!important;overflow:hidden!important}
+.quote-preview table,.quote-preview th,.quote-preview td,.air-quote-preview table,.air-quote-preview th,.air-quote-preview td,.lcl-quote-preview table,.lcl-quote-preview th,.lcl-quote-preview td{white-space:nowrap!important;word-break:keep-all!important;overflow-wrap:normal!important;font-size:10px!important}
+</style>
+
 </head>
-<body>
+<body data-shahid-output-v12="true">
 	<header>
 		<div class="header-left" style="display:flex; align-items:center; gap:10px;">
 			<button class="nav-toggle-btn" id="navToggleBtn" onclick="toggleNav()" title="Toggle Menu">
@@ -34,6 +66,17 @@
 					   placeholder="🔍 Search quotes, shipments, rates..."
 					   oninput="debouncedGlobalSearch()" autocomplete="off" />
 				<div id="global-search-results" class="global-search-results"></div>
+			</div>
+			<button class="header-action-center-btn" type="button" onclick="switchToTab('actioncenter')" title="Open Action & Exception Center">🔔 Action Center <span id="action-center-header-badge" class="action-center-nav-badge">0</span></button>
+			<div class="alert-center-wrap">
+				<button class="theme-toggle alert-bell" type="button" id="alertCenterBtn" onclick="toggleAlertCenter(event)" title="Open Alert Center" aria-expanded="false">🔔 <span id="alert-count-badge" class="alert-count-badge">0</span></button>
+				<div id="alert-center-panel" class="alert-center-panel" role="dialog" aria-label="Alert Center">
+					<div class="alert-center-head">
+						<div><strong>ALERT CENTER</strong><small id="alert-center-summary">Checking operational alerts...</small></div>
+						<button type="button" class="alert-clear-btn" onclick="clearAllAlerts()">Clear</button>
+					</div>
+					<div id="alert-center-list" class="alert-center-list"></div>
+				</div>
 			</div>
 			<button class="theme-toggle" type="button" onclick="toggleDarkMode()">🌙 Dark Mode</button>
 			<button class="theme-toggle" type="button" onclick="location.reload()" title="Refresh the page">🔄 Refresh</button>
@@ -151,7 +194,7 @@
 						</div>
 
 						<div class="form-group">
-							<label>Carrier *</label>
+							<label>Carrier 1 *</label>
 							<input type="text" id="sea-carrier" list="sea-carrier-list" placeholder="Type Carrier..." onchange="onCarrierChange('sea');markUnsaved('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
 							<datalist id="sea-carrier-list"></datalist>
 						</div>
@@ -227,9 +270,38 @@
 						</div>
 					</div>
                 <div class="charges-section">
-                    <h3>💰 Freight & Local Charges <span style="font-size:0.72rem;color:var(--buy-red);font-weight:400;">(Drag to reorder • Buy rates in RED)</span></h3>
-                    <div class="charges-header">
-                        <span>Charge</span><span>Sell Amt</span><span>Sell Cur</span><span class="buy-col">Buy Amt</span><span class="buy-col">Buy Cur</span><span>Sell INR</span><span>Buy INR</span><span>Margin</span><span>Margin %</span><span>Basis</span><span></span>
+                    <h3>💰 Freight & Local Charges <span style="font-size:0.72rem;color:var(--buy-red);font-weight:400;">(Drag to reorder • Carrier-wise default charges auto-load)</span></h3>
+                    <div class="carrier-rate-selectors sea-comparison-selectors" data-mode="sea">
+                        <div class="carrier-rate-selector comparison-mode-selector">
+                            <label>Compare By</label>
+                            <select id="sea-comparison-mode" onchange="onSeaComparisonChange()" aria-label="SEA rate comparison mode">
+                                <option value="carrier">Carrier</option>
+                                <option value="container">Container</option>
+                            </select>
+                        </div>
+                        <div class="carrier-rate-selector">
+                            <label>Carrier 2</label>
+                            <input type="text" id="sea-carrier-2" list="sea-carrier-list" placeholder="Select Carrier 2" autocomplete="off" oninput="onMultiCarrierChange('sea')">
+                        </div>
+                        <div class="carrier-rate-selector">
+                            <label>Carrier 3</label>
+                            <input type="text" id="sea-carrier-3" list="sea-carrier-list" placeholder="Select Carrier 3" autocomplete="off" oninput="onMultiCarrierChange('sea')">
+                        </div>
+                        <div class="carrier-rate-selector">
+                            <label>Container 2</label>
+                            <input type="text" id="sea-container-2" list="sea-container-list" placeholder="Select Container 2" autocomplete="off" oninput="onSeaContainerComparisonChange(2)">
+                        </div>
+                        <div class="carrier-rate-selector">
+                            <label>Container 3</label>
+                            <input type="text" id="sea-container-3" list="sea-container-list" placeholder="Select Container 3" autocomplete="off" oninput="onSeaContainerComparisonChange(3)">
+                        </div>
+                    </div>
+                    <div class="charges-header multi-carrier-header">
+                        <span class="charge-header-main">Charge</span>
+                        <span class="carrier-header" data-carrier-header="sea-1"><strong>Carrier 1</strong><small>SELL AMT &nbsp;|&nbsp; BUY AMT &nbsp;|&nbsp; MARGIN %</small></span>
+                        <span class="carrier-header" data-carrier-header="sea-2"><strong>Carrier 2</strong><small>SELL AMT &nbsp;|&nbsp; BUY AMT &nbsp;|&nbsp; MARGIN %</small></span>
+                        <span class="carrier-header" data-carrier-header="sea-3"><strong>Carrier 3</strong><small>SELL AMT &nbsp;|&nbsp; BUY AMT &nbsp;|&nbsp; MARGIN %</small></span>
+                        <span>Basis</span><span></span>
                     </div>
                     <div class="charges-grid" id="sea-charges-grid"></div>
                     <div style="margin-top:10px;text-align:center;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
@@ -294,7 +366,7 @@
 					</div>
 
 					<div class="form-group">
-						<label>Carrier *</label>
+						<label>Carrier 1 *</label>
 						<input type="text" id="air-carrier" list="air-carrier-list" placeholder="Type Carrier..." onchange="onCarrierChange('air');markUnsaved('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
 						<datalist id="air-carrier-list"></datalist>
 					</div>
@@ -361,9 +433,17 @@
 
 
                 <div class="charges-section">
-                    <h3>💰 Freight & Local Charges <span style="font-size:0.72rem;color:var(--buy-red);font-weight:400;">(Drag to reorder • Auto-calculated)</span></h3>
-                    <div class="charges-header">
-                        <span>Charge</span><span>Sell Amt</span><span>Sell Cur</span><span class="buy-col">Buy Amt</span><span class="buy-col">Buy Cur</span><span>Sell INR</span><span>Buy INR</span><span>Margin</span><span>Margin %</span><span>Basis</span><span></span>
+                    <h3>💰 Freight & Local Charges <span style="font-size:0.72rem;color:var(--buy-red);font-weight:400;">(Drag to reorder • Carrier-wise default charges auto-load)</span></h3>
+                    <div class="carrier-rate-selectors" data-mode="air">
+                        <div class="carrier-rate-selector"><label>Carrier 2</label><input type="text" id="air-carrier-2" list="air-carrier-list" placeholder="Select Carrier 2" autocomplete="off" oninput="onMultiCarrierChange('air')"></div>
+                        <div class="carrier-rate-selector"><label>Carrier 3</label><input type="text" id="air-carrier-3" list="air-carrier-list" placeholder="Select Carrier 3" autocomplete="off" oninput="onMultiCarrierChange('air')"></div>
+                    </div>
+                    <div class="charges-header multi-carrier-header">
+                        <span class="charge-header-main">Charge</span>
+                        <span class="carrier-header" data-carrier-header="air-1"><strong>Carrier 1</strong><small>SELL AMT &nbsp;|&nbsp; BUY AMT &nbsp;|&nbsp; MARGIN %</small></span>
+                        <span class="carrier-header" data-carrier-header="air-2"><strong>Carrier 2</strong><small>SELL AMT &nbsp;|&nbsp; BUY AMT &nbsp;|&nbsp; MARGIN %</small></span>
+                        <span class="carrier-header" data-carrier-header="air-3"><strong>Carrier 3</strong><small>SELL AMT &nbsp;|&nbsp; BUY AMT &nbsp;|&nbsp; MARGIN %</small></span>
+                        <span>Basis</span><span></span>
                     </div>
                     <div class="charges-grid" id="air-charges-grid"></div>
                     <div style="margin-top:10px;text-align:center;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
@@ -428,7 +508,7 @@
 					</div>
 
 					<div class="form-group">
-						<label>Carrier *</label>
+						<label>Carrier 1 *</label>
 						<input type="text" id="lcl-carrier" list="lcl-carrier-list" placeholder="Type Carrier..." onchange="onCarrierChange('lcl');markUnsaved('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)" autocomplete="off" />
 						<datalist id="lcl-carrier-list"></datalist>
 					</div>
@@ -448,9 +528,17 @@
 			</div>
 
                 <div class="charges-section">
-                    <h3>💰 Freight & Local Charges <span style="font-size:0.72rem;color:var(--buy-red);font-weight:400;">(Drag to reorder • FREIGHT & THC per CBM)</span></h3>
-                    <div class="charges-header">
-                        <span>Charge</span><span>Sell Amt</span><span>Sell Cur</span><span class="buy-col">Buy Amt</span><span class="buy-col">Buy Cur</span><span>Sell INR</span><span>Buy INR</span><span>Margin</span><span>Margin %</span><span>Basis</span><span></span>
+                    <h3>💰 Freight & Local Charges <span style="font-size:0.72rem;color:var(--buy-red);font-weight:400;">(Drag to reorder • FREIGHT & THC per CBM • Carrier-wise default charges auto-load)</span></h3>
+                    <div class="carrier-rate-selectors" data-mode="lcl">
+                        <div class="carrier-rate-selector"><label>Carrier 2</label><input type="text" id="lcl-carrier-2" list="lcl-carrier-list" placeholder="Select Carrier 2" autocomplete="off" oninput="onMultiCarrierChange('lcl')"></div>
+                        <div class="carrier-rate-selector"><label>Carrier 3</label><input type="text" id="lcl-carrier-3" list="lcl-carrier-list" placeholder="Select Carrier 3" autocomplete="off" oninput="onMultiCarrierChange('lcl')"></div>
+                    </div>
+                    <div class="charges-header multi-carrier-header">
+                        <span class="charge-header-main">Charge</span>
+                        <span class="carrier-header" data-carrier-header="lcl-1"><strong>Carrier 1</strong><small>SELL AMT &nbsp;|&nbsp; BUY AMT &nbsp;|&nbsp; MARGIN %</small></span>
+                        <span class="carrier-header" data-carrier-header="lcl-2"><strong>Carrier 2</strong><small>SELL AMT &nbsp;|&nbsp; BUY AMT &nbsp;|&nbsp; MARGIN %</small></span>
+                        <span class="carrier-header" data-carrier-header="lcl-3"><strong>Carrier 3</strong><small>SELL AMT &nbsp;|&nbsp; BUY AMT &nbsp;|&nbsp; MARGIN %</small></span>
+                        <span>Basis</span><span></span>
                     </div>
                     <div class="charges-grid" id="lcl-charges-grid"></div>
                     <div style="margin-top:10px;text-align:center;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
@@ -754,7 +842,7 @@
                             <th>Carrier</th><th>Type</th><th>POL</th><th>POD</th><th>Container</th>
                             <th>Amount</th><th>Currency</th><th>Transit</th>
                             <th>Commodity</th>
-                            <th>Valid From</th><th>Valid To</th><th>Days Left</th><th>Status</th><th>Actions</th>
+                            <th>Valid From</th><th>Valid To</th><th>Days Left</th><th>Status</th>
                         </tr></thead>
                         <tbody id="ratesheet-body"></tbody>
                     </table>
@@ -871,25 +959,29 @@
 				<div id="bldraft-list"></div>
 			</div>
 
-            <!-- ===== DASHBOARD ===== -->
-            <div class="tab-panel" id="dashboard">
-                <div class="tab-heading"><h2>📊 Dashboard & Analytics</h2></div>
-                <div class="counters">
-                    <div class="counter-card" style="border-color:#10b981;"><div class="counter-label">💰 Total Revenue</div><div class="counter-value" id="dash-total-revenue">₹ 0</div></div>
-                    <div class="counter-card" style="border-color:#8b5cf6;"><div class="counter-label">📈 Total Margin</div><div class="counter-value" id="dash-total-margin">₹ 0</div></div>
-                    <div class="counter-card" style="border-color:#3b82f6;"><div class="counter-label">📊 Total Quotes</div><div class="counter-value" id="dash-total-quotes">0</div></div>
-                    <div class="counter-card" style="border-color:#10b981;"><div class="counter-label">✅ Conversion Rate</div><div class="counter-value" id="dash-conversion">0%</div></div>
-                    <div class="counter-card" style="border-color:#f59e0b;"><div class="counter-label">⚠️ Expiring Soon (3 days)</div><div class="counter-value" id="dash-expiring">0</div></div>
-                    <div class="counter-card" style="border-color:#ef4444;"><div class="counter-label">❌ Expired Quotes</div><div class="counter-value" id="dash-expired">0</div></div>
+            <!-- ===== ACTION & EXCEPTION CENTER (NEW — does not modify existing modules) ===== -->
+            <div class="tab-panel" id="actioncenter">
+                <div class="tab-heading"><h2>🔔 Action & Exception Center</h2></div>
+                <div class="action-center-kpis">
+                    <button type="button" class="action-kpi action-kpi-critical" onclick="filterActionCenter('critical')"><strong id="ac-critical">0</strong><span>🔴 Critical</span></button>
+                    <button type="button" class="action-kpi action-kpi-high" onclick="filterActionCenter('warning')"><strong id="ac-high">0</strong><span>🟠 High</span></button>
+                    <button type="button" class="action-kpi action-kpi-due" onclick="filterActionCenter('due')"><strong id="ac-due">0</strong><span>🟡 Due / Pending</span></button>
+                    <button type="button" class="action-kpi action-kpi-overdue" onclick="filterActionCenter('overdue')"><strong id="ac-overdue">0</strong><span>⏰ Overdue</span></button>
                 </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-                    <div class="form-section"><h3>🏆 Top 10 Clients</h3><ul style="list-style:none;max-height:300px;overflow-y:auto;" id="dash-top-clients"></ul></div>
-                    <div class="form-section"><h3>🛣️ Top 10 Routes</h3><ul style="list-style:none;max-height:300px;overflow-y:auto;" id="dash-top-routes"></ul></div>
+                <div class="action-center-tabs">
+                    <button type="button" class="action-center-tab active" data-ac-view="actions" onclick="setActionCenterView('actions')">MY ACTIONS</button>
+                    <button type="button" class="action-center-tab" data-ac-view="exceptions" onclick="setActionCenterView('exceptions')">EXCEPTIONS</button>
+                </div>
+                <div class="form-section">
+                    <div class="action-center-toolbar">
+                        <strong id="action-center-view-title">MY ACTIONS</strong>
+                        <button type="button" class="btn btn-clear" onclick="renderActionCenter()">🔄 Refresh</button>
+                    </div>
+                    <div id="action-center-table-wrap" class="action-center-table-wrap"></div>
                 </div>
             </div>
-			
-			
-						<!-- ===== REPORTING (exactly like Measurement) ===== -->
+
+			<!-- ===== REPORTING (exactly like Measurement) ===== -->
 			<div class="tab-panel" id="reporting">
 				<div class="tab-heading"><h2>📊 Reporting Command Center</h2></div>
 
@@ -903,10 +995,6 @@
 						<div class="form-section" style="cursor:pointer;text-align:center;padding:20px;" onclick="switchReportTab('opsreport')">
 							<div style="font-size:2rem;">🚚</div>
 							<div style="font-weight:700;">Operations Report</div>
-						</div>
-						<div class="form-section" style="cursor:pointer;text-align:center;padding:20px;" onclick="switchReportTab('dashboard')">
-							<div style="font-size:2rem;">📊</div>
-							<div style="font-weight:700;">Dashboard & Analytics</div>
 						</div>
 						<div class="form-section" style="cursor:pointer;text-align:center;padding:20px;" onclick="switchReportTab('profitreport')">
 							<div style="font-size:2rem;">💵</div>
@@ -990,23 +1078,6 @@
 						<div class="form-section"><h3>🧭 Shipment Detail</h3><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Job</th><th>Mode</th><th>Shipper</th><th>Route</th><th>Liner</th><th>ETD</th><th>ETA</th><th>Cargo</th><th>Docs</th></tr></thead><tbody id="ops-detail-report"></tbody></table></div></div>
 					</div>
 
-					<!-- ===== DASHBOARD ===== -->
-					<div class="report-panel" id="report-panel-dashboard">
-						<div class="tab-heading"><h2>📊 Dashboard & Analytics</h2></div>
-						<div class="counters">
-							<div class="counter-card" style="border-color:#10b981;"><div class="counter-label">💰 Total Revenue</div><div class="counter-value" id="dash-total-revenue">₹ 0</div></div>
-							<div class="counter-card" style="border-color:#8b5cf6;"><div class="counter-label">📈 Total Margin</div><div class="counter-value" id="dash-total-margin">₹ 0</div></div>
-							<div class="counter-card" style="border-color:#3b82f6;"><div class="counter-label">📊 Total Quotes</div><div class="counter-value" id="dash-total-quotes">0</div></div>
-							<div class="counter-card" style="border-color:#10b981;"><div class="counter-label">✅ Conversion Rate</div><div class="counter-value" id="dash-conversion">0%</div></div>
-							<div class="counter-card" style="border-color:#f59e0b;"><div class="counter-label">⚠️ Expiring Soon (3d)</div><div class="counter-value" id="dash-expiring">0</div></div>
-							<div class="counter-card" style="border-color:#ef4444;"><div class="counter-label">❌ Expired Quotes</div><div class="counter-value" id="dash-expired">0</div></div>
-						</div>
-						<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-							<div class="form-section"><h3>🏆 Top 10 Clients</h3><ul style="list-style:none;max-height:300px;overflow-y:auto;" id="dash-top-clients"></ul></div>
-							<div class="form-section"><h3>🛣️ Top 10 Routes</h3><ul style="list-style:none;max-height:300px;overflow-y:auto;" id="dash-top-routes"></ul></div>
-						</div>
-					</div>
-
 					<!-- ===== PROFITABILITY ===== -->
 					<div class="report-panel" id="report-panel-profitreport">
 						<div class="tab-heading"><div><h2>💵 Profitability Intelligence</h2><div class="module-subtitle">Estimated vs actual shipment profitability</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderProfitabilityReport()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportProfitabilityExcel()">📊 Excel</button></div></div>
@@ -1054,11 +1125,11 @@
 
 					<!-- ===== CUT-OFF CALENDAR ===== -->
 					<div class="report-panel" id="report-panel-cutoff-calendar">
-						<div class="tab-heading"><div><h2>⏱️ Cut‑off Calendar</h2><div class="module-subtitle">SI / VGM / CY / Gate cut‑off control</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderCutoffCalendar()">↻ Refresh</button><button class="btn btn-preview btn-sm" onclick="printCutoffCalendar()">🖨 Print</button></div></div>
+						<div class="tab-heading"><div><h2>⏱️ Cut‑off Calendar</h2><div class="module-subtitle">SI / Gate / SB / Gate Opening cut‑off control</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderCutoffCalendar()">↻ Refresh</button><button class="btn btn-preview btn-sm" onclick="printCutoffCalendar()">🖨 Print</button></div></div>
 						<div class="report-filter-bar">
 							<input type="date" id="cutoff-from" onchange="renderCutoffCalendar()">
 							<input type="date" id="cutoff-to" onchange="renderCutoffCalendar()">
-							<select id="cutoff-type" onchange="renderCutoffCalendar()"><option value="">All Cut‑offs</option><option value="SI">SI</option><option value="VGM">VGM</option><option value="CY">CY</option><option value="GATE">GATE</option></select>
+							<select id="cutoff-type" onchange="renderCutoffCalendar()"><option value="">All Cut‑offs</option><option value="SI">SI Cut-off</option><option value="GATE">Gate Cut-off</option><option value="SB">SB Cut-off</option><option value="GATE_OPENING">Gate Opening</option></select>
 							<button class="btn btn-clear btn-sm" onclick="clearCutoffFilters()">Clear</button>
 						</div>
 						<div class="report-kpi-grid" id="cutoff-kpis"></div>
@@ -1636,6 +1707,7 @@
                                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                                     <div class="form-group"><label>Origin</label><input type="text" id="truck-origin" placeholder="e.g., LOS ANGELES, CA" oninput="onTruckInput()" style="text-transform:uppercase;"></div>
                                     <div class="form-group"><label>Destination</label><input type="text" id="truck-dest" placeholder="e.g., CHICAGO, IL" oninput="onTruckInput()" style="text-transform:uppercase;"></div>
+                                    <div class="form-group"><label>CONTAINER NO.</label><input type="text" id="truck-container-no" placeholder="e.g., MSCU1234567" oninput="updateLdbTrackingLink('truck-container-no','truck-ldb-track')" autocomplete="off" style="text-transform:uppercase;letter-spacing:0.5px;"><div id="truck-ldb-track" class="ldb-track-slot" aria-live="polite"></div></div>
                                     <div class="form-group"><label>INVENTORY (# containers)</label><input type="number" id="truck-inventory" value="1" min="1" oninput="onTruckInput()"></div>
                                     <div class="form-group"><label>MILES</label><input type="number" id="truck-miles" placeholder="e.g., 800" oninput="onTruckInput()"></div>
                                     <div class="form-group"><label>DISTANCE (MILES × 2)</label><input type="text" id="truck-distance" readonly style="background:#f1f5f9;font-weight:700;"></div>
@@ -2159,88 +2231,6 @@
 			
 			
 			
-			<!-- ===== DSR EXCEPTIONS ===== -->
-			<div class="tab-panel" id="dsr-exceptions">
-				<div class="tab-heading"><div><h2>⚠️ Shipment Exception Center</h2><div class="module-subtitle">Operational exceptions, risk scoring and action ownership</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderDSRExceptions()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportDSRExceptionsExcel()">📊 Excel</button></div></div>
-				<div class="report-kpi-grid" id="exception-kpis"></div>
-				<div class="report-filter-bar"><input id="exception-search" class="search-box" placeholder="Search Job / Customer / Exception" oninput="renderDSRExceptions()"><select id="exception-severity" onchange="renderDSRExceptions()"><option value="">All Severity</option><option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option></select><select id="exception-owner" onchange="renderDSRExceptions()"><option value="">All Owners</option></select><button class="btn btn-clear btn-sm" onclick="clearExceptionFilters()">Clear</button></div>
-				<div class="form-section"><h3>🚨 Open Exceptions</h3><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Risk</th><th>Job</th><th>Customer</th><th>Exception</th><th>Severity</th><th>Due</th><th>Owner</th><th>Action</th></tr></thead><tbody id="exception-detail"></tbody></table></div></div>
-			</div>
-			
-			<!-- ===== CUT-OFF CALENDAR ===== -->
-			<div class="tab-panel" id="cutoff-calendar">
-				<div class="tab-heading"><div><h2>⏱️ Cut-off Calendar</h2><div class="module-subtitle">SI / VGM / CY / Gate cut-off control</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderCutoffCalendar()">↻ Refresh</button><button class="btn btn-preview btn-sm" onclick="printCutoffCalendar()">🖨 Print</button></div></div>
-				<div class="report-filter-bar"><input type="date" id="cutoff-from" onchange="renderCutoffCalendar()"><input type="date" id="cutoff-to" onchange="renderCutoffCalendar()"><select id="cutoff-type" onchange="renderCutoffCalendar()"><option value="">All Cut-offs</option><option value="SI">SI</option><option value="VGM">VGM</option><option value="CY">CY</option><option value="GATE">GATE</option></select><button class="btn btn-clear btn-sm" onclick="clearCutoffFilters()">Clear</button></div>
-				<div class="report-kpi-grid" id="cutoff-kpis"></div><div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Due</th><th>Type</th><th>Job</th><th>Customer</th><th>Vessel / Flight</th><th>Route</th><th>Status</th><th>Owner</th></tr></thead><tbody id="cutoff-detail"></tbody></table></div></div>
-			</div>
-			
-			<!-- ===== CONTAINER TRACKER ===== -->
-			<div class="tab-panel" id="container-tracker">
-				<div class="tab-heading"><div><h2>📦 Container Tracker</h2><div class="module-subtitle">Container lifecycle and milestone control</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderContainerTracker()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportContainerTrackerExcel()">📊 Excel</button></div></div>
-				<div class="report-filter-bar"><input id="container-search" class="search-box" placeholder="Container / Job / Seal / Customer" oninput="renderContainerTracker()"><select id="container-status" onchange="renderContainerTracker()"><option value="">All Lifecycle Status</option><option>RELEASED</option><option>PICKED UP</option><option>STUFFED</option><option>GATED IN</option><option>LOADED</option><option>DEPARTED</option><option>ARRIVED</option><option>DELIVERED</option><option>EMPTY RETURNED</option></select><button class="btn btn-clear btn-sm" onclick="clearContainerFilters()">Clear</button></div>
-				<div class="report-kpi-grid" id="container-kpis"></div><div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Container</th><th>Job</th><th>Customer</th><th>Type</th><th>Seal</th><th>VGM</th><th>Current Status</th><th>ETD</th><th>ETA</th><th>Action</th></tr></thead><tbody id="container-detail"></tbody></table></div></div>
-			</div>
-			
-			<!-- ===== SALES REPORT ===== -->
-			<div class="tab-panel" id="salesreport">
-				<div class="tab-heading">
-					<div><h2>💰 Sales Report</h2><div class="module-subtitle">Quotation performance, conversion, revenue and margin</div></div>
-					<div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderSalesReport()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportSalesReportExcel()">📊 Excel</button></div>
-				</div>
-				<div class="report-filter-bar">
-					<input type="date" id="sales-report-from" onchange="renderSalesReport()"><input type="date" id="sales-report-to" onchange="renderSalesReport()">
-					<select id="sales-report-mode" onchange="renderSalesReport()"><option value="">All Modes</option><option value="sea">SEA</option><option value="air">AIR</option><option value="lcl">LCL</option></select>
-					<select id="sales-report-status" onchange="renderSalesReport()"><option value="">All Follow-up</option><option value="WON">WON</option><option value="LOST">LOST</option><option value="PENDING">PENDING</option></select><select id="sales-report-shipper" onchange="renderSalesReport()"><option value="">All Shippers</option></select>
-					<button class="btn btn-clear btn-sm" onclick="clearSalesReportFilters()">Clear</button>
-				</div>
-				<div class="report-kpi-grid">
-					<div class="report-kpi"><span>Total Quotes</span><strong id="sales-r-total">0</strong></div><div class="report-kpi"><span>Won</span><strong id="sales-r-won">0</strong></div><div class="report-kpi"><span>Conversion</span><strong id="sales-r-conv">0%</strong></div><div class="report-kpi"><span>Revenue</span><strong id="sales-r-revenue">₹ 0</strong></div><div class="report-kpi"><span>Margin</span><strong id="sales-r-margin">₹ 0</strong></div>
-				</div>
-				<div class="report-grid-2"><div class="form-section"><h3>🏆 Client Performance</h3><div id="sales-client-report"></div></div><div class="form-section"><h3>🛣️ Route Performance</h3><div id="sales-route-report"></div></div></div>
-				<div class="form-section"><h3>📋 Quote Performance Detail</h3><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Quote</th><th>Mode</th><th>Client</th><th>POL</th><th>POD</th><th>Status</th><th>Sell</th><th>Margin</th><th>Validity</th></tr></thead><tbody id="sales-detail-report"></tbody></table></div></div>
-			</div>
-			
-			<!-- ===== OPERATIONS REPORT ===== -->
-			<div class="tab-panel" id="opsreport">
-				<div class="tab-heading">
-					<div><h2>🚚 Operations Report</h2><div class="module-subtitle">Shipment milestones, document control and delivery performance</div></div>
-					<div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderOperationsReport()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportOperationsReportExcel()">📊 Excel</button></div>
-				</div>
-				<div class="report-filter-bar">
-					<input type="date" id="ops-report-from" onchange="renderOperationsReport()"><input type="date" id="ops-report-to" onchange="renderOperationsReport()">
-					<select id="ops-report-mode" onchange="renderOperationsReport()"><option value="">All Modes</option><option value="SEA">SEA</option><option value="AIR">AIR</option></select>
-					<select id="ops-report-cargo" onchange="renderOperationsReport()"><option value="">All Cargo Status</option></select>
-					<button class="btn btn-clear btn-sm" onclick="clearOperationsReportFilters()">Clear</button>
-				</div>
-				<div class="report-kpi-grid">
-					<div class="report-kpi"><span>Total Shipments</span><strong id="ops-r-total">0</strong></div><div class="report-kpi"><span>In Transit</span><strong id="ops-r-transit">0</strong></div><div class="report-kpi"><span>Docs Pending</span><strong id="ops-r-docs">0</strong></div><div class="report-kpi"><span>Delivered</span><strong id="ops-r-delivered">0</strong></div><div class="report-kpi"><span>On-Time ETA</span><strong id="ops-r-ontime">-</strong></div>
-				</div>
-				<div class="report-grid-2"><div class="form-section"><h3>📦 Cargo Status</h3><div id="ops-cargo-report"></div></div><div class="form-section"><h3>📄 Documentation Status</h3><div id="ops-docs-report"></div></div></div>
-				<div class="form-section"><h3>🧭 Shipment Detail</h3><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Job</th><th>Mode</th><th>Shipper</th><th>Route</th><th>Liner</th><th>ETD</th><th>ETA</th><th>Cargo</th><th>Docs</th></tr></thead><tbody id="ops-detail-report"></tbody></table></div></div>
-			</div>
-			
-			
-			<!-- ===== PROFITABILITY ===== -->
-			<div class="tab-panel" id="profitreport">
-				<div class="tab-heading"><div><h2>💵 Profitability Intelligence</h2><div class="module-subtitle">Estimated vs actual shipment profitability</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderProfitabilityReport()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportProfitabilityExcel()">📊 Excel</button></div></div>
-				<div class="report-filter-bar"><input type="date" id="profit-from" onchange="renderProfitabilityReport()"><input type="date" id="profit-to" onchange="renderProfitabilityReport()"><select id="profit-mode" onchange="renderProfitabilityReport()"><option value="">All Modes</option><option>SEA</option><option>AIR</option><option>LCL</option></select><input id="profit-search" class="search-box" placeholder="Customer / Job / Route" oninput="renderProfitabilityReport()"><button class="btn btn-clear btn-sm" onclick="clearProfitFilters()">Clear</button></div>
-				<div class="report-kpi-grid" id="profit-kpis"></div><div class="report-grid-2"><div class="form-section"><h3>👤 Customer Profitability</h3><div id="profit-customer-report"></div></div><div class="form-section"><h3>🛣️ Route Profitability</h3><div id="profit-route-report"></div></div></div><div class="form-section"><h3>📋 Shipment Profit Detail</h3><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Job</th><th>Customer</th><th>Mode</th><th>Route</th><th>Estimated Sell</th><th>Estimated Cost</th><th>Actual Sell</th><th>Actual Cost</th><th>Profit</th><th>Margin %</th><th>Variance</th></tr></thead><tbody id="profit-detail"></tbody></table></div></div>
-			</div>
-			
-			<!-- ===== CUSTOMER 360 ===== -->
-			<div class="tab-panel" id="customer360">
-				<div class="tab-heading"><div><h2>👤 Customer 360</h2><div class="module-subtitle">Quotes + shipments + revenue + profitability + activity</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderCustomer360()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportCustomer360Excel()">📊 Excel</button></div></div>
-				<div class="report-filter-bar"><input id="customer360-search" class="search-box" placeholder="Search customer" oninput="renderCustomer360()"><select id="customer360-mode" onchange="renderCustomer360()"><option value="">All Modes</option><option>SEA</option><option>AIR</option><option>LCL</option></select><button class="btn btn-clear btn-sm" onclick="clearCustomer360()">Clear</button></div>
-				<div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Customer</th><th>Quotes</th><th>Won</th><th>Shipments</th><th>Revenue</th><th>Profit</th><th>Conversion</th><th>Last Activity</th><th>Score</th><th>Open</th></tr></thead><tbody id="customer360-detail"></tbody></table></div></div><div id="customer360-drawer" class="feature-drawer"></div>
-			</div>
-			
-			<!-- ===== CARRIER PERFORMANCE ===== -->
-			<div class="tab-panel" id="carrierreport">
-				<div class="tab-heading"><div><h2>🚢 Carrier Performance</h2><div class="module-subtitle">Carrier volume, route usage, reliability and profitability</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderCarrierPerformance()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportCarrierPerformanceExcel()">📊 Excel</button></div></div>
-				<div class="report-filter-bar"><input type="date" id="carrier-from" onchange="renderCarrierPerformance()"><input type="date" id="carrier-to" onchange="renderCarrierPerformance()"><input id="carrier-search" class="search-box" placeholder="Search carrier / route" oninput="renderCarrierPerformance()"><button class="btn btn-clear btn-sm" onclick="clearCarrierFilters()">Clear</button></div>
-				<div class="report-kpi-grid" id="carrier-kpis"></div><div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Carrier</th><th>Shipments</th><th>Containers</th><th>Routes</th><th>Delivered</th><th>In Transit</th><th>Avg Delay</th><th>Profit</th><th>Performance</th></tr></thead><tbody id="carrier-detail"></tbody></table></div></div>
-			</div>
-			
 			<!-- ===== RECEIVABLES ===== -->
 			<div class="tab-panel" id="receivables">
 				<div class="tab-heading"><div><h2>💳 Receivables & Credit Control</h2><div class="module-subtitle">Outstanding, ageing and customer credit exposure</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderReceivables()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportReceivablesExcel()">📊 Excel</button></div></div>
@@ -2287,11 +2277,21 @@
 							</div>
 						</div>
 						<div class="db-section">
-							<div class="db-header">🚢 Carrier-Specific Charges</div>
+							<div class="db-header">🧾 SEA THC Charges — Dedicated Table</div>
 							<div class="db-body">
 								<div class="filter-row">
-									<input type="text" id="cc-sealcl-search" class="search-box" placeholder="🔍 Search Carrier / POL..." oninput="renderCarrierChargesMaster('sealcl')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
-									<select id="cc-sealcl-filter-mode" onchange="renderCarrierChargesMaster('sealcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">All Modes</option><option value="sea">SEA</option><option value="lcl">LCL</option></select>
+									<input type="text" id="sea-thc-search" class="search-box" placeholder="🔍 Search Carrier / POL / Cargo..." oninput="renderSeaTHCMaster()" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+									<button class="btn btn-quoted" type="button" onclick="openAddSeaTHCModal()">+ Add THC</button>
+								</div>
+								<div class="table-wrap" id="sea-thc-master-table"></div>
+							</div>
+						</div>
+						<div class="db-section">
+							<div class="db-header">🚢 Carrier-Specific Charges (CARRIER + POL + HAZ/NON HAZ + CONTAINER — THC managed above)</div>
+							<div class="db-body">
+								<div class="filter-row">
+									<input type="text" id="cc-sealcl-search" class="search-box" placeholder="🔍 Search Carrier / POL / Cargo / Container..." oninput="renderCarrierChargesMaster('sealcl')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+									
 									<button class="btn btn-quoted" type="button" onclick="openAddCarrierChargeModal('sealcl')">+ Add</button>
 								</div>
 								<div class="table-wrap" id="cc-sealcl-master-table"></div>
@@ -2318,7 +2318,7 @@
 							<div class="db-header">✈️ Carrier-Specific Charges</div>
 							<div class="db-body">
 								<div class="filter-row">
-									<input type="text" id="cc-air-search" class="search-box" placeholder="🔍 Search Carrier / POL..." oninput="renderCarrierChargesMaster('air')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+									<input type="text" id="cc-air-search" class="search-box" placeholder="🔍 Search Carrier / Cargo..." oninput="renderCarrierChargesMaster('air')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
 									<button class="btn btn-quoted" type="button" onclick="openAddCarrierChargeModal('air')">+ Add</button>
 								</div>
 								<div class="table-wrap" id="cc-air-master-table"></div>
@@ -2345,7 +2345,7 @@
 							<div class="db-header">📦 Carrier-Specific Charges</div>
 							<div class="db-body">
 								<div class="filter-row">
-									<input type="text" id="cc-lcl-search" class="search-box" placeholder="🔍 Search Carrier / POL..." oninput="renderCarrierChargesMaster('lcl')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+									<input type="text" id="cc-lcl-search" class="search-box" placeholder="🔍 Search Carrier / Cargo..." oninput="renderCarrierChargesMaster('lcl')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
 									<button class="btn btn-quoted" type="button" onclick="openAddCarrierChargeModal('lcl')">+ Add</button>
 								</div>
 								<div class="table-wrap" id="cc-lcl-master-table"></div>
@@ -2682,31 +2682,6 @@
         </div>
     </div>
 
-    <div class="modal" id="emailModal">
-        <div class="modal-content" style="max-width:550px;">
-            <div class="modal-header"><span style="font-weight:600;">📧 Email Quotation</span><span class="close-modal" onclick="closeModal('emailModal')" aria-label="Close">&times;</span></div>
-            <div class="modal-body">
-                <div style="display:flex;flex-direction:column;gap:10px;">
-                    <div class="form-group"><label>To</label><input type="email" id="email-to" placeholder="client@example.com" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-                    <div class="form-group"><label>CC</label><input type="email" id="email-cc" placeholder="optional" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-                    <div class="form-group"><label>Subject</label><input type="text" id="email-subject" readonly style="background:#f1f5f9;font-weight:600;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"></div>
-                    <div class="form-group"><label>HTML Body (preview)</label><div id="email-html-preview" style="border:1px solid var(--border);padding:10px;border-radius:4px;max-height:300px;overflow:auto;background:white;color:#333;font-family:Arial;font-size:14px;"></div></div>
-                    <button class="btn btn-info" onclick="copyEmailCompact()">📋 Copy Tables (Compact)</button>
-					<div style="display:flex;gap:8px;flex-wrap:wrap;">
-                        <button class="btn btn-email" type="button" onclick="sendEmail()">📤 Send Email (Copy HTML & Open Outlook)</button>
-                    </div>
-                    <p style="font-size:0.75rem;color:var(--text-light);background:#fef3c7;padding:8px;border-radius:4px;">
-                        ℹ️ The HTML will be copied to your clipboard. Outlook will open with the recipient and subject pre‑filled.
-                        <strong>Paste the HTML</strong> into Outlook's HTML editor (or "Insert HTML" feature).
-                    </p>
-                    <div style="text-align:right;display:flex;gap:8px;justify-content:flex-end;">
-                        <button class="btn btn-clear" type="button" onclick="closeModal('emailModal')">Cancel</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div class="modal" id="tabSwitchModal">
         <div class="delete-modal-content">
             <div class="delete-modal-body">
@@ -2809,12 +2784,6 @@
         </div>
     </div>
 
-	<div class="modal-overlay" id="v11InvoicePreview">
-		<div class="v11-invoice-preview-modal">
-			<div class="modal-header"><div><h3>🧾 Invoice Preview</h3><small id="v11-inv-title"></small></div><button class="btn btn-clear" onclick="document.getElementById('v11InvoicePreview').classList.remove('show')">×</button></div>
-			<div id="v11-inv-preview-body"></div>
-		</div>
-	</div>
 	
 	<div class="modal-overlay" id="v91WonModal">
 		<div class="v9-won-modal">
@@ -2872,22 +2841,27 @@
     <!-- ===== LOGIN OVERLAY ===== -->
     <div id="login-overlay">
         <div class="login-box">
-            <div class="login-header">🚢 SHAHID ERP</div>
+            <div class="login-header">🚢 Shahid ERP </div>
             <div class="login-form">
                 <div class="form-group" style="margin-bottom:12px;">
                     <label>User ID</label>
                     <input type="text" id="login-id" placeholder="Enter User ID" onkeydown="if(event.key==='Enter') performLogin()">
                 </div>
-                <div class="form-group" style="margin-bottom:16px;">
+                <div class="form-group" style="margin-bottom:10px;">
                     <label>Password</label>
                     <input type="password" id="login-password" placeholder="Enter Password" onkeydown="if(event.key==='Enter') performLogin()">
                 </div>
-                <button class="btn btn-quoted" onclick="performLogin()" style="width:100%;">🔐 Login</button>
+                <label style="display:flex;align-items:center;gap:8px;margin:0 0 16px;font-size:0.85rem;color:var(--text-light);cursor:pointer;">
+                    <input type="checkbox" id="remember-login" style="width:16px;height:16px;accent-color:var(--primary);cursor:pointer;">
+                    <span>Remember Login ID &amp; Password</span>
+                </label>
+                <button class="btn btn-quoted" id="login-submit" onclick="performLogin()" style="width:100%;">🔐 Login</button>
                 <div id="login-error" style="color:var(--danger);margin-top:10px;font-size:0.85rem;display:none;">Invalid credentials</div>
+                <div class="login-security-note">🔒 Session protection enabled • 30-minute idle timeout • 5-attempt lockout</div>
             </div>
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script src="script.js?v=SHAHID-FINAL-RS-FIX"></script>
 </body>
 </html>
