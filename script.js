@@ -1,3 +1,60 @@
+/*
+===============================================================================
+SHAHID ERP — JAVASCRIPT FUNCTION MAP / TAB-WISE SEQUENCE
+===============================================================================
+This is an index only. Existing function order is intentionally preserved to
+avoid changing runtime dependencies or breaking legacy functions.
+
+01. APP / INITIALIZATION
+    init, checkLogin, restoreNavState, switchToTab, refreshCurrentTab
+
+02. SEA QUOTE
+    getSeaComparisonMode, updateSeaComparisonUI, getSeaComparisonContainers,
+    getCarrierNames, setCarrierNames, onMultiCarrierChange, onCarrierChange,
+    onPolChange, onContainerChange, onCarrierPolChangeInternal,
+    buildChargesGrid, recalcAllCarrierCharges, collectMultiCarrierGridData,
+    getFormData, saveRecord, editRecord, clearForm
+
+03. AIR QUOTE
+    AIR form handlers, AIR freight/currency calculations, surcharge calculations,
+    AIR multi-carrier grid, AIR totals, AIR preview/PDF/email/copy flows
+
+04. LCL QUOTE
+    LCL form handlers, LCL grid, LCL calculations, totals, preview/PDF/email/copy
+
+05. COMMON QUOTE PREVIEW / OUTPUT
+    previewQuote, previewSavedRecord, buildPreviewHTML,
+    buildMultiCarrierChargeHTML, mcBuildSectionHTML, mcBuildGrandTotalHTML,
+    copyPreviewTables, copyPreviewText, emailFromPreview, downloadPDF
+
+06. SEA MULTI-CARRIER CALCULATION
+    mcOutputCarriers, mcOutputRowData, mcBasisValue, mcHasOutputSell,
+    mcCalculateGrandTotals, mcBuildSectionHTML, mcBuildGrandTotalHTML
+
+07. RATE SHEET
+    renderRateSheet, openRateSheetModal, saveRateSheet, editRateSheet,
+    duplicateRateSheet, previewRateSheet, renewRateSheet, deleteRateSheet,
+    processBulkRateImport, ratesheetBulkAction, pagination/sorting handlers
+
+08. RATE REQUEST / DRAFTS
+    getRateRequestData, sendRateRequestEmail, renderRecords, draft/quote conversion
+
+09. RATE QUOTES
+    renderRecords('rates'), quote filters, quote actions, edit/preview/email/PDF
+
+10. DATABASE / BACKUP / AUTH
+    saveDB, autoBackup, loadBackupPath, startAutoBackup, auth/login/watchdog
+
+11. REPORTING / OPERATIONS / OTHER TABS
+    Reporting, DSR, BL Drafts, Follow-up, Measurement, Database, Invoice, etc.
+
+12. FINAL TOTAL RULE
+    Rendered section Subtotals are the single source for the displayed Grand Total.
+    AIR Freight = INR; SEA Freight = USD; LCL Freight = USD.
+    Existing data and legacy functions are preserved.
+===============================================================================
+*/
+
 
 // ==================== DATA DEFINITIONS ====================
 const AIR_MIN_THRESHOLDS = {
@@ -14,7 +71,7 @@ const airChargePlaceholders = {
     "XRAY": "Rate per KGS (min 850)",
     "GATE PASS": "Rate per KGS ×4 (min 850)",
     "PALLETISATION": "₹1,875/pallet (auto)",
-    "PLY": "₹600/ply (auto)"
+    "PLY": "₹1,000/pallet (auto)"
 };
 
 
@@ -350,7 +407,7 @@ const EMBEDDED_BACKUP = {
   "bldrafts": [],
   "cargoStatusMaster": ["RATES REQUESTED","RATES RECEIVED","RATES QUOTED","INQUERY","LOST","NO SERVICE","HIGH RATES","RATES APPROVED","BOOKING PLACED","BOOKING RECEIVED","BOOKING SENT","CARGO PICKED","TRANSPORATION","AT CFS","UNDER CLEARANCE","CONTAINER GATEIN","BY ROAD MOVEMENT","BY RAIL MOVEMENT","SOB DONE","COMPLETED","PLANNING","DUPLICATE"],
   "docsStatusMaster": ["DOCS RECEIVED","CHECKLIST PENDING","CHECKLIST SHARED","CHECKLIST CORRECTION","CHECKLIST APPROVED","LEO RECEIVED","SI SUBMITED","DRAFT SHARED","BL CORRECTION","BL APPROVED","SELL GIVEN","INVOICE PENDING","PERFORMA INVOICE SENT","INVOICE APPROVED","TAX INVOICE SEND"],
-  "users": [{"id":"Shaikh Shahid","password":"123789","name":"Shaikh Shahid","role":"master","permissions":"all"}],
+  "users": [{"id":"Shaikh Shahid","passwordHash":"b7158b64a98516b31d0c23609f69265a868c594dda5b3c8da9e13159e209c9b6","name":"Shaikh Shahid","role":"master","permissions":"all"}],
   "defaults": {"gst":18,"insurance":0.05,"profitMargin":15,"defaultCurrency":"USD","usDuty":0,"usTariff":0,"usMPF":0.3464,"usHMF":0.125,"inDuty":7.5,"inSocialWelfare":10,"drawback":0,"rodtep":0},
   "stuffing": [],
   "truckingShipments": [],
@@ -853,7 +910,7 @@ function plannerSaveNote() {
     autoBackup();
 }
 
-function plannerAddTaskQuick() {
+function legacy_plannerAddTaskQuick() {
     const dateKey = formatDateKey(plannerSelectedDate);
     const title = prompt('Enter task:');
     if (!title) return;
@@ -1134,6 +1191,36 @@ if (!db.defaultAirCharges) db.defaultAirCharges = [];
 if (!db.defaultLclCharges) db.defaultLclCharges = [];
 if (!db.carrierChargesSeaLcl) db.carrierChargesSeaLcl = [];
 if (!db.carrierChargesAir) db.carrierChargesAir = [];
+if (!db.seaTHCRates) db.seaTHCRates = [];
+// Migrate legacy SEA THC values into the dedicated SEA THC table exactly once.
+(function migrateLegacySeaTHC(){
+    const source = db.carrierChargesSeaLcl || [];
+    const target = db.seaTHCRates || (db.seaTHCRates = []);
+    source.forEach(rec => {
+        if (rec.mode !== 'sea' || !rec.charges) return;
+        const thc20 = rec.charges.THC_20 || (rec.container === '20 GP' ? rec.charges.THC : null);
+        const thc40 = rec.charges.THC_40 || ((rec.container === '40 GP' || rec.container === '40 HC') ? rec.charges.THC : null);
+        if (!thc20 && !thc40) return;
+        const currency = (thc20?.currency || thc40?.currency || 'INR').toUpperCase();
+        const key = `${String(rec.carrier||'').trim().toUpperCase()}|${String(rec.pol||'').trim().toUpperCase()}|${String(rec.commodity||'').trim().toUpperCase()}|${currency}`;
+        let out = target.find(x => `${String(x.carrier||'').trim().toUpperCase()}|${String(x.pol||'').trim().toUpperCase()}|${String(x.commodity||'').trim().toUpperCase()}|${String(x.currency||'INR').toUpperCase()}` === key);
+        if (!out) {
+            out = { mode:'sea', carrier:rec.carrier||'', pol:rec.pol||'', commodity:rec.commodity||'', currency, thc20:null, thc40:null, validFrom:rec.validFrom||'', validTo:rec.validTo||'', updated:new Date().toISOString() };
+            target.push(out);
+        }
+        if (thc20 && Number(thc20.amount||0)>0) out.thc20 = Number(thc20.amount);
+        if (thc40 && Number(thc40.amount||0)>0) out.thc40 = Number(thc40.amount);
+        out.validFrom = out.validFrom || rec.validFrom || '';
+        out.validTo = out.validTo || rec.validTo || '';
+        out.updated = new Date().toISOString();
+        delete rec.charges.THC_20;
+        delete rec.charges.THC_40;
+        if (rec.charges.THC && (rec.container === '20 GP' || rec.container === '40 GP' || rec.container === '40 HC')) delete rec.charges.THC;
+    });
+    if (source.some(r => r.mode === 'sea' && r.charges && ('THC_20' in r.charges || 'THC_40' in r.charges))) {
+        try { localStorage.setItem('freight_db_v20', JSON.stringify(db)); } catch(e) {}
+    }
+})();
 if (!db.rateSheet) db.rateSheet = [];
 if (!db.hiddenItems) db.hiddenItems = { pol: [], pod: [], incoterms: [], containers: [], carriers: [] };
 if (!db.companyName) db.companyName = defaultDB.companyName;
@@ -1159,7 +1246,7 @@ if (!db.plannerTasks) db.plannerTasks = [];
 if (!db.users.find(u => u.id === 'Shaikh Shahid')) {
     db.users.push({
         id: 'Shaikh Shahid',
-        password: '123789',
+        passwordHash: 'b7158b64a98516b31d0c23609f69265a868c594dda9e13159e209c9b6',
         name: 'Shaikh Shahid',
         role: 'master',
         permissions: 'all'
@@ -1315,6 +1402,7 @@ function switchToTab(targetTab) {
     if (targetTab === 'rrdrafts') renderRecords('rrdrafts');
     if (targetTab === 'followup') renderFollowups();
     if (targetTab === 'dashboard') renderDashboard();
+    if (targetTab === 'actioncenter') renderActionCenter();
     if (targetTab === 'database') renderDatabase();
     
     if (targetTab === 'raterequest') {
@@ -1358,6 +1446,7 @@ function switchToTab(targetTab) {
         const mode = targetTab === 'sealocal' ? 'sea' : targetTab === 'airlocal' ? 'air' : 'lcl';
         currentLocalContainer = targetTab + '-content';
         renderDefaultChargesMaster(mode);
+        if (mode === 'sea') renderSeaTHCMaster();
         renderCarrierChargesMaster(mode === 'sea' ? 'sealcl' : mode);
     }
     editingRecord = null;
@@ -1466,9 +1555,16 @@ function getCurrencyOptions(selected) {
 }
 
 function toINR(amount, currency) {
-    if (!amount || isNaN(amount)) return 0;
-    const rate = db.exchangeRates[currency] || 1;
-    return Math.round(parseFloat(amount) * rate * 100) / 100;
+    if (amount === '' || amount === null || amount === undefined || Number.isNaN(Number(amount))) return 0;
+    const cur = String(currency || 'INR').trim().toUpperCase();
+    const rates = db.exchangeRates || {};
+    if (cur === 'INR') return Math.round(Number(amount) * 100) / 100;
+    const rate = Number(rates[cur]);
+    if (!Number.isFinite(rate) || rate <= 0) {
+        console.warn('[Currency] Missing/invalid exchange rate for:', cur);
+        return 0;
+    }
+    return Math.round(Number(amount) * rate * 100) / 100;
 }
 
 function formatINR(n) {
@@ -1550,21 +1646,16 @@ function calculateAirCharges() {
         
         // ---- PALLETISATION: pallets × 1,875 ----
         const palletCharge = pallets * 1875;
-        const palletEl = document.getElementById('air-amt-PALLETISATION');
-        if (palletEl) {
-            palletEl.value = palletCharge.toFixed(2);
-            console.log('✅ PALLETISATION set to:', palletCharge);
-        }
-        
-        // ---- PLY: plies × 600 ----
-        const plyCharge = plies * 600;
-        const plyEl = document.getElementById('air-amt-PLY');
-        if (plyEl) {
-            plyEl.value = plyCharge.toFixed(2);
-            console.log('✅ PLY set to:', plyCharge);
-        }
+        const plyCharge = pallets * 1000;
+        const palletIds = ['air-amt-PALLETISATION','air-c1-amt-PALLETISATION','air-c2-amt-PALLETISATION','air-c3-amt-PALLETISATION'];
+        const plyIds = ['air-amt-PLY','air-c1-amt-PLY','air-c2-amt-PLY','air-c3-amt-PLY'];
+        palletIds.forEach(id => { const el=document.getElementById(id); if(el) el.value=palletCharge.toFixed(2); });
+        plyIds.forEach(id => { const el=document.getElementById(id); if(el) el.value=plyCharge.toFixed(2); });
+        console.log('✅ PALLETISATION set to:', palletCharge, 'PLY set to:', plyCharge);
+    } else {
+        ['air-amt-PALLETISATION','air-c1-amt-PALLETISATION','air-c2-amt-PALLETISATION','air-c3-amt-PALLETISATION','air-amt-PLY','air-c1-amt-PLY','air-c2-amt-PLY','air-c3-amt-PLY'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
     }
-    
+    if(typeof window.__finalMultiCarrierPull==='function' && (document.getElementById('air-carrier-2')?.value || document.getElementById('air-carrier-3')?.value)) window.__finalMultiCarrierPull('air',null,true);
     // Force recalculation of all charges
     recalcTotal('air');
 }
@@ -1577,7 +1668,7 @@ function updateLCLPerCBM() {
 }
 
 // ==================== CHARGES UI WITH DRAG & DROP ====================
-function buildChargesGrid(mode, savedCharges = {}, customOrder = null) {
+function legacy_buildChargesGrid(mode, savedCharges = {}, customOrder = null) {
     const grid = document.getElementById(`${mode}-charges-grid`);
     let html = '';
     const categories = chargeCategories[mode];
@@ -1719,21 +1810,23 @@ function getCurrentChargesOrder(mode) {
 }
 function moveChargeToCategory(mode, charge, fromCategory, toCategory) {
     const currentOrder = getCurrentChargesOrder(mode);
+    const gridData = window.__multiCollectGridData ? window.__multiCollectGridData(mode) : {arrays:[{},{},{}]};
     if (fromCategory && currentOrder[fromCategory]) currentOrder[fromCategory] = currentOrder[fromCategory].filter(c => c !== charge);
     if (!currentOrder[toCategory]) currentOrder[toCategory] = [];
     currentOrder[toCategory].push(charge);
     chargesOrder[mode] = currentOrder;
-    buildChargesGrid(mode, getCurrentChargesData(mode), chargesOrder[mode]);
+    if (window.buildChargesGrid) window.buildChargesGrid(mode, gridData.arrays, chargesOrder[mode], {arrays:gridData.arrays});
 }
 function moveChargeBefore(mode, charge, fromCategory, targetCharge, targetCategory) {
     const currentOrder = getCurrentChargesOrder(mode);
+    const gridData = window.__multiCollectGridData ? window.__multiCollectGridData(mode) : {arrays:[{},{},{}]};
     if (fromCategory && currentOrder[fromCategory]) currentOrder[fromCategory] = currentOrder[fromCategory].filter(c => c !== charge);
     if (!currentOrder[targetCategory]) currentOrder[targetCategory] = [];
     const idx = currentOrder[targetCategory].indexOf(targetCharge);
     if (idx >= 0) currentOrder[targetCategory].splice(idx, 0, charge);
     else currentOrder[targetCategory].push(charge);
     chargesOrder[mode] = currentOrder;
-    buildChargesGrid(mode, getCurrentChargesData(mode), chargesOrder[mode]);
+    if (window.buildChargesGrid) window.buildChargesGrid(mode, gridData.arrays, chargesOrder[mode], {arrays:gridData.arrays});
 }
 function getCurrentChargesData(mode) {
     const data = {};
@@ -1755,7 +1848,7 @@ function removeChargeRow(mode, charge) {
     const row = document.querySelector(`#${mode}-charges-grid [data-charge="${charge}"]`);
     if (row) { row.remove(); recalcTotal(mode); }
 }
-function recalcCharge(mode, charge) {
+function legacy_recalcCharge(mode, charge) {
     const safe = charge.replace(/[^A-Z0-9]/gi, '_');
     let sellAmt = parseFloat(document.getElementById(`${mode}-amt-${safe}`)?.value) || 0;
     let buyAmt = parseFloat(document.getElementById(`${mode}-buyAmt-${safe}`)?.value) || 0;
@@ -1787,7 +1880,7 @@ function recalcCharge(mode, charge) {
         const pallets = parseFloat(document.getElementById('air-pallets')?.value) || 0;
         if (pallets > 0) {
             const plies = pallets * 2;
-            totalSellAmt = plies * 600;
+            totalSellAmt = pallets * 1000;
             totalBuyAmt = Math.max(totalBuyAmt, totalSellAmt);
             const inputEl = document.getElementById(`${mode}-amt-${safe}`);
             if (inputEl && parseFloat(inputEl.value) !== totalSellAmt) {
@@ -1857,7 +1950,7 @@ function recalcCharge(mode, charge) {
 
 
 
-function recalcTotal(mode) {
+function legacy_recalcTotal(mode) {
     let totalSell = 0, totalBuy = 0;
     
     document.querySelectorAll(`#${mode}-charges-grid .charge-row`).forEach(row => {
@@ -1888,12 +1981,12 @@ function recalcTotal(mode) {
             }
         }
 
-        // ---- Special logic for PLY (calculate from pallets × 2 × 600) ----
+        // ---- Special logic for PLY (calculate from pallets × 1000) ----
         if (mode === 'air' && charge === 'PLY') {
             const pallets = parseFloat(document.getElementById('air-pallets')?.value) || 0;
             if (pallets > 0) {
                 const plies = pallets * 2;
-                totalSellAmt = plies * 600;
+                totalSellAmt = pallets * 1000;
                 totalBuyAmt = Math.max(totalBuyAmt, totalSellAmt);
                 const inputEl = document.getElementById(`${mode}-amt-${safe}`);
                 if (inputEl && parseFloat(inputEl.value) !== totalSellAmt) {
@@ -2006,29 +2099,38 @@ function openAddChargeModal(mode) {
 document.getElementById('addChargeSaveBtn').addEventListener('click', function() {
     const chargeName = document.getElementById('new-charge-name').value.trim().toUpperCase();
     if (!chargeName) { alert('Enter charge name'); return; }
+    // Custom charge names are used in DOM data attributes and inline handlers.
+    // Keep them to a safe, predictable character set to prevent HTML/JS injection.
+    if (!/^[A-Z0-9][A-Z0-9 _&().\/-]{0,79}$/.test(chargeName)) {
+        alert('Charge name may contain only letters, numbers, spaces, _ - & ( ) . /');
+        return;
+    }
     const grid = document.getElementById(`${currentAddChargeMode}-charges-grid`);
-    if (grid.querySelector(`[data-charge="${chargeName}"]`)) { alert('Charge exists!'); return; }
-    const data = getCurrentChargesData(currentAddChargeMode);
-    data[chargeName] = {
+    const exists = Array.from(grid.querySelectorAll('[data-charge]')).some(el => String(el.getAttribute('data-charge') || '').toUpperCase() === chargeName);
+    if (exists) { alert('Charge exists!'); return; }
+    const gridData = window.__multiCollectGridData ? window.__multiCollectGridData(currentAddChargeMode) : {arrays:[{},{},{}]};
+    const firstSell = {
         amount: document.getElementById('new-charge-sell-amt').value,
         currency: document.getElementById('new-charge-sell-cur').value,
         buyAmount: document.getElementById('new-charge-buy-amt').value,
         buyCurrency: document.getElementById('new-charge-buy-cur').value,
         basis: 'Normal'
     };
+    // Add the manually entered values to Carrier 1 only; Carrier 2/3 remain untouched.
+    gridData.arrays[0][chargeName] = firstSell;
     const order = chargesOrder[currentAddChargeMode] || getCurrentChargesOrder(currentAddChargeMode);
     const lastCat = Object.keys(order).pop() || "Other Charges";
     if (!order[lastCat]) order[lastCat] = [];
     order[lastCat].push(chargeName);
     chargesOrder[currentAddChargeMode] = order;
     if (!defaultCharges[currentAddChargeMode].includes(chargeName)) defaultCharges[currentAddChargeMode].push(chargeName);
-    buildChargesGrid(currentAddChargeMode, data, chargesOrder[currentAddChargeMode]);
+    if (window.buildChargesGrid) window.buildChargesGrid(currentAddChargeMode, gridData.arrays, chargesOrder[currentAddChargeMode], {arrays:gridData.arrays});
     closeModal('addChargeModal');
 });
 
 // ==================== CLEAR FORM ====================
 function clearFormWithConfirm(mode) {
-    if (confirm('Are you sure you want to clear all form data? This action cannot be undone.')) clearForm(mode);
+    if (confirm('Are you sure you want to clear all form data? This action cannot be undone.')) { if (typeof window.clearForm === 'function') window.clearForm(mode); else clearForm(mode); }
 }
 
 // ==================== DELETE CONFIRMATION ====================
@@ -2072,11 +2174,11 @@ function deleteRecord(target, mode, idx) {
 }
 
 // ==================== AUTO-LOAD CHARGES (with "ALL" logic) ====================
-function onCarrierChange(mode) { markUnsaved(mode); onCarrierPolChangeInternal(mode); }
-function onPolChange(mode) { markUnsaved(mode); onCarrierPolChangeInternal(mode); }
-function onContainerChange(mode) { markUnsaved(mode); onCarrierPolChangeInternal(mode); }
+function legacy_onCarrierChange(mode) { markUnsaved(mode); onCarrierPolChangeInternal(mode); }
+function legacy_onPolChange(mode) { markUnsaved(mode); onCarrierPolChangeInternal(mode); }
+function legacy_onContainerChange(mode) { markUnsaved(mode); onCarrierPolChangeInternal(mode); }
 
-function onCarrierPolChangeInternal(mode) {
+function legacy_onCarrierPolChangeInternal(mode) {
     const carrier = document.getElementById(`${mode}-carrier`).value;
     const pol = document.getElementById(`${mode}-pol`).value;
     const containerEl = document.getElementById(`${mode}-container`);
@@ -2119,6 +2221,10 @@ function onCarrierPolChangeInternal(mode) {
             );
             if (defaultMatch) {
                 defaultCharges = { ...defaultMatch.charges };
+                // SEA THC is managed only by the dedicated SEA THC table.
+                delete defaultCharges.THC;
+                delete defaultCharges.THC_20;
+                delete defaultCharges.THC_40;
                 // Handle container suffix (if needed)
                 let suffix = '';
                 if (container === '20 GP') suffix = '_20';
@@ -2151,18 +2257,25 @@ function onCarrierPolChangeInternal(mode) {
     // ---- 2. Load carrier‑specific charges (always) ----
     let carrierCharges = {};
     if (mode === 'sea') {
+        // Other carrier charges remain in Carrier Charges master. THC is pulled ONLY from the dedicated SEA THC table.
         const carrierMatch = db.carrierChargesSeaLcl.find(c =>
             c.mode === mode && c.carrier === carrier && c.pol === pol && c.commodity === commodity
         );
         if (carrierMatch) carrierCharges = { ...carrierMatch.charges };
-        let suffix = '';
-        if (container === '20 GP') suffix = '_20';
-        else if (container === '40 GP' || container === '40 HC') suffix = '_40';
-        if (suffix) {
-            const thcKey = 'THC' + suffix;
-            if (carrierCharges[thcKey]) carrierCharges.THC = carrierCharges[thcKey];
-            delete carrierCharges.THC_20;
-            delete carrierCharges.THC_40;
+        delete carrierCharges.THC;
+        delete carrierCharges.THC_20;
+        delete carrierCharges.THC_40;
+
+        const preferredCurrency = existingValues.THC?.currency || 'INR';
+        const thcRecords = (db.seaTHCRates || []).filter(r =>
+            r.carrier === carrier && r.pol === pol && r.commodity === commodity
+        );
+        let thcRec = thcRecords.find(r => String(r.currency||'').toUpperCase() === String(preferredCurrency).toUpperCase()) || thcRecords[0];
+        if (thcRec) {
+            const thcAmount = (container === '20 GP') ? thcRec.thc20 : ((container === '40 GP' || container === '40 HC') ? thcRec.thc40 : null);
+            if (thcAmount !== null && thcAmount !== undefined && Number(thcAmount) > 0) {
+                carrierCharges.THC = { amount:Number(thcAmount), currency:(thcRec.currency||'INR').toUpperCase(), buyAmount:Number(thcAmount), buyCurrency:(thcRec.currency||'INR').toUpperCase(), basis:'Normal' };
+            }
         }
     } else if (mode === 'air') {
         const carrierMatch = db.carrierChargesAir.find(c =>
@@ -2305,55 +2418,56 @@ function applyAutoRate(idx, mode) {
         return;
     }
     const rate = matches[idx];
-    const freightKey = 'FREIGHT';
+    const freightKey = mode === 'air' ? 'AIR FREIGHT' : 'FREIGHT';
     const safe = freightKey.replace(/[^A-Z0-9]/gi, '_');
 
-    // Get form elements – carrier is an INPUT with datalist
-    const amtEl = document.getElementById(`${mode}-amt-${safe}`);
-    const curEl = document.getElementById(`${mode}-cur-${safe}`);
-    const carrierEl = document.getElementById(`${mode}-carrier`); // <input>
-    const buyAmtEl = document.getElementById(`${mode}-buyAmt-${safe}`);
+    // Canonical quote fields are carrier-slot based (C1/C2/C3).
+    // The old ${mode}-amt-FREIGHT lookup caused the false
+    // "quotation form is not fully loaded" error.
+    const carrierEl = document.getElementById(`${mode}-carrier`);
+    const sellEl = document.getElementById(`${mode}-c1-amt-${safe}`);
+    const buyAmtEl = document.getElementById(`${mode}-c1-buyAmt-${safe}`);
 
-    // Verify all critical elements exist
-    if (!amtEl || !curEl || !carrierEl) {
-        alert('Cannot apply rate – the quotation form is not fully loaded. Please open the correct quotation tab first.');
+    if (!carrierEl || !sellEl || !buyAmtEl) {
+        // Open the correct quote tab and retry once after the UI is active.
+        if (typeof switchToTab === 'function' && ['sea','air','lcl'].includes(mode)) {
+            switchToTab(mode);
+            setTimeout(() => applyAutoRate(idx, mode), 60);
+            return;
+        }
+        alert('Cannot apply rate because the quotation fields are unavailable.');
         return;
     }
 
-    // Populate freight amount and currency
-    if (buyAmtEl) buyAmtEl.value = rate.freightAmount;
-    if (curEl) curEl.value = rate.currency || 'USD';
-
-    // Set carrier value on the input field
     if (rate.carrierName) {
         carrierEl.value = rate.carrierName;
-
-        // Ensure the carrier exists in the datalist (optional)
         const datalist = document.getElementById(`${mode}-carrier-list`);
-        if (datalist) {
-            let found = false;
-            for (let i = 0; i < datalist.options.length; i++) {
-                if (datalist.options[i].value === rate.carrierName) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                const opt = document.createElement('option');
-                opt.value = rate.carrierName;
-                datalist.appendChild(opt);
-            }
+        if (datalist && !Array.from(datalist.options).some(o => o.value === rate.carrierName)) {
+            const opt = document.createElement('option');
+            opt.value = rate.carrierName;
+            datalist.appendChild(opt);
         }
     }
 
-    // Recalculate the freight charge
-    recalcCharge(mode, freightKey);
+    const amount = Number(rate.freightAmount ?? rate.sellAmount ?? 0);
+    sellEl.value = Number.isFinite(amount) ? String(amount) : '';
+    buyAmtEl.value = Number.isFinite(amount) ? String(amount) : '';
+
+    const curEls = document.querySelectorAll(`#${mode}-charges-grid .carrier-1 .sell-amt, #${mode}-charges-grid .carrier-1 .buy-input`);
+    // Currency is carried by the row/master logic; set the quote freight currency
+    // through the canonical freight currency fields when available.
+    const row = document.querySelector(`#${mode}-charges-grid .charge-row[data-charge="${freightKey}"]`);
+    const currencySelect = row?.querySelector('.charge-currency');
+    if (currencySelect) currencySelect.value = rate.currency || 'USD';
+
+    if (typeof recalcCharge === 'function') recalcCharge(mode, freightKey, 0);
+    if (typeof markUnsaved === 'function') markUnsaved(mode);
     closeModal('autoRateModal');
-    alert(`✅ Rate applied from ${rate.carrierName} - ${rate.currency} ${rate.freightAmount}`);
+    alert(`✅ Rate applied from ${rate.carrierName || '-'} - ${rate.currency || 'USD'} ${amount}`);
 }
 
 // ==================== FORM DATA COLLECTION ====================
-function getFormData(mode) {
+function legacy_getFormData(mode) {
     const data = { mode: mode.toUpperCase(), timestamp: new Date().toISOString(), lastModified: new Date().toISOString() };
     data.autoDate = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
     data.sales = getLoggedInUserName() || db.defaultUser || 'N/A';
@@ -2442,7 +2556,7 @@ function getFormData(mode) {
 
 // ==================== SAVE / QUOTE ====================
 function saveRecord(mode, target, status = 'DRAFT') {
-    const data = getFormData(mode);
+    const data = (window.__multiGetFormData || getFormData)(mode);
     if (!data.client && Object.keys(data.charges).length === 0) return alert('Fill Client Name or at least one charge.');
     if (data.marginINR < 0 && (data.totalSellINR > 0 || data.totalBuyINR > 0)) {
         if (!confirm('⚠️ WARNING: This quote has a negative margin (loss). Do you want to proceed?')) return;
@@ -2466,8 +2580,8 @@ function saveRecord(mode, target, status = 'DRAFT') {
         else data.quoteNumber = 'DRAFT-' + Date.now();
         db[target][mode].push(data);
     }
-    if (target === 'drafts' && data.carrier && data.pol) upsertCarrierCharges(mode, data);
-    updateRateSheetFromQuote(data, mode);
+    if (target === 'drafts' && data.carrier && data.pol && typeof window.upsertCarrierCharges === 'function') window.upsertCarrierCharges(mode, data);
+    if (typeof window.updateRateSheetFromQuote === 'function') window.updateRateSheetFromQuote(data, mode);
     if (!saveDB()) return;
     document.getElementById(`${mode}-qn-value`).textContent = data.quoteNumber;
     document.getElementById(`${mode}-qn-box`).classList.add('show');
@@ -2479,7 +2593,7 @@ function saveRecord(mode, target, status = 'DRAFT') {
     autoBackup();
 }
 
-function updateRateSheetFromQuote(data, mode) {
+function legacy_updateRateSheetFromQuote(data, mode) {
     const freightKey = mode === 'air' ? 'AIR FREIGHT' : 'FREIGHT';
     const freight = data.charges && data.charges[freightKey];
     if (!freight) return;
@@ -2529,22 +2643,37 @@ function updateRateSheetFromQuote(data, mode) {
     saveDB();
 }
 
-function upsertCarrierCharges(mode, data) {
+function legacy_upsertCarrierCharges(mode, data) {
     if (mode === 'air') {
         const idx = db.carrierChargesAir.findIndex(c => c.carrier === data.carrier && c.pol === data.pol);
         const entry = { carrier: data.carrier, pol: data.pol, charges: data.charges, updated: new Date().toISOString() };
         if (idx >= 0) db.carrierChargesAir[idx] = entry;
         else db.carrierChargesAir.push(entry);
+    } else if (mode === 'sea') {
+        const charges = { ...(data.charges || {}) };
+        const thc = charges.THC;
+        delete charges.THC; delete charges.THC_20; delete charges.THC_40;
+        if (thc && Number(thc.amount || 0) > 0 && (data.container === '20 GP' || data.container === '40 GP' || data.container === '40 HC')) {
+            const currency = (thc.currency || 'INR').toUpperCase();
+            let rec = (db.seaTHCRates || []).find(r => r.carrier === data.carrier && r.pol === data.pol && r.commodity === data.commodity && r.currency === currency);
+            if (!rec) { rec = { mode:'sea', carrier:data.carrier, pol:data.pol, commodity:data.commodity || 'NON HAZ', currency, thc20:null, thc40:null, validFrom:'', validTo:'', updated:new Date().toISOString() }; db.seaTHCRates.push(rec); }
+            if (data.container === '20 GP') rec.thc20 = Number(thc.amount);
+            else rec.thc40 = Number(thc.amount);
+            rec.updated = new Date().toISOString();
+        }
+        const key = { mode, carrier: data.carrier, pol: data.pol, container: data.container || '' };
+        const idx = db.carrierChargesSeaLcl.findIndex(c => c.mode === mode && c.carrier === data.carrier && c.pol === data.pol && (c.container || '') === (data.container || ''));
+        const entry = { ...key, commodity:data.commodity || '', charges, updated: new Date().toISOString() };
+        if (idx >= 0) db.carrierChargesSeaLcl[idx] = entry; else db.carrierChargesSeaLcl.push(entry);
     } else {
         const key = { mode, carrier: data.carrier, pol: data.pol, container: data.container || '' };
-        const idx = db.carrierChargesSeaLcl.findIndex(c => c.mode === key.mode && c.carrier === key.carrier && c.pol === key.pol && (c.container || '') === key.container);
-        const entry = { ...key, charges: data.charges, updated: new Date().toISOString() };
-        if (idx >= 0) db.carrierChargesSeaLcl[idx] = entry;
-        else db.carrierChargesSeaLcl.push(entry);
+        const idx = db.carrierChargesSeaLcl.findIndex(c => c.mode === mode && c.carrier === data.carrier && c.pol === data.pol && (c.container || '') === (data.container || ''));
+        const entry = { ...key, commodity:data.commodity || '', charges:data.charges || {}, updated: new Date().toISOString() };
+        if (idx >= 0) db.carrierChargesSeaLcl[idx] = entry; else db.carrierChargesSeaLcl.push(entry);
     }
 }
 
-function clearForm(mode) {
+function legacy_clearForm(mode) {
     const panel = document.getElementById(mode);
     panel.querySelectorAll('input,select,textarea').forEach(el => {
         if (el.tagName === 'SELECT') el.selectedIndex = 0;
@@ -2576,14 +2705,28 @@ function clearForm(mode) {
 
 
 function setValidityDefault(mode) {
-    const now = new Date();
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    const formatted = lastDay.toISOString().split('T')[0];
     const el = document.getElementById(`${mode}-validityDate`);
-    if (el && !el.value) el.value = formatted;
+    if (!el || el.value) return;
+
+    const now = new Date();
+    let defaultDate;
+
+    // AIR QUOTE: default validity is exactly 4 calendar days from today.
+    // Example: 16 Aug -> 20 Aug.
+    if (mode === 'air') {
+        defaultDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 4);
+    } else {
+        // Preserve the existing default behaviour for SEA/LCL.
+        defaultDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    }
+
+    const yyyy = defaultDate.getFullYear();
+    const mm = String(defaultDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(defaultDate.getDate()).padStart(2, '0');
+    el.value = `${yyyy}-${mm}-${dd}`;
 }
 
-function editRecord(target, mode, idx) {
+function legacy_editRecord(target, mode, idx) {
     const rec = db[target][mode][idx];
     if (!rec) {
         alert('Record not found.');
@@ -3255,6 +3398,15 @@ function clearRateSheetFilter() { rateSheetFilter = 'all';
     rateSheetPage = 1;
     document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.filter === 'all'));
     renderRateSheet(); }
+let rateSheetSort = { key: 'validTo', dir: 'asc' };
+function sortRateSheet(key) {
+    const allowed = new Set(['carrierName','freightType','pol','pod','containerType','freightAmount','currency','transitTime','commodity','validFrom','validTo']);
+    if (!allowed.has(key)) return;
+    if (rateSheetSort.key === key) rateSheetSort.dir = rateSheetSort.dir === 'asc' ? 'desc' : 'asc';
+    else { rateSheetSort.key = key; rateSheetSort.dir = 'asc'; }
+    rateSheetPage = 1; renderRateSheet();
+}
+
 function getFilteredRateSheet() {
     let rates = [...(db.rateSheet || [])];
     const today = new Date();
@@ -3273,6 +3425,13 @@ function getFilteredRateSheet() {
     } else if (rateSheetFilter === 'expired') {
         rates = rates.filter(r => { const e = getExpiryStatus(r.validTo); return e.status === 'expired'; });
     }
+    const k = rateSheetSort.key;
+    const dir = rateSheetSort.dir === 'asc' ? 1 : -1;
+    rates.sort((a,b) => {
+        const av = a?.[k] ?? ''; const bv = b?.[k] ?? '';
+        if (k === 'freightAmount') return ((Number(av)||0) - (Number(bv)||0)) * dir;
+        return String(av).localeCompare(String(bv), undefined, {numeric:true, sensitivity:'base'}) * dir;
+    });
     return rates;
 }
 
@@ -3325,25 +3484,25 @@ function renderRateSheet() {
     let html = `<thead>
         <tr>
             <th style="width:30px;"><input type="checkbox" id="ratesheet-select-all" onchange="toggleAllRatesheetCheckboxes()" /></th>
-            <th>Carrier</th>
-            <th>Type</th>
-            <th>POL</th>
-            <th>POD</th>
-            <th>Container</th>
-            <th>Amount</th>
-            <th>Currency</th>
-            <th>Transit</th>
-            <th>Commodity</th>
-            <th>Valid From</th>
-            <th>Valid To</th>
+            <th style="cursor:pointer;" onclick="sortRateSheet('carrierName')" title="Sort">Carrier ↕</th>
+            <th style="cursor:pointer;" onclick="sortRateSheet('freightType')" title="Sort">Type ↕</th>
+            <th style="cursor:pointer;" onclick="sortRateSheet('pol')" title="Sort">POL ↕</th>
+            <th style="cursor:pointer;" onclick="sortRateSheet('pod')" title="Sort">POD ↕</th>
+            <th style="cursor:pointer;" onclick="sortRateSheet('containerType')" title="Sort">Container ↕</th>
+            <th style="cursor:pointer;" onclick="sortRateSheet('freightAmount')" title="Sort">Amount ↕</th>
+            <th style="cursor:pointer;" onclick="sortRateSheet('currency')" title="Sort">Currency ↕</th>
+            <th style="cursor:pointer;" onclick="sortRateSheet('transitTime')" title="Sort">Transit ↕</th>
+            <th style="cursor:pointer;" onclick="sortRateSheet('commodity')" title="Sort">Commodity ↕</th>
+            <th style="cursor:pointer;" onclick="sortRateSheet('validFrom')" title="Sort">Valid From ↕</th>
+            <th style="cursor:pointer;" onclick="sortRateSheet('validTo')" title="Sort">Valid To ↕</th>
             <th>Days Left</th>
             <th>Status</th>
         </tr>
     </thead>
-    <tbody>`;
+    <tbody id="ratesheet-body">`;
 
     if (pageData.length === 0) {
-        html += `<tr><td colspan="14" style="text-align:center;padding:20px;color:var(--text-light);">No rates found</td></tr>`;
+        html += `<tr><td colspan="15" style="text-align:center;padding:20px;color:var(--text-light);">No rates found</td></tr>`;
     } else {
         pageData.forEach((r) => {
             const realIdx = db.rateSheet.indexOf(r);
@@ -3369,6 +3528,7 @@ function renderRateSheet() {
                 <td style="font-weight:bold;">${r.validTo || '-'}</td>
                 <td style="font-weight:bold;">${expiry.days !== null ? expiry.days + ' days' : '-'}</td>
                 <td style="font-weight:bold;"><span class="status-badge ${statusClass}">${statusText}</span></td>
+
             </tr>`;
         });
     }
@@ -3412,6 +3572,10 @@ function openRateSheetModal(editIdx = null) {
     document.getElementById('rs-pod').innerHTML = '<option value="">Select POD</option>' + db.pod.map(p => `<option value="${p}">${p}</option>`).join('');
     document.getElementById('rs-container').innerHTML = '<option value="">Select Container</option>' + db.containers.map(c => `<option value="${c}">${c}</option>`).join('');
     document.getElementById('rs-currency').innerHTML = getCurrencyOptions('USD');
+    const rsType = document.getElementById('rs-freightType');
+    const rsCurrency = document.getElementById('rs-currency');
+    const syncRateSheetCurrency = () => { if (rsCurrency) { rsCurrency.innerHTML = getCurrencyOptions(rsType?.value === 'AIR' ? 'INR' : 'USD'); rsCurrency.value = rsType?.value === 'AIR' ? 'INR' : 'USD'; } };
+    if (rsType) rsType.onchange = syncRateSheetCurrency;
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('rs-validFrom').value = today;
 
@@ -3423,7 +3587,7 @@ function openRateSheetModal(editIdx = null) {
         document.getElementById('rs-pol').value = r.pol || '';
         document.getElementById('rs-pod').value = r.pod || '';
         document.getElementById('rs-container').value = r.containerType || '';
-        document.getElementById('rs-currency').value = r.currency || 'USD';
+        document.getElementById('rs-currency').value = (r.freightType || '').toUpperCase() === 'AIR' ? 'INR' : 'USD';
         document.getElementById('rs-amount').value = r.freightAmount || '';
         document.getElementById('rs-transit').value = r.transitTime || '';
         document.getElementById('rs-commodity').value = r.commodity || '';
@@ -3439,6 +3603,7 @@ function openRateSheetModal(editIdx = null) {
         document.getElementById('rs-pod').value = '';
         document.getElementById('rs-container').value = '';
         document.getElementById('rs-currency').value = 'USD';
+        if (document.getElementById('rs-freightType').value === 'AIR') document.getElementById('rs-currency').value = 'INR';
         document.getElementById('rs-amount').value = '';
         document.getElementById('rs-transit').value = '';
         document.getElementById('rs-commodity').value = '';
@@ -3456,7 +3621,7 @@ function saveRateSheet(editIdx) {
         pol: document.getElementById('rs-pol').value,
         pod: document.getElementById('rs-pod').value,
         containerType: document.getElementById('rs-container').value,
-        currency: document.getElementById('rs-currency').value,
+        currency: (document.getElementById('rs-freightType').value || '').toUpperCase() === 'AIR' ? 'INR' : 'USD',
         freightAmount: parseFloat(document.getElementById('rs-amount').value) || 0,
         transitTime: document.getElementById('rs-transit').value.trim(),
         commodity: document.getElementById('rs-commodity').value,
@@ -3631,7 +3796,7 @@ function processBulkRateImport() {
                 pol: parts[2].trim(),
                 pod: parts[3].trim(),
                 containerType: parts[4].trim(),
-                currency: parts[5].trim().toUpperCase() || 'USD',
+                currency: parts[1].trim().toUpperCase() === 'AIR' ? 'INR' : 'USD',
                 freightAmount: parseFloat(parts[6]) || 0,
                 transitTime: parts[7].trim(),
                 commodity: parts[8] ? parts[8].trim() : '',
@@ -3719,12 +3884,23 @@ function exportRateSheetReport(format) {
 }
 
 // ==================== LOCAL CHARGES SAVE ====================
-function saveLocalCharges(mode) {
+function legacy_saveLocalCharges(mode) {
     const carrier = document.getElementById(`${mode}-carrier`).value;
     const pol = document.getElementById(`${mode}-pol`).value;
     const container = document.getElementById(`${mode}-container`)?.value || '';
     if (!carrier || !pol) return alert('Please select Carrier and POL first.');
     const charges = getCurrentChargesData(mode);
+    if (mode === 'sea') {
+        const thc = charges.THC;
+        if (thc && Number(thc.amount || 0) > 0 && (container === '20 GP' || container === '40 GP' || container === '40 HC')) {
+            const currency = (thc.currency || 'INR').toUpperCase();
+            let rec = (db.seaTHCRates || []).find(r => r.carrier === carrier && r.pol === pol && r.commodity === (document.getElementById(`${mode}-commodity`)?.value || 'NON HAZ') && r.currency === currency);
+            if (!rec) { rec = {mode:'sea',carrier,pol,commodity:document.getElementById(`${mode}-commodity`)?.value || 'NON HAZ',currency,thc20:null,thc40:null,validFrom:'',validTo:'',updated:new Date().toISOString()}; db.seaTHCRates.push(rec); }
+            if (container === '20 GP') rec.thc20 = Number(thc.amount); else rec.thc40 = Number(thc.amount);
+            rec.updated = new Date().toISOString();
+        }
+        delete charges.THC; delete charges.THC_20; delete charges.THC_40;
+    }
     const hasData = Object.values(charges).some(c => c.amount || c.buyAmount);
     if (!hasData) return alert('No charges to save.');
     if (mode === 'air') {
@@ -3749,7 +3925,7 @@ function saveLocalCharges(mode) {
     autoBackup();
 }
 
-function saveFreightRate(mode) {
+function legacy_saveFreightRate(mode) {
     const carrier = document.getElementById(`${mode}-carrier`).value;
     const pol = document.getElementById(`${mode}-pol`).value;
     const pod = document.getElementById(`${mode}-pod`).value;
@@ -4244,9 +4420,14 @@ function mergeDatabase(importedDb) {
     // ---- 20. MERGE DSR COLUMNS ----
     if (importedDb.dsrColumns && Array.isArray(importedDb.dsrColumns)) {
         if (!db.dsrColumns) db.dsrColumns = ['code','shipper','pol','pod','liner','cargoStatus','docsStatus','actions'];
-        // Only update if new columns are different and valid
+        // Non-destructive import: never replace the existing column configuration.
+        // Imported columns are only added when they are missing.
         if (importedDb.dsrColumns.length > 0) {
-            db.dsrColumns = importedDb.dsrColumns;
+            const existing = Array.isArray(db.dsrColumns) ? db.dsrColumns : [];
+            importedDb.dsrColumns.forEach(col => {
+                if (col && !existing.includes(col)) existing.push(col);
+            });
+            db.dsrColumns = existing;
         }
     }
 
@@ -4384,7 +4565,7 @@ function confirmRateImport() {
 
 // ==================== COPY QUOTE DATA ====================
 function copyQuoteData(mode) {
-    const data = getFormData(mode);
+    const data = (window.__multiGetFormData || getFormData)(mode);
     if (!data.client && Object.keys(data.charges).length === 0) { alert('No data to copy. Please fill the form first.'); return; }
     let text = '========================================\n';
     text += `       ${mode.toUpperCase()} FREIGHT QUOTATION\n`;
@@ -4432,7 +4613,7 @@ function copyQuoteData(mode) {
     let grandTotal = 0;
     Object.values(data.charges).forEach(c => { grandTotal += toINR(c.amount, c.currency); });
     text += '\n  =========================================\n';
-    text += `  GRAND TOTAL (INR): ${formatINR(grandTotal)}\n`;
+    text += `  Grand Total (INR): ${formatINR(grandTotal)}\n`;
     text += '  =========================================\n\n';
     text += `--- COMPANY ---\n`;
     text += `${db.companyName || 'GATEWAY EXIM'}\n`;
@@ -4471,7 +4652,7 @@ function buildEmailHTML(data, mode) {
             if (pallets > 0) {
                 const plies = pallets * 2;
                 const palletCharge = pallets * 1875;
-                const plyCharge = plies * 600;
+                const plyCharge = pallets * 1000;
                 totalSellAmt = Math.max(palletCharge, plyCharge);
                 totalBuyAmt = Math.max(totalBuyAmt, totalSellAmt);
             }
@@ -4573,7 +4754,7 @@ function buildEmailHTML(data, mode) {
                         basisDisplay = 'Minimum';
                     } else {
                         if (ch === 'GATE PASS') {
-                            basisDisplay = 'At Actual';
+                            basisDisplay = 'AT Actual';
                         } else {
                             basisDisplay = 'Per KGS';
                         }
@@ -4602,7 +4783,7 @@ function buildEmailHTML(data, mode) {
         chargeRowsHtml += `
         <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-top:6px;">
             <tr style="background:#10b981;color:white;font-weight:bold;">
-                <td style="padding:6px 10px;text-align:right;font-family:Arial;font-size:11px;">GRAND TOTAL (INR)</td>
+                <td style="padding:6px 10px;text-align:right;font-family:Arial;font-size:11px;">Grand Total(INR)</td>
                 <td style="padding:6px 10px;text-align:right;font-family:Arial;font-size:11px;">${formatINR(grandTotal)}</td>
             </tr>
         </table>`;
@@ -4665,7 +4846,7 @@ function buildEmailHTML(data, mode) {
 }
 
 function emailQuote(mode) {
-    const data = getFormData(mode);
+    const data = (window.__multiGetFormData || getFormData)(mode);
     if (!data.client && Object.keys(data.charges).length === 0) {
         alert('Fill data first');
         return;
@@ -4730,28 +4911,30 @@ function emailSavedQuote(target, mode, idx) {
 // NEW: copy compact tables (replaces old copyEmailHTML)
 function copyEmailCompact() {
     if (!currentEmailData) {
-        alert('No email data available. Please open the email modal first.');
+        alert('No email data available. Please open the Email Quotation modal first.');
         return;
     }
-    const compactHtml = buildCompactEmailHTML(currentEmailData.data, currentEmailData.mode);
-    
-    if (navigator.clipboard && navigator.clipboard.write) {
-        const blobHTML = new Blob([compactHtml], { type: 'text/html' });
-        const blobPlain = new Blob([currentEmailData.data.client || 'Quotation'], { type: 'text/plain' });
-        const clipboardItem = new ClipboardItem({
-            'text/html': blobHTML,
-            'text/plain': blobPlain
-        });
-        navigator.clipboard.write([clipboardItem])
-            .then(() => alert('✅ Compact tables copied with formatting.'))
-            .catch(() => fallbackCopyText(compactHtml));
-    } else {
-        fallbackCopyText(compactHtml);
+    const previewEl = document.getElementById('email-html-preview');
+    const htmlToCopy = previewEl ? previewEl.innerHTML : (currentEmailData.htmlContent || '');
+    if (!htmlToCopy.trim()) return alert('Email HTML Body is empty.');
+    const plainEl = document.createElement('div');
+    plainEl.innerHTML = htmlToCopy;
+    const plainText = plainEl.innerText || plainEl.textContent || 'Quotation';
+    if (navigator.clipboard?.write && window.ClipboardItem) {
+        try {
+            const item = new ClipboardItem({
+                'text/html': new Blob([htmlToCopy], { type:'text/html' }),
+                'text/plain': new Blob([plainText], { type:'text/plain' })
+            });
+            navigator.clipboard.write([item]).then(() => alert('✅ Email HTML Body copied with formatting.')).catch(() => fallbackCopyText(htmlToCopy));
+            return;
+        } catch (e) { console.warn('Rich email clipboard unavailable:', e); }
     }
+    fallbackCopyText(htmlToCopy);
 }
 
 // Keep fallbackCopyText (used by copyPreviewTables)
-function fallbackCopyText(text) {
+function legacy_fallbackCopyText(text) {
     const textarea = document.createElement('textarea');
     textarea.value = text;
     document.body.appendChild(textarea);
@@ -4838,7 +5021,7 @@ function calculateChargesWithINR(data, mode) {
             if (pallets > 0) {
                 const plies = pallets * 2;
                 const palletCharge = pallets * 1875;
-                const plyCharge = plies * 600;
+                const plyCharge = pallets * 1000;
                 totalSellAmt = Math.max(palletCharge, plyCharge);
                 totalBuyAmt = Math.max(totalBuyAmt, totalSellAmt);
             }
@@ -4903,193 +5086,113 @@ function calculateChargesWithINR(data, mode) {
 }
 
 function buildPDFDefinition(data, mode) {
-    const modeLabel = { sea: 'SEA FREIGHT', air: 'AIR FREIGHT', lcl: 'LCL FREIGHT' }[mode];
-    const userName = getLoggedInUserName() || db.defaultUser || 'N/A';
-    const order = data.chargesOrder || getCurrentChargesOrder(mode);
-    const toUpper = (val) => val ? String(val).toUpperCase() : '-';
-    const { chargesWithINR, grandTotal } = calculateChargesWithINR(data, mode);
-
-    const content = [];
-
-
-    content.push(
-        { text: db.companyName || 'GATEWAY EXIM', style: 'companyName' },
-        { text: db.companyAddress || '', style: 'companyAddress' },
-        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2, lineColor: '#1e3a8a' }] },
-        { text: ' ' }
-    );
-
-    content.push({
-        columns: [
-            { text: modeLabel + ' QUOTATION', style: 'title' },
-            { text: 'Quote No: ' + (data.quoteNumber || 'DRAFT'), style: 'quoteNum', alignment: 'right' }
-        ]
-    });
-
-    const detailRows = [
-        [{ text: 'Client', style: 'detailLabel' }, { text: toUpper(data.client) }, { text: 'Status', style: 'detailLabel' }, { text: toUpper(data.status) }],
-        [{ text: 'POL', style: 'detailLabel' }, { text: toUpper(data.pol) }, { text: 'POD', style: 'detailLabel' }, { text: toUpper(data.pod) }],
-        [{ text: 'Commodity', style: 'detailLabel' }, { text: toUpper(data.commodity) }, { text: 'Carrier', style: 'detailLabel' }, { text: toUpper(data.carrier) }],
-        [{ text: 'Weight (KGS)', style: 'detailLabel' }, { text: data.weight || '-' }, { text: 'Incoterm', style: 'detailLabel' }, { text: toUpper(data.incoterm) }],
-        [
-            { text: (mode === 'sea' ? 'Container' : 'Volume (CBM)'), style: 'detailLabel' },
-            { text: mode === 'sea' ? toUpper(data.container) : (data.volume || '-') },
-            { text: 'Transit Time', style: 'detailLabel' },
-            { text: data.transit ? data.transit + ' Days' : '-' }
-        ],
-        [{ text: 'Quote Date', style: 'detailLabel' }, { text: data.autoDate || '-' }, { text: 'Validity Date', style: 'detailLabel' }, { text: data.validityDate ? new Date(data.validityDate).toLocaleDateString('en-IN') : '-' }]
+    const modeLabel={sea:'SEA FREIGHT',air:'AIR FREIGHT',lcl:'LCL FREIGHT'}[mode];
+    const userName=getLoggedInUserName()||db.defaultUser||'N/A';
+    const carriers=mcOutputCarriers(data,mode);
+    const groups=mcOutputChargeGroups(data,mode);
+    const content=[];
+    const toUpper=v=>v?String(v).toUpperCase():'-';
+    content.push({text:db.companyName||'GATEWAY EXIM',style:'companyName'},{text:db.companyAddress||'',style:'companyAddress'},{canvas:[{type:'line',x1:0,y1:0,x2:515,y2:0,lineWidth:2,lineColor:'#1e3a8a'}]},{text:' '},{columns:[{text:modeLabel+' QUOTATION',style:'title'},{text:'Quote No: '+(data.quoteNumber||'DRAFT'),style:'quoteNum',alignment:'right'}]});
+    const validity=data.validityDate?new Date(data.validityDate).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'-';
+    const carrierText=carriers.map(c=>toUpper(c.carrier)).join(' | ')||toUpper(data.carrier);
+    const detailRows=[
+        [{text:'Client',style:'detailLabel'},{text:toUpper(data.client)},{text:'Ex. Rates',style:'detailLabel'},{text:`1 USD = ${Number(db.exchangeRates?.USD||0).toFixed(2)} INR`}],
+        [{text:'POL',style:'detailLabel'},{text:toUpper(data.pol)},{text:'POD',style:'detailLabel'},{text:toUpper(data.pod)}],
+        [{text:'Commodity',style:'detailLabel'},{text:toUpper(data.commodity)},{text:mode==='sea'?'Container':'Volume (CBM)',style:'detailLabel'},{text:mode==='sea'?toUpper(data.container):(data.volume||'-')}],
+        [{text:'Weight (KGS)',style:'detailLabel'},{text:data.weight||'-'},{text:'Incoterm',style:'detailLabel'},{text:toUpper(data.incoterm)}],
+        [{text:'Carrier',style:'detailLabel'},{text:carrierText},{text:'Transit Time',style:'detailLabel'},{text:data.transit?data.transit+' Days':'-'}],
+        [{text:'Quote Date',style:'detailLabel'},{text:data.autoDate||'-'},{text:'Validity Date',style:'detailLabel',color:'#dc2626'},{text:validity,color:'#dc2626',bold:true}]
     ];
-    content.push({
-        table: {
-            widths: ['*', '*', '*', '*'],
-            body: detailRows
-        },
-        layout: {
-            hLineWidth: function() { return 1; },
-            vLineWidth: function() { return 1; },
-            hLineColor: '#d1d5db',
-            vLineColor: '#d1d5db',
-            fillColor: function(rowIndex) {
-                return (rowIndex % 2 === 0) ? '#f1f5f9' : null;
-            }
-        },
-        margin: [0, 10, 0, 10]
-    });
-
-
-    // ---- Charge tables ----
-    function buildChargeTableRows(category, charges, startSr) {
-        const catEntries = charges.filter(ch => chargesWithINR[ch]);
-        if (catEntries.length === 0) return null;
-
-        let rows = [
-            [
-                { text: 'Sr. No', style: 'Aptos', alignment: 'center' },
-                { text: 'Charge Type', style: 'Aptos', alignment: 'center' },
-                { text: 'Currency', style: 'Aptos', alignment: 'center' },
-                { text: 'Sell Amount', style: 'Aptos', alignment: 'center' },
-                { text: 'Basis', style: 'Aptos', alignment: 'center' },
-                { text: 'INR Equivalent', style: 'Aptos', alignment: 'center' }
-            ]
-        ];
-        let catTotal = 0;
-        let sr = startSr;
-        catEntries.forEach((ch) => {
-            const c = chargesWithINR[ch];
-            catTotal += c.sellINR;
-            const isFreight = ch.toUpperCase() === 'FREIGHT' || ch.toUpperCase() === 'AIR FREIGHT';
-
-            let basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
-            if (mode === 'air' && AIR_MIN_THRESHOLDS && AIR_MIN_THRESHOLDS[ch]) {
-                if (c.minApplied) {
-                    basisDisplay = 'Minimum';
+    content.push({table:{widths:['20%','30%','20%','30%'],body:[[{text:'Customer & Shipment Details',colSpan:4,alignment:'center',bold:true,color:'white',fontSize:12,fillColor:'#1e3a8a'}, {},{},{}],...detailRows]},layout:{hLineWidth:()=>1,vLineWidth:()=>1,hLineColor:'#d1d5db',vLineColor:'#d1d5db',fillColor:(row)=>row===0?'#1e3a8a':(row%2===1?'#f1f5f9':null)},margin:[0,10,0,10]});
+    if(carriers.length){
+        let sr=1; const overall=carriers.map(()=>0);
+        [groups.first,groups.second].forEach(section=>{
+            const list=mcChargeListForCategories(data,section.categories).filter(ch=>carriers.some(c=>mcHasOutputSell(data,mode,c,ch)));
+            if(!list.length)return;
+            content.push({text:section.label.toUpperCase(),style:'categoryHeader'});
+            const multi=carriers.length>1; const body=[];
+            if(!multi){
+                body.push([{text:'Sr. No',style:'Aptos',alignment:'center'},{text:'Charge Type',style:'Aptos',alignment:'center'},{text:'Currency',style:'Aptos',alignment:'center'},{text:'Amount',style:'Aptos',alignment:'center'},{text:'Basis',style:'Aptos',alignment:'center'},{text:'INR Equivalent',style:'Aptos',alignment:'center'}]);
+                let subtotal=0;
+                list.forEach(ch=>{const d=mcOutputRowData(data,mode,carriers[0],ch);subtotal+=d.sellINR;overall[0]+=d.sellINR;body.push([{text:String(sr++),alignment:'center'},{text:ch.toUpperCase()},{text:d.sellCur,alignment:'right'},{text:d.x.sell?mcMoney(d.x.sell,d.sellCur):'—',alignment:'right'},{text:mcBasisDisplay(mode,ch,d.raw.basis||'Normal',data,d.raw),alignment:'center'},{text:formatINR(d.sellINR),alignment:'right'}]);});
+                body.push([{text:'TOTAL',colSpan:5,alignment:'right',bold:true},{text:formatINR(subtotal),alignment:'right',bold:true}]);
+                content.push({table:{widths:['auto','*','auto','auto','auto','auto'],body},layout:{hLineWidth:()=>1,vLineWidth:()=>1,hLineColor:'#d1d5db',vLineColor:()=>1,fillColor:i=>(i===0?'#1e3a8a':i===body.length-1?'#f1f5f9':null)},margin:[0,5,0,10]});
+            }else{
+                const subtotals=carriers.map(()=>0);
+                if (mode === 'air') {
+                    body.push([
+                        {text:'Sr. No',style:'Aptos',alignment:'center',rowSpan:2},
+                        {text:'Charge Type',style:'Aptos',alignment:'center',rowSpan:2},
+                        {text:'Basis',style:'Aptos',alignment:'center',rowSpan:2},
+                        ...carriers.map(c=>({text:c.carrier,style:'Aptos',alignment:'center',colSpan:2})).flatMap(x=>[x,{}])
+                    ]);
+                    body.push([{}, {}, {}, ...carriers.flatMap(()=>[
+                        {text:'Amount',style:'Aptos',alignment:'center'},
+                        {text:'INR Equivalent',style:'Aptos',alignment:'center'}
+                    ])]);
+                    list.forEach(ch=>{
+                        const row=[{text:String(sr++),alignment:'center'},{text:ch.toUpperCase()},{text:airCompactDisplayLogic(ch, carriers[0]?.charges?.[ch]||{}, data).basis,alignment:'center'}];
+                        carriers.forEach((c,i)=>{
+                            const d=mcOutputRowData(data,mode,c,ch);
+                            const air=airCompactDisplayLogic(ch,d.raw,data);
+                            subtotals[i]+=Number(air.finalINR)||0;
+                            overall[i]+=Number(air.finalINR)||0;
+                            row.push({text:air.unit?mcMoney(air.unit,'INR'):'—',alignment:'right'});
+                            row.push({text:formatINR(Number(air.finalINR)||0),alignment:'right'});
+                        });
+                        body.push(row);
+                    });
+                    body.push([{text:'TOTAL (INR)',colSpan:3,alignment:'right',bold:true},{},{},...subtotals.flatMap(v=>[
+                        {text:formatINR(v),alignment:'right',bold:true},
+                        {text:formatINR(v),alignment:'right',bold:true}
+                    ])]);
+                    content.push({table:{widths:['auto','*','auto',...carriers.flatMap(()=>['*','*'])],body},layout:{hLineWidth:()=>1,vLineWidth:()=>1,hLineColor:'#d1d5db',fillColor:i=>(i<=1?'#1e3a8a':i===body.length-1?'#f1f5f9':null)},margin:[0,5,0,10]});
+                } else if (mode === 'lcl') {
+                    body.push([
+                        {text:'Sr. No',style:'Aptos',alignment:'center',rowSpan:2},
+                        {text:'Charge Type',style:'Aptos',alignment:'center',rowSpan:2},
+                        {text:'Basis',style:'Aptos',alignment:'center',rowSpan:2},
+                        ...carriers.map(c=>({text:c.carrier,style:'Aptos',alignment:'center',colSpan:2})).flatMap(x=>[x,{}])
+                    ]);
+                    body.push([{}, {}, {}, ...carriers.flatMap(()=>[
+                        {text:'Amount',style:'Aptos',alignment:'center'},
+                        {text:'INR Equivalent',style:'Aptos',alignment:'center'}
+                    ])]);
+                    list.forEach(ch=>{
+                        const row=[{text:String(sr++),alignment:'center'},{text:ch.toUpperCase()},{text:mcBasisForCarriers(data,mode,ch,carriers),alignment:'center'}];
+                        carriers.forEach((c,i)=>{
+                            const d=mcOutputRowData(data,mode,c,ch);
+                            subtotals[i]+=d.sellINR;
+                            overall[i]+=d.sellINR;
+                            row.push({text:d.x.sell?mcMoney(d.x.sell,d.sellCur):'—',alignment:'right'});
+                            row.push({text:formatINR(Number(d.sellINR)||0),alignment:'right'});
+                        });
+                        body.push(row);
+                    });
+                    body.push([{text:'TOTAL (INR)',colSpan:3,alignment:'right',bold:true},{},{},...subtotals.flatMap(v=>[
+                        {text:formatINR(v),alignment:'right',bold:true},
+                        {text:formatINR(v),alignment:'right',bold:true}
+                    ])]);
+                    content.push({table:{widths:['auto','*','auto',...carriers.flatMap(()=>['*','*'])],body},layout:{hLineWidth:()=>1,vLineWidth:()=>1,hLineColor:'#d1d5db',fillColor:i=>(i<=1?'#1e3a8a':i===body.length-1?'#f1f5f9':null)},margin:[0,5,0,10]});
                 } else {
-                    if (ch === 'GATE PASS') {
-                        basisDisplay = 'At Actual';
-                    } else {
-                        basisDisplay = 'Per KGS';
-                    }
+                    body.push([{text:'Sr. No',style:'Aptos',alignment:'center'},{text:'Charge Type',style:'Aptos',alignment:'center'},...carriers.map(c=>({text:c.carrier,style:'Aptos',alignment:'center'})),{text:'Basis',style:'Aptos',alignment:'center'}]);
+                    list.forEach(ch=>{const row=[{text:String(sr++),alignment:'center'},{text:ch.toUpperCase()}];carriers.forEach((c,i)=>{const d=mcOutputRowData(data,mode,c,ch);subtotals[i]+=d.sellINR;overall[i]+=d.sellINR;row.push({text:d.x.sell?mcMoney(d.x.sell,d.sellCur):'—',alignment:'right'});});row.push({text:mcBasisForCarriers(data,mode,ch,carriers),alignment:'center'});body.push(row);});
+                    body.push([{text:'TOTAL (INR)',colSpan:2,alignment:'right',bold:true},...subtotals.map(v=>({text:formatINR(v),alignment:'right',bold:true})),{text:'—',alignment:'center',bold:true}]);
+                    content.push({table:{widths:['auto','*',...carriers.map(()=>'*'),'auto'],body},layout:{hLineWidth:()=>1,vLineWidth:()=>1,hLineColor:'#d1d5db',fillColor:i=>(i===0?'#1e3a8a':i===body.length-1?'#f1f5f9':null)},margin:[0,5,0,10]});
                 }
             }
-
-            rows.push([
-                { text: String(sr), alignment: 'center' },
-                { text: ch.toUpperCase(), bold: isFreight, color: isFreight ? '#dc2626' : '#000' },
-                { text: c.currency, alignment: 'center' },
-                { text: Number(c.unitSellAmt).toLocaleString('en-IN'), alignment: 'center' },
-                { text: basisDisplay, alignment: 'center' },
-                { text: formatINR(c.sellINR), alignment: 'center' }
-            ]);
-            sr++;
         });
-        rows.push([
-            { text: 'Subtotal:', colSpan: 4, alignment: 'right', bold: true },
-            {}, {}, {},
-            {},
-            { text: formatINR(catTotal), alignment: 'center', bold: true }
-        ]);
-        return { rows, nextSr: sr };
-    }
-
-    if (Object.keys(chargesWithINR).length > 0) {
-        let currentSr = 1;
-        Object.entries(order).forEach(([category, charges]) => {
-            if (charges.length === 0) return;
-            const result = buildChargeTableRows(category, charges, currentSr);
-            if (!result) return;
-            currentSr = result.nextSr;
-            content.push({ text: category.toUpperCase(), style: 'categoryHeader' });
-            content.push({
-                table: {
-                    widths: ['auto', '*', 'auto', 'auto', 'auto', 'auto'],
-                    body: result.rows
-                },
-                layout: {
-                    hLineWidth: function() { return 1; },
-                    vLineWidth: function() { return 1; },
-                    hLineColor: '#d1d5db',
-                    vLineColor: '#d1d5db',
-                    fillColor: function(rowIndex) {
-                        if (rowIndex === 0) return '#1e3a8a';
-                        if (rowIndex === result.rows.length - 1) return '#f1f5f9';
-                        return null;
-                    }
-                },
-                margin: [0, 5, 0, 10]
-            });
-        });
-        content.push({
-            table: {
-                widths: ['*', 'auto'],
-                body: [
-                    [{ text: 'GRAND TOTAL (INR)', alignment: 'right', bold: true, fontSize: 11, color: 'white' },
-                    { text: formatINR(grandTotal), alignment: 'right', bold: true, fontSize: 11, color: 'white' }]
-                ]
-            },
-            layout: { fillColor: '#10b981' },
-            margin: [0, 0, 0, 10]
-        });
-    }
-
-    if (data.remarks) {
-        content.push({
-            table: {
-                widths: ['*'],
-                body: [
-                    [{ text: 'Remarks', style: 'categoryHeader' }],
-                    [{ text: data.remarks.toUpperCase(), margin: [5, 5] }]
-                ]
-            },
-            layout: 'noBorders',
-            margin: [0, 5, 0, 10]
-        });
-    }
-
-    content.push(
-        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: '#e2e8f0' }] },
-        { text: 'This quotation is system-generated. Rates are subject to change based on validity date.', alignment: 'center', fontSize: 8, color: '#64748b', margin: [0, 8, 0, 2] },
-        { text: 'Generated on ' + new Date().toLocaleString('en-IN'), alignment: 'center', fontSize: 8, color: '#64748b' },
-        { text: 'Prepared By: ' + userName, alignment: 'center', fontSize: 8, color: '#64748b', margin: [0, 2, 0, 0] }
-    );
-
-    return {
-        content: content,
-        styles: {
-            companyName: { fontSize: 14, bold: true, color: '#1e3a8a' },
-            companyAddress: { fontSize: 9, color: '#64748b', margin: [0, 2, 0, 4] },
-            title: { fontSize: 18, bold: true, color: '#1e3a8a' },
-            quoteNum: { fontSize: 12, bold: true, color: '#d97706' },
-            detailLabel: { fontSize: 11, bold: true, color: '#334155' },
-            categoryHeader: { fontSize: 11, bold: true, color: '#1e3a8a', margin: [0, 8, 0, 4] },
-            Aptos: { fontSize: 11, bold: true, color: 'white' }
-        },
-        defaultStyle: {
-            fontSize: 10,
-            font: 'Roboto'
+        if(carriers.length===1){
+            content.push({table:{widths:['*','auto'],body:[[{text:'Grand Total (INR) + GST additional',bold:true,color:'white',alignment:'right'},{text:formatINR(overall[0]),bold:true,color:'white',alignment:'right'}]]},layout:{fillColor:'#05964b'},margin:[0,0,0,10]});
+        }else{
+            content.push({text:'GRAND TOTAL (INR) + GST ADDITIONAL',style:'categoryHeader'});
+            content.push({table:{widths:['*',...carriers.map(()=>'*')],body:[[{text:'Grand Total',style:'Aptos',alignment:'left'},...carriers.map(c=>({text:c.carrier,style:'Aptos',alignment:'center'}))],[{text:'INR Total',bold:true},...overall.map(v=>({text:formatINR(v),bold:true,alignment:'right'}))]]},layout:{hLineWidth:()=>1,vLineWidth:()=>1,hLineColor:'#d1d5db',fillColor:i=>(i===0?'#05964b':i===1?'#ecfdf5':null)},margin:[0,0,0,10]});
         }
-    };
+    }
+    if(data.remarks)content.push({table:{widths:['*'],body:[[{text:'Remarks',style:'categoryHeader'}],[{text:data.remarks.toUpperCase(),margin:[5,5]}]]},layout:'noBorders',margin:[0,5,0,10]});
+    content.push({canvas:[{type:'line',x1:0,y1:0,x2:515,y2:0,lineWidth:1,lineColor:'#e2e8f0'}]},{text:'This quotation is system-generated. Rates are subject to change based on validity date.',alignment:'center',fontSize:8,color:'#64748b',margin:[0,8,0,2]},{text:'Generated on '+new Date().toLocaleString('en-IN'),alignment:'center',fontSize:8,color:'#64748b'},{text:'Prepared By: '+userName,alignment:'center',fontSize:8,color:'#64748b',margin:[0,2,0,0]});
+    return {content,styles:{companyName:{fontSize:14,bold:true,color:'#1e3a8a'},companyAddress:{fontSize:9,color:'#64748b',margin:[0,2,0,4]},title:{fontSize:18,bold:true,color:'#1e3a8a'},quoteNum:{fontSize:12,bold:true,color:'#d97706'},detailLabel:{fontSize:10,bold:true,color:'#334155'},categoryHeader:{fontSize:11,bold:true,color:'#1e3a8a',margin:[0,8,0,4]},Aptos:{fontSize:10,bold:true,color:'white'}},defaultStyle:{fontSize:10,font:'Roboto'}};
 }
-
 
 function generatePDF(data, mode) {
     if (typeof pdfMake === 'undefined') {
@@ -5110,7 +5213,7 @@ function generatePDF(data, mode) {
     pdfMake.createPdf(docDefinition).download(`${data.quoteNumber || 'Quote'}.pdf`);
 }
 function downloadPDF(mode) {
-    const data = getFormData(mode);
+    const data = (window.__multiGetFormData || getFormData)(mode);
     if (!data.client && Object.keys(data.charges).length === 0) {
         alert('Please fill the form with at least a Client Name and charges before generating PDF.');
         return;
@@ -5135,69 +5238,86 @@ function downloadSavedPDF(target, mode, idx) {
 function generatePDFFromHTML(data, mode) {
     if (!data.quoteNumber) data.quoteNumber = 'DRAFT-' + Date.now();
 
-    // Build preview HTML (same as modal preview)
     const html = buildPreviewHTML(data, mode, '100%', false);
-
     const renderArea = document.getElementById('pdf-render-area');
     if (!renderArea) {
         alert('PDF render area not found. Please refresh the page.');
         return;
     }
 
-    renderArea.innerHTML = html;
-    renderArea.style.cssText = 'position:fixed;left:0;top:0;width:800px;background:white;z-index:9999;opacity:1;padding:0;margin:0;font-family: Arial, sans-serif;';
+    // PDF MASTER SURFACE: quotation width increased to 220mm as requested.
+    // The previous renderer reduced the image width when height exceeded A4,
+    // which created the large right-side blank area. We now compress vertical
+    // spacing/typography instead, while keeping the full quotation width.
+    renderArea.innerHTML = `
+        <style id="shahid-pdf-fit-style">
+            #preview-content-container{width:831px!important;max-width:831px!important;min-width:831px!important;padding:5px!important;margin:0!important;box-sizing:border-box!important;}
+            #preview-content-container table{width:100%!important;max-width:100%!important;min-width:0!important;table-layout:fixed!important;box-sizing:border-box!important;}
+            #preview-content-container .shahid-master-quote-table{width:100%!important;max-width:100%!important;}
+            #preview-content-container th,#preview-content-container td{white-space:nowrap!important;overflow:hidden!important;text-overflow:clip!important;overflow-wrap:normal!important;word-break:normal!important;line-height:1.4!important;}
+            #preview-content-container .shahid-master-quote-table th,#preview-content-container .shahid-master-quote-table td{padding:4px 8px!important;font-size:15px!important;height:auto!important;}
+            #preview-content-container .shahid-master-quote-table thead th{font-size:15px!important;height:auto!important;}
+            #preview-content-container .shahid-master-quote-table tbody td{height:auto!important;}
+            #preview-content-container .shahid-master-quote-table tfoot td{padding:4px 8px!important;font-size:15px!important;}
+            #preview-content-container .shahid-master-quote-table th:first-child,#preview-content-container .shahid-master-quote-table td:first-child{white-space:nowrap!important;}
+            #preview-content-container p{margin:2px 0!important;line-height:1.4!important;font-size:15px!important;}
+            #preview-content-container .special-remark-inline{white-space:nowrap!important;overflow:hidden!important;text-overflow:clip!important;}
+            #preview-content-container .pdf-section-heading{height:auto!important;padding:4px 8px!important;font-size:17px!important;line-height:1.4!important;white-space:nowrap!important;overflow:hidden!important;}
+            #preview-content-container .pdf-detail-table th,#preview-content-container .pdf-detail-table td{padding:4px 8px!important;font-size:15px!important;line-height:1.4!important;white-space:nowrap!important;}
+            #preview-content-container .pdf-grand-total{padding:4px 8px!important;font-size:17px!important;line-height:1.4!important;white-space:nowrap!important;}
+            #preview-content-container .pdf-remarks-heading{height:auto!important;padding:4px 8px!important;font-size:17px!important;line-height:1.4!important;white-space:nowrap!important;}
+        </style>
+        ${html}`;
+
+    renderArea.style.cssText = 'position:fixed;left:0;top:0;width:831px;min-width:831px;max-width:831px;background:white;z-index:9999;opacity:1;padding:0;margin:0;font-family:Arial,sans-serif;overflow:hidden;';
 
     setTimeout(() => {
         html2canvas(renderArea, {
-            scale: 3,                 // High DPI for sharp text
+            scale: 3,
             useCORS: true,
             logging: false,
             backgroundColor: '#ffffff',
-            width: 800,
-        })
-        .then(canvas => {
+            width: 831,
+            windowWidth: 831
+        }).then(canvas => {
             const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
-            const pdfWidth = pdf.internal.pageSize.getWidth();   // 210 mm
-            const pdfHeight = pdf.internal.pageSize.getHeight(); // 297 mm
-            const margin = 5; // 0.5 cm = 5 mm
+            const pdf = new jsPDF({unit:'mm',format:[220,297],orientation:'portrait'});
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const margin = 0;
+            const maxWidth = pdfWidth - (2 * margin);
+            const maxHeight = pdfHeight - (2 * margin);
 
-            // Available area inside margins
-            const maxWidth = pdfWidth - 1.5 * margin;
-            const maxHeight = pdfHeight - 1.5 * margin;
-
-            // Calculate image dimensions to fit within maxWidth and maxHeight
+            // Keep full 220mm width whenever possible. Only if the compressed
+            // content still exceeds A4 height do we apply a very small final
+            // uniform scale. This prevents the previous severe right-side gap.
             let imgWidth = maxWidth;
             let imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-            // If height exceeds maxHeight, scale down to fit height
             if (imgHeight > maxHeight) {
+                // Last-resort scale is kept extremely small; normal output is
+                // vertically compressed by the PDF CSS above.
+                const fit = maxHeight / imgHeight;
+                imgWidth *= fit;
                 imgHeight = maxHeight;
-                imgWidth = (canvas.width * imgHeight) / canvas.height;
             }
-
-            // Center the image within the margins
-            const x = (pdfWidth - imgWidth) / 2;
-            const y = (pdfHeight - imgHeight) / 2;
-
-            const imgData = canvas.toDataURL('image/jpeg', 1.0);
-            pdf.addImage(imgData, 'JPEG', x, y, imgWidth, imgHeight);
+            const x = imgWidth < maxWidth ? margin + ((maxWidth-imgWidth)/2) : margin;
+            const y = margin;
+            pdf.addImage(canvas.toDataURL('image/jpeg',1.0),'JPEG',x,y,imgWidth,imgHeight);
             pdf.save(`${data.quoteNumber || 'Quote'}.pdf`);
 
-            renderArea.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;background:white;z-index:-1;';
-            renderArea.innerHTML = '';
-        })
-        .catch(err => {
+            renderArea.style.cssText='position:fixed;left:-10000px;top:0;width:831px;min-width:831px;max-width:831px;background:white;z-index:-1;';
+            renderArea.innerHTML='';
+        }).catch(err=>{
             console.error(err);
             alert('PDF generation failed. Please try again.');
-            renderArea.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;background:white;z-index:-1;';
-            renderArea.innerHTML = '';
+            renderArea.style.cssText='position:fixed;left:-10000px;top:0;width:831px;min-width:831px;max-width:831px;background:white;z-index:-1;';
+            renderArea.innerHTML='';
         });
     }, 500);
 }
 
 // ==================== PREVIEW ====================
-function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
+function legacy_buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
     const modeLabel = { sea: 'SEA FREIGHT', air: 'AIR FREIGHT', lcl: 'LCL FREIGHT' }[mode];
     const validityDisplay = data.validityDate ? new Date(data.validityDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
     const transitDisplay = data.transit ? `${data.transit} Days` : '—';
@@ -5220,7 +5340,7 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
             if (pallets > 0) {
                 const plies = pallets * 2;
                 const palletCharge = pallets * 1875;
-                const plyCharge = plies * 600;
+                const plyCharge = pallets * 1000;
                 totalSellAmt = Math.max(palletCharge, plyCharge);
                 totalBuyAmt = Math.max(totalBuyAmt, totalSellAmt);
             }
@@ -5281,9 +5401,9 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
     });
 
     // ---- HTML generation with inline styles ----
-    const baseFont = '0.78rem';
-    const headingSize = '0.90rem';
-    const titleFont = '1.2rem';
+    const baseFont = '1rem';
+    const headingSize = '1.3rem';
+    const titleFont = '1.5rem';
     const thPadding = '4px 7px';
     const tdPadding = '4px 7px';
     const containerPadding = '10px';
@@ -5361,7 +5481,7 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
                     basisDisplay = 'Minimum';
                 } else {
                     if (charge === 'GATE PASS') {
-                        basisDisplay = 'At Actual';
+                        basisDisplay = 'AT Actual';
                     } else {
                         basisDisplay = 'Per KGS';
                     }
@@ -5373,7 +5493,7 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
                 <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;width:25%;">${charge.toUpperCase()}</td>
                 <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;width:10%;">${c.currency}</td>
                 <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;width:15%;">${Number(c.unitSellAmt).toLocaleString('en-IN')}</td>
-                <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;width:10%;">${basisDisplay}</td>
+                <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;width:10%;" class="cell-text">${basisDisplay}</td>
                 <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;width:29%;">${formatINR(c.sellINR)}</td>
             </tr>`;
         });
@@ -5391,7 +5511,7 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
 
     // ---- Build groups ----
     const groupMap = getChargeGroups(mode);
-    const group1Label = "Freight & Carrier Charges";
+    const group1Label = "Sea Freight & Local Charges";
     const group2Label = "CFS / Transport Charges";
     const group1Cats = groupMap.group1 || [];
     const group2Cats = groupMap.group2 || [];
@@ -5400,7 +5520,7 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
     let chargeHtml = '';
     if (mode === 'air') {
         const combinedCats = group1Cats.concat(group2Cats);
-        const combinedTable = buildGroupTable("AIR FREIGHT CHARGES", combinedCats, srStart);
+        const combinedTable = buildGroupTable("Air Freight Charges", combinedCats, srStart);
         chargeHtml = combinedTable.html;
     } else {
         let table1 = buildGroupTable(group1Label, group1Cats, srStart);
@@ -5414,7 +5534,7 @@ function buildPreviewHTML(data, mode, maxWidth = '100%', compact = false) {
         chargeHtml += `<table style="width:100%;border-collapse:collapse;font-size:${baseFont};margin-top:4px;">
             <tbody>
                 <tr style="background:#05964b;color:#edeef0;font-weight:800;font-size:1.05rem;line-height:1.4;">
-                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;width:71%;">GRAND TOTAL (INR) + GST additional</td>
+                    <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;width:71%;">Grand Total(INR) + GST additional</td>
                     <td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;width:29%;">${formatINR(grandTotal)}</td>
                 </tr>
             </tbody>
@@ -5531,7 +5651,7 @@ function getChargeGroups(mode) {
 }
 
 function previewQuote(mode) {
-    const data = getFormData(mode);
+    const data = (window.__multiGetFormData || getFormData)(mode);
     if (!data.client && Object.keys(data.charges).length === 0) {
         alert('Please fill the form with at least a Client Name and charges before previewing.');
         return;
@@ -5657,7 +5777,7 @@ function copyPreviewText() {
         const symbol = c.currency === 'INR' ? '₹' : '$'; // crude but works for now
         text += `${charge} : ${symbol} ${Number(c.unitSellAmt).toLocaleString('en-IN')}\n`;
     });
-    text += `\nGRAND TOTAL : ₹ ${Number(grandTotal).toLocaleString('en-IN')}\n`;
+    text += `\Grand Total : ₹ ${Number(grandTotal).toLocaleString('en-IN')}\n`;
 
     // Copy to clipboard
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -5690,21 +5810,38 @@ function copyPreviewTables() {
     }
     const { data, mode } = _previewData;
     const compactHtml = buildCompactEmailHTML(data, mode);
+    const plain = document.createElement('div');
+    plain.innerHTML = compactHtml;
+    const plainText = plain.innerText || plain.textContent || 'Quotation';
 
-    // Use clipboard API to copy HTML and plain text fallback
-    if (navigator.clipboard && navigator.clipboard.write) {
-        const blobHTML = new Blob([compactHtml], { type: 'text/html' });
-        const blobPlain = new Blob([data.client || 'Quotation'], { type: 'text/plain' });
-        const clipboardItem = new ClipboardItem({
-            'text/html': blobHTML,
-            'text/plain': blobPlain
-        });
-        navigator.clipboard.write([clipboardItem])
-            .then(() => alert('✅ Compact tables copied with formatting.'))
-            .catch(() => fallbackCopyText(compactHtml));
-    } else {
-        fallbackCopyText(compactHtml);
+    const copyPlainFallback = () => {
+        const ta = document.createElement('textarea');
+        ta.value = plainText;
+        ta.setAttribute('readonly','');
+        ta.style.position='fixed'; ta.style.opacity='0';
+        document.body.appendChild(ta);
+        ta.select();
+        let ok=false;
+        try { ok=document.execCommand('copy'); } catch(e) {}
+        ta.remove();
+        alert(ok ? '✅ Compact table copied.' : '⚠️ Clipboard access is blocked by the browser.');
+    };
+
+    if (navigator.clipboard?.write && window.ClipboardItem) {
+        try {
+            const item = new ClipboardItem({
+                'text/html': new Blob([compactHtml], {type:'text/html'}),
+                'text/plain': new Blob([plainText], {type:'text/plain'})
+            });
+            navigator.clipboard.write([item]).then(() => {
+                alert('✅ Compact tables copied with formatting.');
+            }).catch(copyPlainFallback);
+            return;
+        } catch (e) {
+            console.warn('Rich clipboard unavailable:', e);
+        }
     }
+    copyPlainFallback();
 }
 
 // ==================== DSR FUNCTIONS ====================
@@ -5724,6 +5861,55 @@ document.addEventListener('click', function(e) {
 
 // ===== UNIFIED DSR GLOBAL VARIABLES =====
 let dsrEditIdx = null;
+
+// ===== SEA DSR CUT-OFF DEFAULTS =====
+function formatISODateLocal(d){
+    const x=new Date(d); if(isNaN(x)) return '';
+    const y=x.getFullYear(), m=String(x.getMonth()+1).padStart(2,'0'), day=String(x.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+}
+function addDaysLocal(base, days){ const d=new Date(base); d.setHours(12,0,0,0); d.setDate(d.getDate()+Number(days||0)); return d; }
+function calculateSeaDsrCutoffs(etd){
+    if(!etd) return {siCutoff:'',gateCutoff:'',sbCutoff:'',gateOpening:''};
+    const gate=addDaysLocal(etd,-2);
+    return {
+        siCutoff: formatISODateLocal(addDaysLocal(etd,-4)),
+        gateCutoff: formatISODateLocal(gate),
+        sbCutoff: formatISODateLocal(gate),
+        gateOpening: formatISODateLocal(addDaysLocal(gate,-3))
+    };
+}
+function applyDsrCutoffDefaults(force=false){
+    const mode=document.getElementById('dsr-mode')?.value || 'SEA';
+    if(mode!=='SEA') return;
+    const etd=document.getElementById('dsr-etd')?.value || '';
+    const c=calculateSeaDsrCutoffs(etd); if(!etd) return;
+    const map=[['dsr-gate-opening','gateOpening'],['dsr-gate-cutoff','gateCutoff'],['dsr-sb-cutoff','sbCutoff'],['dsr-si-cutoff','siCutoff']];
+    map.forEach(([id,key])=>{ const el=document.getElementById(id); if(el && (force || !el.value)) el.value=c[key]||''; });
+}
+function getDsrContainerRows(){
+    return Array.from(document.querySelectorAll('#dsr-container-rows .dsr-container-row')).map(row=>({
+        containerNo: row.querySelector('.dsr-container-no')?.value.trim() || '',
+        type: row.querySelector('.dsr-container-type')?.value || ''
+    })).filter(x=>x.containerNo || x.type);
+}
+function renderDsrContainerRows(rows=[]){
+    const wrap=document.getElementById('dsr-container-rows'); if(!wrap) return;
+    const list=Array.isArray(rows)&&rows.length?rows:[{containerNo:'',type:''}];
+    const opts=(db.containers||[]).filter(c=>!(db.hiddenItems?.containers||[]).includes(c)).sort();
+    wrap.innerHTML=list.map((c,i)=>`<div class="dsr-container-row" style="display:grid;grid-template-columns:1.5fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;">
+        <div class="form-group" style="margin:0;"><label>Container No. ${i===0?'*':''}</label><input type="text" class="dsr-container-no" value="${escapeHtml(c.containerNo||'')}" placeholder="MSCU1234567" style="width:100%;"></div>
+        <div class="form-group" style="margin:0;"><label>Container Size / Type ${i===0?'*':''}</label><select class="dsr-container-type" style="width:100%;"><option value="">Select</option>${opts.map(t=>`<option value="${escapeHtml(t)}" ${c.type===t?'selected':''}>${escapeHtml(t)}</option>`).join('')}</select></div>
+        <button type="button" class="btn btn-clear btn-sm" onclick="removeDsrContainerRow(this)" ${list.length===1?'disabled':''}>✕</button>
+    </div>`).join('');
+}
+function addDsrContainerRow(){
+    const rows=getDsrContainerRows(); rows.push({containerNo:'',type:''}); renderDsrContainerRows(rows);
+}
+function removeDsrContainerRow(btn){
+    const rows=getDsrContainerRows(); const idx=Array.from(document.querySelectorAll('#dsr-container-rows .dsr-container-row')).indexOf(btn.closest('.dsr-container-row'));
+    if(idx>=0) rows.splice(idx,1); renderDsrContainerRows(rows);
+}
 
 // ===== UNIFIED DSR FORM BUILDER =====
 function buildDsrForm(s, mode, isEdit) {
@@ -5810,6 +5996,26 @@ function buildDsrForm(s, mode, isEdit) {
                 <div style="flex:1;"><label>ETA</label><input type="date" id="dsr-eta" value="${s.eta || ''}" style="width:100%;"></div>
             </div>
         </div>
+
+        ${mode === 'SEA' ? `
+        <div style="margin-top:10px;border-top:1px solid #cbd5e1;padding-top:10px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <strong style="color:#1e3a8a;">📦 Container Details</strong>
+                <button type="button" class="btn btn-success btn-sm" onclick="addDsrContainerRow()">+ Add Container</button>
+            </div>
+            <div id="dsr-container-rows"></div>
+        </div>
+
+        <div style="margin-top:10px;border-top:1px solid #cbd5e1;padding-top:10px;">
+            <strong style="color:#1e3a8a;display:block;margin-bottom:8px;">⏱️ SEA Cut-off Defaults</strong>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
+                <div class="form-group"><label>Gate Opening</label><input type="date" id="dsr-gate-opening" value="${s.gateOpening || ''}" onchange="applyDsrCutoffDefaults(false)" style="width:100%;"></div>
+                <div class="form-group"><label>Gate Cut-off</label><input type="date" id="dsr-gate-cutoff" value="${s.gateCutoff || ''}" onchange="applyDsrCutoffDefaults(false)" style="width:100%;"></div>
+                <div class="form-group"><label>SB Cut-off</label><input type="date" id="dsr-sb-cutoff" value="${s.sbCutoff || ''}" onchange="applyDsrCutoffDefaults(false)" style="width:100%;"></div>
+                <div class="form-group"><label>SI Cut-off</label><input type="date" id="dsr-si-cutoff" value="${s.siCutoff || ''}" onchange="applyDsrCutoffDefaults(false)" style="width:100%;"></div>
+            </div>
+            <small style="color:#64748b;">Defaults: SI −4 days • Gate −2 days • SB −2 days • Gate Opening = Gate Cut-off −3 days</small>
+        </div>` : ''}
 
         <!-- ===== STATUS DROPDOWNS (NEW) ===== -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;border-top:1px solid #cbd5e1;padding-top:10px;">
@@ -5898,6 +6104,10 @@ function openDsrModal(mode, editIdx = null, prefill = null) {
         }
 
         renderDsrCharges(mode, s);
+        if (mode === 'SEA') {
+            renderDsrContainerRows(Array.isArray(s.containers) && s.containers.length ? s.containers : (s.containerNo ? [{containerNo:s.containerNo,type:s.containerType||''}] : [{containerNo:'',type:''}]));
+            applyDsrCutoffDefaults(false);
+        }
     }, 100);
 }
 
@@ -6034,6 +6244,11 @@ function saveDsrShipment(isUpdate) {
             alert('Mandatory fields: JOB NO, Shipper, POL, POD, Shipping Line');
             return;
         }
+        const seaContainers = mode === 'SEA' ? getDsrContainerRows() : [];
+        if (mode === 'SEA' && (!seaContainers.length || seaContainers.some(c => !c.containerNo || !c.type))) {
+            alert('SEA Shipment: please enter Container No. and Container Size / Type for each container.');
+            return;
+        }
 
         let code = document.getElementById('dsr-code').value.trim();
         if (!code) {
@@ -6069,6 +6284,13 @@ function saveDsrShipment(isUpdate) {
             vesselAtd: document.getElementById('dsr-vessel-atd').value.trim(),
             eta: document.getElementById('dsr-eta').value,
             remarks: document.getElementById('dsr-remarks').value.trim(),
+            containers: mode === 'SEA' ? seaContainers : [],
+            containerNo: mode === 'SEA' ? (seaContainers[0]?.containerNo || '') : '',
+            containerType: mode === 'SEA' ? (seaContainers[0]?.type || '') : '',
+            gateOpening: mode === 'SEA' ? (document.getElementById('dsr-gate-opening')?.value || '') : '',
+            gateCutoff: mode === 'SEA' ? (document.getElementById('dsr-gate-cutoff')?.value || '') : '',
+            sbCutoff: mode === 'SEA' ? (document.getElementById('dsr-sb-cutoff')?.value || '') : '',
+            siCutoff: mode === 'SEA' ? (document.getElementById('dsr-si-cutoff')?.value || '') : '',
             cargoStatus: document.getElementById('dsr-cargo-status').value,
             docsStatus: document.getElementById('dsr-docs-status').value,
             sales: getLoggedInUserName() || db.defaultUser || '',
@@ -6082,7 +6304,6 @@ function saveDsrShipment(isUpdate) {
             sellPK: 0,
             buyPK: 0,
             margin: 0,
-            containerNo: document.getElementById('dsr-container-no')?.value || '',
             grossWeight: 0,
             validEtd: ''
         };
@@ -6119,7 +6340,7 @@ function saveDsrShipment(isUpdate) {
 }
 
 // ===== EDIT DSR SHIPMENT (CLICK FROM LIST) =====
-function editDsrShipment(idx) {
+function legacy_editDsrShipment(idx) {
     const s = db.shipments[idx];
     if (!s) {
         alert('Shipment not found.');
@@ -6283,7 +6504,7 @@ function openDsrByCode(code) {
     }
     editDsrShipment(idx);
 }
-function editDsrShipment(idx) {
+function legacy_editDsrShipment2(idx) {
     const s = db.shipments[idx];
     if (!s) return alert('Shipment not found.');
     if (s.type === 'SEA') {
@@ -6396,12 +6617,14 @@ function addShipmentFromQuote(target, mode, idx, noModal = false) {
         let sellAmtUSD = rawSellAmt;
         let buyAmtUSD = rawBuyAmt;
         if (rawSellCur !== 'USD') {
-            const inrValue = sellAmtUSD * (db.exchangeRates[rawSellCur] || 1);
-            sellAmtUSD = inrValue / (db.exchangeRates.USD || 94.5);
+            const inrValue = toINR(sellAmtUSD, rawSellCur);
+            const usdRate = Number(db.exchangeRates?.USD);
+            sellAmtUSD = usdRate > 0 ? inrValue / usdRate : 0;
         }
         if (rawBuyCur !== 'USD') {
-            const inrValue = buyAmtUSD * (db.exchangeRates[rawBuyCur] || 1);
-            buyAmtUSD = inrValue / (db.exchangeRates.USD || 94.5);
+            const inrValue = toINR(buyAmtUSD, rawBuyCur);
+            const usdRate = Number(db.exchangeRates?.USD);
+            buyAmtUSD = usdRate > 0 ? inrValue / usdRate : 0;
         }
         const s = {
             ...baseShipment,
@@ -7166,15 +7389,14 @@ function populateDropdowns() {
 function renderDefaultChargesMaster(mode) {
     const search = (document.getElementById(`dc-${mode}-search`)?.value || '').toLowerCase();
     let records = [];
-    if (mode === 'sea') records = db.defaultSeaCharges;
-    else if (mode === 'air') records = db.defaultAirCharges;
-    else if (mode === 'lcl') records = db.defaultLclCharges;
+    if (mode === 'sea') records = db.defaultSeaCharges || [];
+    else if (mode === 'air') records = db.defaultAirCharges || [];
+    else records = db.defaultLclCharges || [];
 
     const filterPol = document.getElementById(`dc-${mode}-filter-pol`)?.value || '';
-
     const filtered = records.map((rec, originalIdx) => ({ rec, originalIdx }))
         .filter(({ rec }) => {
-            let text = `${rec.pol} ${rec.commodity||''}`.toLowerCase();
+            const text = `${rec.pol || ''} ${rec.commodity || ''}`.toLowerCase();
             if (search && !text.includes(search)) return false;
             if (filterPol && rec.pol !== filterPol) return false;
             return true;
@@ -7184,41 +7406,47 @@ function renderDefaultChargesMaster(mode) {
     if (!disp) return;
 
     let html = `<table class="master-table"><thead><tr>
-        <th style="width:30px;"><input type="checkbox" class="select-all-dc" data-mode="${mode}" /></th>`;
-    html += `<th>POL</th>`;
-    html += `<th>Commodity / Cargo</th>`;
-    html += `<th>Charges</th>`;
-    // For SEA, add CFS 20 and CFS 40 columns
-    if (mode === 'sea') {
-        html += `<th>CFS 20' (INR)</th><th>CFS 40' (INR)</th>`;
-    }
-    html += `<th>Updated</th><th>Action</th></tr></thead><tbody>`;
+        <th style="width:30px;"><input type="checkbox" class="select-all-dc" data-mode="${mode}" /></th>
+        <th>POL</th><th>HAZ / NON HAZ</th><th>CONTAINER</th><th>CURRENCY</th><th>Charges</th><th>Valid From</th><th>Valid To</th><th>Updated</th><th>Action</th></tr></thead><tbody>`;
 
-    if (filtered.length === 0) {
-        const cols = (mode === 'sea') ? 8 : 6;
-        html += `<tr><td colspan="${cols}" style="text-align:center;padding:16px;color:var(--text-light);">No records.</td></tr>`;
+    const virtualRows = [];
+    filtered.forEach(({ rec, originalIdx }) => {
+        if (mode === 'sea') {
+            const groups = lcContainerRowsForDefault('sea', rec);
+            groups.forEach(group => {
+                const currencies = new Set(Object.values(group.charges || {}).map(v => v?.currency || 'INR'));
+                if (!currencies.size) currencies.add('INR');
+                currencies.forEach(currency => virtualRows.push({ rec, originalIdx, container: group.container, currency, charges: group.charges }));
+            });
+        } else {
+            const currencies = new Set(Object.values(rec.charges || {}).map(v => v?.currency || 'INR'));
+            if (!currencies.size) currencies.add('INR');
+            currencies.forEach(currency => virtualRows.push({ rec, originalIdx, container: 'ALL', currency, charges: rec.charges || {} }));
+        }
+    });
+
+    if (!virtualRows.length) {
+        html += `<tr><td colspan="10" style="text-align:center;padding:16px;color:var(--text-light);">No records.</td></tr>`;
     } else {
-        filtered.forEach(({ rec, originalIdx }) => {
-            const chargesCount = Object.keys(rec.charges || {}).filter(k => k !== 'CFS_20' && k !== 'CFS_40').length;
+        virtualRows.forEach(({ rec, originalIdx, container, currency, charges }) => {
+            const chargeCount = Object.values(charges || {}).filter(v => (v?.currency || 'INR') === currency && Number(v?.amount || 0) > 0).length;
+            const created = rec.validFrom || '';
+            const validTo = rec.validTo || '';
             const updated = rec.updatedAt ? new Date(rec.updatedAt).toLocaleDateString('en-IN') : '—';
-            const cfs20 = rec.charges?.CFS_20?.amount || 0;
-            const cfs40 = rec.charges?.CFS_40?.amount || 0;
-
-            html += `<tr>`;
-            html += `<td><input type="checkbox" class="dc-checkbox" data-mode="${mode}" data-idx="${originalIdx}" data-type="default" /></td>`;
-            html += `<td>${rec.pol}</td>`;
-            html += `<td>${rec.commodity || '—'}</td>`;
-            html += `<td style="text-align:center;"><strong>${chargesCount}</strong></td>`;
-            if (mode === 'sea') {
-                html += `<td>${cfs20}</td><td>${cfs40}</td>`;
-            }
-            html += `<td>${updated}</td>`;
-            html += `<td>
-                <button class="btn btn-sm btn-preview" onclick="previewDefaultCharge('${mode}',${originalIdx})">👁</button>
-                <button class="btn btn-sm btn-preview" onclick="openEditDefaultChargeModal('${mode}',${originalIdx})">✏️</button>
-                <button class="btn btn-sm btn-duplicate" onclick="duplicateDefaultCharge('${mode}',${originalIdx})">📋</button>
-                <button class="btn btn-sm btn-clear" onclick="deleteDefaultChargeEntry('${mode}',${originalIdx})">×</button>
-            </td></tr>`;
+            html += `<tr>
+                <td><input type="checkbox" class="dc-checkbox" data-mode="${mode}" data-idx="${originalIdx}" data-type="default" /></td>
+                <td>${rec.pol || '—'}</td>
+                <td>${rec.commodity || '—'}</td>
+                <td>${container}</td>
+                <td><strong>${currency}</strong></td>
+                <td style="text-align:center;"><strong>${chargeCount}</strong></td>
+                <td>${created || '—'}</td><td>${validTo || '—'}</td><td>${updated}</td>
+                <td>
+                    <button class="btn btn-sm btn-preview" onclick="previewDefaultCharge('${mode}',${originalIdx})">👁</button>
+                    <button class="btn btn-sm btn-preview" onclick="openEditDefaultChargeModal('${mode}',${originalIdx})">✏️</button>
+                    <button class="btn btn-sm btn-duplicate" onclick="duplicateDefaultCharge('${mode}',${originalIdx})">📋</button>
+                    <button class="btn btn-sm btn-clear" onclick="deleteDefaultChargeEntry('${mode}',${originalIdx})">×</button>
+                </td></tr>`;
         });
     }
     html += '</tbody></table>';
@@ -7231,11 +7459,77 @@ function renderDefaultChargesMaster(mode) {
             updateSelectedCount();
         });
     });
-    document.querySelectorAll('.dc-checkbox').forEach(cb => {
-        cb.addEventListener('change', updateSelectedCount);
-    });
+    document.querySelectorAll('.dc-checkbox').forEach(cb => cb.addEventListener('change', updateSelectedCount));
     updateSelectedCount();
 }
+
+// ==================== SEA THC MASTER (DEDICATED) ====================
+function renderSeaTHCMaster(){
+    const disp=document.getElementById('sea-thc-master-table');
+    if(!disp) return;
+    const search=(document.getElementById('sea-thc-search')?.value||'').toLowerCase().trim();
+    const rows=(db.seaTHCRates||[]).map((rec,idx)=>({rec,idx})).filter(({rec})=>{
+        const text=`${rec.carrier||''} ${rec.pol||''} ${rec.commodity||''} ${rec.currency||''}`.toLowerCase();
+        return !search || text.includes(search);
+    });
+    let html=`<table class="master-table"><thead><tr><th>Carrier</th><th>POL</th><th>Cargo</th><th>Currency</th><th>THC 20 GP</th><th>THC 40 HC</th><th>Valid From</th><th>Valid To</th><th>Updated</th><th>Action</th></tr></thead><tbody>`;
+    if(!rows.length) html+=`<tr><td colspan="10" style="text-align:center;padding:16px;color:var(--text-light);">No SEA THC records.</td></tr>`;
+    rows.forEach(({rec,idx})=>{
+        html+=`<tr><td>${rec.carrier||'—'}</td><td>${rec.pol||'—'}</td><td>${rec.commodity||'—'}</td><td><strong>${rec.currency||'INR'}</strong></td><td>${rec.thc20??'—'}</td><td>${rec.thc40??'—'}</td><td>${rec.validFrom||'—'}</td><td>${rec.validTo||'—'}</td><td>${rec.updated?new Date(rec.updated).toLocaleDateString('en-IN'):'—'}</td><td>
+        <button class="btn btn-sm btn-preview" onclick="previewSeaTHC(${idx})">👁</button>
+        <button class="btn btn-sm btn-preview" onclick="openEditSeaTHCModal(${idx})">✏️</button>
+        <button class="btn btn-sm btn-duplicate" onclick="duplicateSeaTHC(${idx})">📋</button>
+        <button class="btn btn-sm btn-clear" onclick="deleteSeaTHC(${idx})">×</button></td></tr>`;
+    });
+    html+='</tbody></table>'; disp.innerHTML=html;
+}
+function seaTHCFormHTML(rec={}){
+    const carrier=rec.carrier||'', pol=rec.pol||'', commodity=rec.commodity||'NON HAZ', currency=rec.currency||'INR';
+    return `<div class="form-grid-2col">
+      <div class="form-group"><label>Carrier</label><select id="modal-thc-carrier"><option value="">Select</option>${db.carriers.map(c=>`<option value="${c}" ${c===carrier?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="form-group"><label>POL</label><select id="modal-thc-pol"><option value="">Select</option>${db.pol.map(p=>`<option value="${p}" ${p===pol?'selected':''}>${p}</option>`).join('')}</select></div>
+      <div class="form-group"><label>Cargo</label><select id="modal-thc-cargo"><option value="NON HAZ" ${commodity==='NON HAZ'?'selected':''}>NON HAZ</option><option value="HAZ" ${commodity==='HAZ'?'selected':''}>HAZ</option></select></div>
+      <div class="form-group"><label>Currency</label><select id="modal-thc-currency"><option value="INR" ${currency==='INR'?'selected':''}>INR</option><option value="USD" ${currency==='USD'?'selected':''}>USD</option></select></div>
+      <div class="form-group"><label>THC 20 GP</label><input type="number" id="modal-thc20" step="0.01" value="${rec.thc20??''}"></div>
+      <div class="form-group"><label>THC 40 HC</label><input type="number" id="modal-thc40" step="0.01" value="${rec.thc40??''}"></div>
+      <div class="form-group"><label>Valid From</label><input type="date" id="modal-thc-from" value="${rec.validFrom||''}"></div>
+      <div class="form-group"><label>Valid To</label><input type="date" id="modal-thc-to" value="${rec.validTo||''}"></div>
+    </div>`;
+}
+function openAddSeaTHCModal(){
+    document.getElementById('modal-title').textContent='Add SEA THC Rate';
+    document.getElementById('previewBody').innerHTML=`<h3 style="color:var(--primary);margin-bottom:12px;">Dedicated SEA THC – Carrier + POL + Cargo</h3>${seaTHCFormHTML()}<div style="margin-top:16px;text-align:right;"><button class="btn btn-clear" onclick="closeModal('previewModal')">Cancel</button><button class="btn btn-quoted" onclick="saveSeaTHC(null)">Save</button></div>`;
+    openModal('previewModal');
+}
+function openEditSeaTHCModal(idx){
+    const rec=db.seaTHCRates?.[idx]; if(!rec) return alert('SEA THC record not found.');
+    document.getElementById('modal-title').textContent='Edit SEA THC Rate';
+    document.getElementById('previewBody').innerHTML=`<h3 style="color:var(--primary);margin-bottom:12px;">Edit SEA THC – Carrier + POL + Cargo</h3>${seaTHCFormHTML(rec)}<div style="margin-top:16px;text-align:right;"><button class="btn btn-clear" onclick="closeModal('previewModal')">Cancel</button><button class="btn btn-quoted" onclick="saveSeaTHC(${idx})">Save</button></div>`;
+    openModal('previewModal');
+}
+function saveSeaTHC(idx){
+    const carrier=document.getElementById('modal-thc-carrier').value.trim();
+    const pol=document.getElementById('modal-thc-pol').value.trim();
+    const commodity=document.getElementById('modal-thc-cargo').value.trim().toUpperCase();
+    const currency=document.getElementById('modal-thc-currency').value.trim().toUpperCase();
+    const thc20=parseFloat(document.getElementById('modal-thc20').value)||0;
+    const thc40=parseFloat(document.getElementById('modal-thc40').value)||0;
+    const validFrom=document.getElementById('modal-thc-from').value;
+    const validTo=document.getElementById('modal-thc-to').value;
+    if(!carrier||!pol||!['HAZ','NON HAZ'].includes(commodity)) return alert('Carrier, POL and HAZ/NON HAZ are required.');
+    if(!['INR','USD'].includes(currency)) return alert('Currency must be INR or USD.');
+    if(!thc20&&!thc40) return alert('Enter THC 20 GP or THC 40 HC.');
+    if(validFrom&&validTo&&validFrom>validTo) return alert('Valid From cannot be after Valid To.');
+    const duplicate=(db.seaTHCRates||[]).findIndex((r,i)=>i!==idx && r.carrier===carrier&&r.pol===pol&&r.commodity===commodity&&r.currency===currency);
+    if(duplicate>=0) return alert('Duplicate SEA THC record already exists for Carrier + POL + Cargo + Currency.');
+    const rec={mode:'sea',carrier,pol,commodity,currency,thc20:thc20||null,thc40:thc40||null,validFrom,validTo,updated:new Date().toISOString()};
+    if(idx===null) db.seaTHCRates.push(rec); else db.seaTHCRates[idx]=rec;
+    saveDB(); closeModal('previewModal'); renderSeaTHCMaster(); autoBackup();
+    alert(idx===null?'✅ SEA THC added.':'✅ SEA THC updated.');
+}
+function deleteSeaTHC(idx){ const rec=db.seaTHCRates?.[idx]; if(!rec)return alert('Record not found.'); if(!confirm(`Delete SEA THC rate for ${rec.carrier} / ${rec.pol} / ${rec.commodity} / ${rec.currency}?`))return; db.seaTHCRates.splice(idx,1); saveDB(); renderSeaTHCMaster(); autoBackup(); }
+function duplicateSeaTHC(idx){ const rec=db.seaTHCRates?.[idx]; if(!rec)return alert('Record not found.'); const copy={...rec,updated:new Date().toISOString()}; copy.carrier=rec.carrier+' (Copy)'; db.seaTHCRates.push(copy); saveDB(); renderSeaTHCMaster(); autoBackup(); }
+function previewSeaTHC(idx){ const r=db.seaTHCRates?.[idx]; if(!r)return alert('Record not found.'); document.getElementById('modal-title').textContent='SEA THC Rate Preview'; document.getElementById('previewBody').innerHTML=`<div class="preview-card"><h3>Dedicated SEA THC</h3><div class="preview-grid"><div class="item"><span class="label">Carrier</span><span class="value">${r.carrier}</span></div><div class="item"><span class="label">POL</span><span class="value">${r.pol}</span></div><div class="item"><span class="label">Cargo</span><span class="value">${r.commodity}</span></div><div class="item"><span class="label">Currency</span><span class="value">${r.currency}</span></div><div class="item"><span class="label">THC 20 GP</span><span class="value">${r.thc20??'—'}</span></div><div class="item"><span class="label">THC 40 HC</span><span class="value">${r.thc40??'—'}</span></div><div class="item"><span class="label">Valid From</span><span class="value">${r.validFrom||'—'}</span></div><div class="item"><span class="label">Valid To</span><span class="value">${r.validTo||'—'}</span></div></div></div>`; openModal('previewModal'); }
 
 // ==================== CARRIER CHARGES MASTER ====================
 function renderCarrierChargesMaster(type) {
@@ -7267,31 +7561,23 @@ function renderCarrierChargesMaster(type) {
 
     let html = `<table class="master-table"><thead><tr>
         <th style="width:30px;"><input type="checkbox" class="select-all-cc" data-type="${type}" /></th>`;
-    // Remove Container column – only Carrier, POL, Commodity, Charges, THC_20, THC_40, Updated, Action
+    // SEA THC is managed exclusively in the dedicated SEA THC table.
     html += `<th>Carrier</th><th>POL</th><th>Commodity</th>`;
     html += `<th>Charges</th>`;
-    if (type === 'sealcl') {
-        html += `<th>THC 20' (INR)</th><th>THC 40' (INR)</th>`;
-    }
     html += `<th>Updated</th><th>Action</th></tr></thead><tbody>`;
 
     if (filtered.length === 0) {
-        const cols = (type === 'sealcl') ? 9 : (type === 'air' ? 7 : 8);
+        const cols = (type === 'air' ? 7 : 6);
         html += `<tr><td colspan="${cols}" style="text-align:center;padding:16px;color:var(--text-light);">No records.</td></tr>`;
     } else {
         filtered.forEach(({ rec, originalIdx }) => {
-            const chargeCount = Object.keys(rec.charges || {}).filter(k => k !== 'THC_20' && k !== 'THC_40').length;
+            const chargeCount = Object.keys(rec.charges || {}).filter(k => k !== 'THC_20' && k !== 'THC_40' && k !== 'THC').length;
             const updated = rec.updated ? new Date(rec.updated).toLocaleDateString('en-IN') : '—';
-            const thc20 = rec.charges?.THC_20?.amount || 0;
-            const thc40 = rec.charges?.THC_40?.amount || 0;
             html += `<tr>`;
             html += `<td><input type="checkbox" class="cc-checkbox" data-type="${type}" data-idx="${originalIdx}" /></td>`;
             html += `<td>${rec.carrier}</td><td>${rec.pol}</td>`;
             html += `<td>${rec.commodity || '—'}</td>`;
             html += `<td style="text-align:center;"><strong>${chargeCount}</strong></td>`;
-            if (type === 'sealcl') {
-                html += `<td>${thc20}</td><td>${thc40}</td>`;
-            }
             html += `<td>${updated}</td>
             <td>
                 <button class="btn btn-sm btn-preview" onclick="previewCarrierCharge('${type}',${originalIdx})">👁</button>
@@ -7477,7 +7763,7 @@ function openEditDefaultChargeModal(mode, idx) {
 }
 
 
-function saveEditDefaultCharge(mode, idx) {
+function legacy_saveEditDefaultCharge(mode, idx) {
     // ---- 1. Safely get modal elements ----
     const polEl = document.getElementById('modal-dc-pol-edit');
     const commodityEl = document.getElementById('modal-dc-commodity-edit');
@@ -7746,7 +8032,7 @@ function addChargeToDCModal(mode) {
 }
 
 
-function addCCChargeToModal() {
+function legacy_addCCChargeToModal() {
     const key = document.getElementById('modal-cc-add-charge').value;
     const list = document.getElementById('modal-cc-charges-list');
 
@@ -7959,13 +8245,6 @@ function openEditCarrierChargeModal(type, idx) {
         </select>
     </div>`;
 
-    // Container dropdown removed
-    if (type === 'sealcl') {
-        const thc20 = rec.charges?.THC_20?.amount || 0;
-        const thc40 = rec.charges?.THC_40?.amount || 0;
-        html += `<div class="form-group"><label>THC 20' (INR)</label><input type="number" id="modal-cc-thc20" step="0.01" value="${thc20}" /></div>`;
-        html += `<div class="form-group"><label>THC 40' (INR)</label><input type="number" id="modal-cc-thc40" step="0.01" value="${thc40}" /></div>`;
-    }
 
     html += `<div class="form-group"><label>Commodity</label>
         <select id="modal-cc-commodity-edit">
@@ -8071,8 +8350,6 @@ function saveEditCarrierCharge(type, idx) {
         commodity = document.getElementById('modal-cc-commodity-edit').value.trim();
         if (!carrier || !pol) return alert('Carrier and POL are required.');
         // Handle THC
-        const thc20 = parseFloat(document.getElementById('modal-cc-thc20').value) || 0;
-        const thc40 = parseFloat(document.getElementById('modal-cc-thc40').value) || 0;
         // We'll set later
     } else if (type === 'air') {
         carrier = document.getElementById('modal-cc-carrier-edit').value.trim();
@@ -8102,14 +8379,6 @@ function saveEditCarrierCharge(type, idx) {
         }
     });
 
-    // Add THC for SEA
-    if (type === 'sealcl') {
-        const thc20 = parseFloat(document.getElementById('modal-cc-thc20').value) || 0;
-        const thc40 = parseFloat(document.getElementById('modal-cc-thc40').value) || 0;
-        if (thc20 > 0) charges.THC_20 = { amount: thc20, currency: 'INR' };
-        if (thc40 > 0) charges.THC_40 = { amount: thc40, currency: 'INR' };
-    }
-
     // Update rec – container removed
     rec.mode = mode;
     rec.carrier = carrier;
@@ -8134,11 +8403,6 @@ function openAddCarrierChargeModal(type) {
     }
     html += `<div class="form-group"><label>Carrier</label><select id="modal-cc-carrier"><option value="">Select</option>${db.carriers.map(c => `<option value="${c}">${c}</option>`).join('')}</select></div>`;
     html += `<div class="form-group"><label>POL</label><select id="modal-cc-pol"><option value="">Select</option>${db.pol.map(p => `<option value="${p}">${p}</option>`).join('')}</select></div>`;
-    if (type === 'sealcl') {
-        // Container dropdown removed – only THC fields
-        html += `<div class="form-group"><label>THC 20' (INR)</label><input type="number" id="modal-cc-thc20" step="0.01" placeholder="e.g., 11560" /></div>`;
-        html += `<div class="form-group"><label>THC 40' (INR)</label><input type="number" id="modal-cc-thc40" step="0.01" placeholder="e.g., 17805" /></div>`;
-    }
     html += `<div class="form-group"><label>Commodity</label><select id="modal-cc-commodity"><option value="">Select</option><option value="NON HAZ">Non Haz</option><option value="HAZ">Haz</option></select></div>`;
     html += `</div>`;
 
@@ -8163,13 +8427,8 @@ function saveNewCarrierCharge(type) {
         const carrier = document.getElementById('modal-cc-carrier').value;
         const pol = document.getElementById('modal-cc-pol').value;
         const commodity = document.getElementById('modal-cc-commodity').value;
-        const thc20 = parseFloat(document.getElementById('modal-cc-thc20').value) || 0;
-        const thc40 = parseFloat(document.getElementById('modal-cc-thc40').value) || 0;
         if (!carrier || !pol) return alert('Carrier and POL are required');
         record = { mode, carrier, pol, commodity, charges: {}, updated: new Date().toISOString() };
-        // Container removed
-        if (thc20 > 0) record.charges.THC_20 = { amount: thc20, currency: 'INR' };
-        if (thc40 > 0) record.charges.THC_40 = { amount: thc40, currency: 'INR' };
         if (findCarrierChargeDuplicate(type, record)) return alert('Duplicate entry!');
         db.carrierChargesSeaLcl.push(record);
     } else if (type === 'air') {
@@ -8348,7 +8607,7 @@ function previewDefaultCharge(mode, idx) {
                         </tbody>
                         <tfoot>
                             <tr style="background: linear-gradient(135deg, #10b981, #059669); color: white; font-weight: 700; font-size: 1rem;">
-                                <td colspan="5" style="padding: 8px 12px; text-align: right;">💰 Grand Total (INR)</td>
+                                <td colspan="5" style="padding: 8px 12px; text-align: right;">💰 Grand Total(INR)</td>
                                 <td style="padding: 8px 12px; text-align: right;">${formatINR(grandTotalSellINR)}</td>
                             </tr>
                         </tfoot>
@@ -8416,9 +8675,6 @@ function previewCarrierCharge(type, idx) {
     let rec = type === 'sealcl' ? db.carrierChargesSeaLcl[idx] : db.carrierChargesAir[idx];
     if (!rec) return alert('Record not found');
     
-    const thc20 = rec.charges?.THC_20?.amount || 0;
-    const thc40 = rec.charges?.THC_40?.amount || 0;
-    
     let html = `
         <div class="preview-card">
             <h3>Carrier Charge Details</h3>
@@ -8427,10 +8683,6 @@ function previewCarrierCharge(type, idx) {
                 <div class="item"><span class="label">Carrier</span><span class="value">${rec.carrier}</span></div>
                 <div class="item"><span class="label">POL</span><span class="value">${rec.pol}</span></div>
                 <div class="item"><span class="label">Commodity</span><span class="value">${rec.commodity || '—'}</span></div>
-                ${type === 'sealcl' ? `
-                    <div class="item"><span class="label">THC 20' (INR)</span><span class="value">${thc20}</span></div>
-                    <div class="item"><span class="label">THC 40' (INR)</span><span class="value">${thc40}</span></div>
-                ` : ''}
                 <div class="item"><span class="label">Updated</span><span class="value">${rec.updated ? new Date(rec.updated).toLocaleString() : '—'}</span></div>
             </div>
         </div>
@@ -8505,217 +8757,352 @@ function findCarrierChargeDuplicate(type, record, excludeIndex) {
     });
 }
 
-// ==================== LOGIN & USER MANAGEMENT ====================
-function getLoggedInUserName() {
+// ==================== LOGIN, SECURITY & USER MANAGEMENT ====================
+const AUTH_CONFIG = {
+    idleTimeoutMs: 30 * 60 * 1000,
+    lockoutMs: 5 * 60 * 1000,
+    maxAttempts: 5,
+    sessionKey: 'loggedInUser',
+    sessionStartedKey: 'erpSessionStartedAt',
+    lastActivityKey: 'erpLastActivityAt',
+    failKey: 'erpLoginFailures',
+    rememberKey: 'erpRememberedLogin'
+};
+let authIdleTimer = null;
+let alertCenterOpen = false;
+
+function getAuthFailures(){
+    try { return JSON.parse(localStorage.getItem(AUTH_CONFIG.failKey) || '{"count":0,"until":0}'); }
+    catch(e){ return {count:0,until:0}; }
+}
+function setAuthFailures(v){ localStorage.setItem(AUTH_CONFIG.failKey, JSON.stringify(v)); }
+function resetAuthFailures(){ localStorage.removeItem(AUTH_CONFIG.failKey); }
+function isLoginLocked(){
+    const f=getAuthFailures();
+    if(f.until && Date.now()<f.until) return true;
+    if(f.until && Date.now()>=f.until) resetAuthFailures();
+    return false;
+}
+function lockRemainingMs(){ const f=getAuthFailures(); return Math.max(0,(f.until||0)-Date.now()); }
+function formatDuration(ms){ const sec=Math.ceil(ms/1000); const m=Math.floor(sec/60); const s=sec%60; return `${m}m ${String(s).padStart(2,'0')}s`; }
+
+function loadRememberedLogin(){
     try {
-        const userData = sessionStorage.getItem('loggedInUser');
-        if (!userData) return null;
-        const user = JSON.parse(userData);
-        return user.name || user.id || null;
-    } catch (e) {
-        return null;
+        const raw=localStorage.getItem(AUTH_CONFIG.rememberKey);
+        if(!raw) return;
+        const saved=JSON.parse(raw);
+        const idEl=document.getElementById('login-id');
+        const passEl=document.getElementById('login-password');
+        const rememberEl=document.getElementById('remember-login');
+        if(idEl && saved.id) idEl.value=saved.id;
+        if(passEl && saved.password) passEl.value=saved.password;
+        if(rememberEl) rememberEl.checked=!!(saved.id && saved.password);
+    } catch(e){
+        localStorage.removeItem(AUTH_CONFIG.rememberKey);
     }
+}
+function saveRememberedLogin(id, pass){
+    const rememberEl=document.getElementById('remember-login');
+    try {
+        if(rememberEl?.checked){
+            localStorage.setItem(AUTH_CONFIG.rememberKey, JSON.stringify({id, password:pass}));
+        } else {
+            localStorage.removeItem(AUTH_CONFIG.rememberKey);
+        }
+    } catch(e){ console.warn('Remember login save skipped:', e); }
+}
+async function sha256(text){
+    if(window.crypto?.subtle){
+        const data=new TextEncoder().encode(text);
+        const hash=await crypto.subtle.digest('SHA-256',data);
+        return [...new Uint8Array(hash)].map(b=>b.toString(16).padStart(2,'0')).join('');
+    }
+    // Compatibility fallback; real production security should use a server-side password verifier.
+    return text;
+}
+function normalizeUser(user){
+    if(!user) return null;
+    return {id:user.id,name:user.name||user.id,role:user.role||'user',permissions:user.permissions||[],passwordHash:user.passwordHash||null};
+}
+function getLoggedInUserName() {
+    try { const user=checkLogin(); return user ? (user.name||user.id||null) : null; } catch(e){ return null; }
 }
 function checkLogin() {
-    const user = sessionStorage.getItem('loggedInUser');
-    return user ? JSON.parse(user) : null;
+    try {
+        const raw=sessionStorage.getItem(AUTH_CONFIG.sessionKey);
+        if(!raw) return null;
+        const user=JSON.parse(raw);
+        const last=Number(sessionStorage.getItem(AUTH_CONFIG.lastActivityKey)||0);
+        if(last && Date.now()-last>AUTH_CONFIG.idleTimeoutMs){ performLogout(true); return null; }
+        return user;
+    } catch(e){ sessionStorage.removeItem(AUTH_CONFIG.sessionKey); return null; }
 }
-function performLogin() {
-    const id = document.getElementById('login-id').value.trim();
-    const pass = document.getElementById('login-password').value.trim();
-    const errorEl = document.getElementById('login-error');
-    if (!id || !pass) {
-        errorEl.textContent = 'Please enter ID and Password.';
-        errorEl.style.display = 'block';
-        return;
-    }
-    const user = db.users.find(u => u.id === id && u.password === pass);
-    if (!user) {
-        errorEl.textContent = 'Invalid User ID or Password.';
-        errorEl.style.display = 'block';
-        return;
-    }
-    errorEl.style.display = 'none';
-    sessionStorage.setItem('loggedInUser', JSON.stringify(user));
-    document.getElementById('login-overlay').classList.add('hidden');
-    applyPermissions();
-    init();
+function markAuthActivity(){
+    if(sessionStorage.getItem(AUTH_CONFIG.sessionKey)) sessionStorage.setItem(AUTH_CONFIG.lastActivityKey,String(Date.now()));
 }
-function performLogout() {
-    sessionStorage.removeItem('loggedInUser');
+function startAuthWatchdog(){
+    clearInterval(authIdleTimer);
+    authIdleTimer=setInterval(()=>{
+        const user=checkLogin();
+        if(user){
+            const last=Number(sessionStorage.getItem(AUTH_CONFIG.lastActivityKey)||0);
+            if(last && Date.now()-last>AUTH_CONFIG.idleTimeoutMs){ performLogout(true); }
+        }
+    },15000);
+    ['click','keydown','mousemove','touchstart','scroll'].forEach(evt=>document.addEventListener(evt,markAuthActivity,{passive:true}));
+}
+function showLoginError(message, locked=false){
+    const errorEl=document.getElementById('login-error'); const box=document.querySelector('#login-overlay .login-box');
+    if(errorEl){ errorEl.textContent=message; errorEl.style.display='block'; }
+    if(box) box.classList.toggle('login-locked',locked);
+}
+function updateLoginLockUI(){
+    const btn=document.getElementById('login-submit'); const existing=document.getElementById('login-lock-message');
+    const locked=isLoginLocked();
+    if(btn) btn.disabled=locked;
+    if(locked){
+        const msg=`Too many failed attempts. Try again in ${formatDuration(lockRemainingMs())}.`;
+        showLoginError(msg,true);
+        if(!existing){ const el=document.createElement('div'); el.id='login-lock-message'; el.className='login-lock-message'; el.textContent=msg; document.querySelector('.login-form')?.appendChild(el); }
+        else existing.textContent=msg;
+    } else if(existing){ existing.remove(); }
+    return locked;
+}
+async function securePasswordHash(password, saltB64) {
+    if (!window.crypto?.subtle) throw new Error('Web Crypto is required for secure password storage.');
+    const salt = saltB64 ? Uint8Array.from(atob(saltB64), c => c.charCodeAt(0)) : crypto.getRandomValues(new Uint8Array(16));
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({name:'PBKDF2', salt, iterations:150000, hash:'SHA-256'}, key, 256);
+    const hash = btoa(String.fromCharCode(...new Uint8Array(bits)));
+    return {hash, salt: btoa(String.fromCharCode(...salt)), algorithm:'PBKDF2-SHA256', iterations:150000};
+}
+async function verifySecurePassword(password, user) {
+    if (!user?.passwordHashV2 || !user?.passwordSalt) return false;
+    const result = await securePasswordHash(password, user.passwordSalt);
+    return result.hash === user.passwordHashV2;
+}
+async function performLogin() {
+    if(updateLoginLockUI()) return;
+    const id=(document.getElementById('login-id')?.value||'').trim();
+    const pass=(document.getElementById('login-password')?.value||'').trim();
+    if(!id||!pass){ showLoginError('Please enter User ID and Password.'); return; }
+    const btn=document.getElementById('login-submit'); if(btn) btn.disabled=true;
+    try{
+        const user=db.users.find(u=>String(u.id).toLowerCase()===id.toLowerCase());
+        const hash=await sha256(pass);
+        const valid=user && ((user.passwordHashV2 && await verifySecurePassword(pass,user)) || (user.passwordHash && user.passwordHash===hash));
+        if(!valid){
+            const f=getAuthFailures(); f.count=(f.count||0)+1;
+            if(f.count>=AUTH_CONFIG.maxAttempts){ f.until=Date.now()+AUTH_CONFIG.lockoutMs; }
+            setAuthFailures(f);
+            const remaining=Math.max(0,AUTH_CONFIG.maxAttempts-f.count);
+            if(f.until) showLoginError(`Too many failed attempts. Try again in ${formatDuration(AUTH_CONFIG.lockoutMs)}.`,true);
+            else showLoginError(`Invalid User ID or Password.${remaining?` ${remaining} attempt(s) remaining.`:''}`);
+            updateLoginLockUI(); return;
+        }
+        // Legacy SHA-256 hashes remain readable for backward compatibility.
+        // Plaintext passwords are never accepted or stored by the current engine.
+        if(user.password){ delete user.password; user.passwordHash=hash; saveDB(); }
+        resetAuthFailures();
+        saveRememberedLogin(id, pass);
+        const safeUser=normalizeUser(user);
+        sessionStorage.setItem(AUTH_CONFIG.sessionKey,JSON.stringify(safeUser));
+        sessionStorage.setItem(AUTH_CONFIG.sessionStartedKey,String(Date.now()));
+        sessionStorage.setItem(AUTH_CONFIG.lastActivityKey,String(Date.now()));
+        const overlay=document.getElementById('login-overlay'); if(overlay) overlay.classList.add('hidden');
+        const err=document.getElementById('login-error'); if(err) err.style.display='none';
+        applyPermissions(); startAuthWatchdog(); init();
+    }catch(e){ console.error(e); showLoginError('Login service error. Please refresh and try again.'); }
+    finally{ if(btn && !isLoginLocked()) btn.disabled=false; }
+}
+function performLogout(auto=false){
+    sessionStorage.removeItem(AUTH_CONFIG.sessionKey); sessionStorage.removeItem(AUTH_CONFIG.sessionStartedKey); sessionStorage.removeItem(AUTH_CONFIG.lastActivityKey);
+    if(auto) sessionStorage.setItem('erpLogoutReason','Your session expired after 30 minutes of inactivity.');
+    else sessionStorage.removeItem('erpLogoutReason');
     location.reload();
 }
 function applyPermissions() {
-    const user = checkLogin();
-    if (!user) return;
-    const adminUserMgmt = document.getElementById('admin-user-management');
-    if (adminUserMgmt) adminUserMgmt.style.display = user.role === 'master' ? 'block' : 'none';
-    document.querySelectorAll('.tab-btn-vertical').forEach(btn => {
-        const tabId = btn.dataset.tab;
-        if (user.role === 'master' || user.permissions === 'all' || user.permissions.includes(tabId)) {
-            btn.style.display = 'block';
-            btn.disabled = false;
-        } else {
-            btn.style.display = 'none';
-            btn.disabled = true;
-        }
+    const user=checkLogin(); if(!user) return;
+    const adminUserMgmt=document.getElementById('admin-user-management');
+    if(adminUserMgmt) adminUserMgmt.style.display=user.role==='master'?'block':'none';
+    document.querySelectorAll('.tab-btn-vertical').forEach(btn=>{
+        const tabId=btn.dataset.tab;
+        const permissions=user.permissions==='all'?'all':(Array.isArray(user.permissions)?user.permissions:[]);
+        const allowed=user.role==='master'||permissions==='all'||permissions.includes(tabId);
+        btn.style.display=allowed?'block':'none'; btn.disabled=!allowed;
     });
 }
 function renderUserTable() {
-    const tbody = document.getElementById('user-table-body');
-    if (!tbody) return;
-    tbody.innerHTML = db.users.map((u, idx) => {
-        const permDisplay = u.role === 'master' ? 'All Access' : (u.permissions || []).join(', ');
-        return `<tr>
-            <td><strong>${u.id}</strong></td>
-            <td>${u.name || '-'}</td>
-            <td><span class="status-badge ${u.role === 'master' ? 'status-active' : 'status-expiring'}">${u.role.toUpperCase()}</span></td>
-            <td style="font-size:0.7rem;">${permDisplay}</td>
-            <td>
-                <button class="btn btn-sm btn-preview" onclick="openEditUserModal(${idx})">✏️</button>
-                ${u.id !== 'Shaikh Shahid' ? `<button class="btn btn-sm btn-clear" onclick="deleteUser(${idx})">×</button>` : ''}
-            </td>
-        </tr>`;
+    const tbody=document.getElementById('user-table-body'); if(!tbody) return;
+    tbody.innerHTML=db.users.map((u,idx)=>{
+        const permDisplay=u.role==='master'?'All Access':(Array.isArray(u.permissions)?u.permissions.join(', '):'-');
+        return `<tr><td><strong>${escapeHtml(u.id)}</strong></td><td>${escapeHtml(u.name||'-')}</td><td><span class="status-badge ${u.role==='master'?'status-active':'status-expiring'}">${escapeHtml(String(u.role||'USER').toUpperCase())}</span></td><td style="font-size:0.7rem;">${escapeHtml(permDisplay)}</td><td><button class="btn btn-sm btn-preview" onclick="openEditUserModal(${idx})">✏️</button> ${u.id!=='Shaikh Shahid'?`<button class="btn btn-sm btn-clear" onclick="deleteUser(${idx})">×</button>`:''}</td></tr>`;
     }).join('');
 }
-function openAddUserModal() {
-    openUserModal(null);
+function openAddUserModal(){ openUserModal(null); }
+function openEditUserModal(idx){ const user=db.users[idx]; if(!user) return alert('User not found.'); openUserModal(idx,user); }
+function openUserModal(idx,userData=null){
+    const isEdit=idx!==null; const title=isEdit?'Edit User':'Add New User'; const data=userData||{id:'',name:'',password:'',passwordHash:'',role:'user',permissions:[]};
+    const allTabs=['sea','air','lcl','drafts','rates','ratesheet','dsr','bldraft','dashboard','measurement','database','sealocal','airlocal','lcllocal'];
+    let permHtml='<div class="perm-grid">'; allTabs.forEach(tab=>{ const checked=data.role==='master'||(data.permissions&&data.permissions.includes(tab))?'checked':''; const disabled=data.role==='master'?'disabled':''; permHtml+=`<label class="${data.role==='master'?'disabled':''}"><input type="checkbox" class="user-perm-cb" value="${tab}" ${checked} ${disabled}>${tab.charAt(0).toUpperCase()+tab.slice(1)}</label>`; }); permHtml+='</div>';
+    const html=`<h3 style="color:var(--primary);margin-bottom:12px;">${title}</h3><div class="form-grid-2col"><div class="form-group"><label>User ID *</label><input type="text" id="modal-user-id" value="${escapeHtml(data.id)}" ${isEdit?'readonly':''}></div><div class="form-group"><label>Full Name</label><input type="text" id="modal-user-name" value="${escapeHtml(data.name||'')}"></div><div class="form-group"><label>Password ${isEdit?'(leave blank to keep current)':'*'}</label><input type="password" id="modal-user-pass" value="" placeholder="Set password"></div><div class="form-group"><label>Role</label><select id="modal-user-role" onchange="toggleUserPerms()"><option value="user" ${data.role==='user'?'selected':''}>User</option><option value="master" ${data.role==='master'?'selected':''}>Master (Full Access)</option></select></div></div><div style="margin-top:10px;"><label style="font-weight:700;font-size:0.85rem;color:var(--text-light);">Tab Permissions (for Users)</label>${permHtml}</div><div style="margin-top:16px;text-align:right;"><button class="btn btn-clear" onclick="closeModal('previewModal')">Cancel</button><button class="btn btn-quoted" onclick="saveUser(${idx})">💾 Save User</button></div>`;
+    document.getElementById('modal-title').textContent=title; document.getElementById('previewBody').innerHTML=html; openModal('previewModal');
 }
-function openEditUserModal(idx) {
-    const user = db.users[idx];
-    if (!user) return alert('User not found.');
-    openUserModal(idx, user);
+function toggleUserPerms(){ const role=document.getElementById('modal-user-role').value; document.querySelectorAll('#previewBody .user-perm-cb').forEach(cb=>{cb.checked=role==='master';cb.disabled=role==='master';cb.closest('label').classList.toggle('disabled',role==='master');}); }
+async function saveUser(idx){
+    const id=document.getElementById('modal-user-id').value.trim(); const name=document.getElementById('modal-user-name').value.trim(); const pass=document.getElementById('modal-user-pass').value; const role=document.getElementById('modal-user-role').value;
+    if(!id) return alert('User ID is required.');
+    if(idx===null && !pass) return alert('New users must have a password.');
+    let passwordHash=idx!==null?db.users[idx].passwordHash:null;
+    let passwordHashV2=idx!==null?db.users[idx].passwordHashV2:null;
+    let passwordSalt=idx!==null?db.users[idx].passwordSalt:null;
+    if(pass){ const secure=await securePasswordHash(pass); passwordHashV2=secure.hash; passwordSalt=secure.salt; passwordHash=null; }
+    if(!passwordHash && !passwordHashV2 && idx!==null && db.users[idx].password){ const secure=await securePasswordHash(db.users[idx].password); passwordHashV2=secure.hash; passwordSalt=secure.salt; }
+    if(!passwordHash && !passwordHashV2) return alert('A valid password is required.');
+    let permissions=[]; if(role!=='master'){ document.querySelectorAll('#previewBody .user-perm-cb:checked').forEach(cb=>permissions.push(cb.value)); if(permissions.length===0 && !confirm('User has no permissions assigned. Continue?')) return; } else permissions='all';
+    const userData={id,name,passwordHash:passwordHash||null,passwordHashV2:passwordHashV2||null,passwordSalt:passwordSalt||null,role,permissions};
+    if(idx!==null&&idx>=0&&idx<db.users.length){ if(db.users[idx].id==='Shaikh Shahid'&&role!=='master') return alert('The Master user must remain Master.'); db.users[idx]={...db.users[idx],...userData}; }
+    else { if(db.users.find(u=>u.id===id)) return alert('User ID already exists.'); db.users.push(userData); }
+    saveDB(); closeModal('previewModal'); renderUserTable(); alert('User saved successfully!');
 }
-function openUserModal(idx, userData = null) {
-    const isEdit = idx !== null;
-    const title = isEdit ? 'Edit User' : 'Add New User';
-    const data = userData || { id: '', name: '', password: '', role: 'user', permissions: [] };
-    const allTabs = ['sea', 'air', 'lcl', 'drafts', 'rates', 'ratesheet', 'dsr', 'bldraft', 'dashboard', 'measurement',
-        'database', 'sealocal', 'airlocal', 'lcllocal'
-    ];
-    let permHtml = '<div class="perm-grid">';
-    allTabs.forEach(tab => {
-        const checked = data.role === 'master' || (data.permissions && data.permissions.includes(tab)) ? 'checked' : '';
-        const disabled = data.role === 'master' ? 'disabled' : '';
-        permHtml += `<label class="${data.role === 'master' ? 'disabled' : ''}">
-            <input type="checkbox" class="user-perm-cb" value="${tab}" ${checked} ${disabled}>
-            ${tab.charAt(0).toUpperCase() + tab.slice(1)}
-        </label>`;
+function deleteUser(idx){ if(idx<0||idx>=db.users.length)return alert('User not found.'); const user=db.users[idx]; if(user.id==='Shaikh Shahid')return alert('Cannot delete the Master user.'); if(!confirm(`Delete user "${user.id}"?`))return; db.users.splice(idx,1); saveDB(); renderUserTable(); }
+
+// ==================== ACTION & EXCEPTION CENTER ====================
+let actionCenterView = 'actions';
+let actionCenterFilter = 'all';
+function actionCenterIsException(a){ return ['margin','quote-expired','quote-expiry','rate-expired','rate-expiry','shipment'].includes(a.type); }
+function actionCenterIsOverdue(a){ return a.type === 'quote-expired' || a.type === 'rate-expired' || a.type === 'task'; }
+function actionCenterIsDue(a){ return a.type === 'followup' || a.type === 'task' || a.type === 'quote-expiry' || a.type === 'rate-expiry'; }
+function actionCenterFilterAlerts(alerts){
+    if(actionCenterFilter==='critical') return alerts.filter(a=>a.priority==='critical');
+    if(actionCenterFilter==='warning') return alerts.filter(a=>a.priority==='warning');
+    if(actionCenterFilter==='due') return alerts.filter(actionCenterIsDue);
+    if(actionCenterFilter==='overdue') return alerts.filter(actionCenterIsOverdue);
+    return alerts;
+}
+function setActionCenterView(view){
+    actionCenterView = view === 'exceptions' ? 'exceptions' : 'actions';
+    document.querySelectorAll('.action-center-tab').forEach(b=>b.classList.toggle('active',b.dataset.acView===actionCenterView));
+    actionCenterFilter='all';
+    renderActionCenter();
+}
+function filterActionCenter(filter){
+    actionCenterFilter=filter||'all';
+    const panel=document.getElementById('actioncenter');
+    if(panel && !panel.classList.contains('active')) switchToTab('actioncenter');
+    renderActionCenter();
+}
+function actionCenterOpenAlert(index){
+    const alerts=window._shahidActionCenterAlerts||[];
+    const a=alerts[index];
+    if(a) handleERPAlert(a);
+}
+function renderActionCenter(){
+    const wrap=document.getElementById('action-center-table-wrap');
+    if(!wrap) return;
+    const all=collectERPAlerts();
+    const critical=all.filter(a=>a.priority==='critical').length;
+    const high=all.filter(a=>a.priority==='warning').length;
+    const due=all.filter(actionCenterIsDue).length;
+    const overdue=all.filter(actionCenterIsOverdue).length;
+    const set=(id,v)=>{const el=document.getElementById(id); if(el) el.textContent=String(v);};
+    set('ac-critical',critical); set('ac-high',high); set('ac-due',due); set('ac-overdue',overdue);
+    const scoped=all.filter(a=>actionCenterView==='exceptions' ? actionCenterIsException(a) : !actionCenterIsException(a));
+    const alerts=actionCenterFilterAlerts(scoped);
+    window._shahidActionCenterAlerts=alerts;
+    const title=document.getElementById('action-center-view-title');
+    if(title) title.textContent=(actionCenterView==='exceptions'?'EXCEPTIONS':'MY ACTIONS') + (actionCenterFilter!=='all' ? ` • ${actionCenterFilter.toUpperCase()}` : '');
+    if(!alerts.length){wrap.innerHTML='<div class="action-center-empty">✓ CLEAR<br><small>No matching actions or exceptions.</small></div>';return;}
+    wrap.innerHTML=`<table class="action-center-table"><thead><tr><th>Priority</th><th>Type</th><th>Reference</th><th>Action / Issue</th><th>Date</th><th></th></tr></thead><tbody>${alerts.map((a,i)=>{
+        const priority=a.priority==='critical'?'🔴 CRITICAL':a.priority==='warning'?'🟠 HIGH':'🔵 INFO';
+        const type=(a.type||'').replaceAll('-',' ').toUpperCase();
+        return `<tr><td class="action-center-priority">${priority}</td><td>${escapeHtml(type)}</td><td>${escapeHtml(a.ref||'-')}</td><td>${escapeHtml(a.title||'-')}<div style="font-size:.65rem;color:var(--text-light);margin-top:2px;">${escapeHtml(a.detail||'')}</div></td><td>${escapeHtml(a.dateKey||'-')}</td><td><button type="button" class="action-center-open" onclick="actionCenterOpenAlert(${i})">OPEN</button></td></tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+// ==================== AUTOMATED ALERT CENTER ====================
+function getAlertDismissals(){ try{return JSON.parse(localStorage.getItem('erpAlertDismissals')||'{}');}catch(e){return{};} }
+function alertKey(a){ return `${a.type}|${a.ref||a.title}|${a.dateKey||''}`; }
+function collectERPAlerts(){
+    const alerts=[], now=new Date();
+    const dismissed=getAlertDismissals();
+    const push=(type,icon,title,detail,action,ref,priority='warning')=>{const a={type,icon,title,detail,action,ref,priority,dateKey:now.toISOString().slice(0,10)}; if(!dismissed[alertKey(a)]) alerts.push(a);};
+    const allQuotes=[...(db.rates?.sea||[]),...(db.rates?.air||[]),...(db.rates?.lcl||[])];
+    allQuotes.forEach(r=>{
+        if(r.marginINR<0) push('margin','🔴','Negative Margin',`${r.client||'Customer'} • ${r.quoteNumber||'Quote'} • ${formatINR(r.marginINR)}`,'rates',r.quoteNumber,'critical');
+        if(r.validityDate){const d=new Date(r.validityDate+'T23:59:59'); const days=Math.ceil((d-now)/86400000); if(days<0) push('quote-expired','⛔','Quote Expired',`${r.quoteNumber||'Quote'} • ${r.client||'Customer'} expired ${Math.abs(days)} day(s) ago.`,'rates',r.quoteNumber,'critical'); else if(days<=3) push('quote-expiry','⚠️','Quote Expiring',`${r.quoteNumber||'Quote'} • ${days} day(s) remaining.`,'rates',r.quoteNumber,'warning'); }
+        if((r.followUpStatus||'PENDING')==='PENDING') push('followup','📞','Follow-up Pending',`${r.client||'Customer'} • ${r.quoteNumber||'Quote'}`,'followup',r.quoteNumber,'warning');
     });
-    permHtml += '</div>';
-    const html = `
-        <h3 style="color:var(--primary);margin-bottom:12px;">${title}</h3>
-        <div class="form-grid-2col">
-            <div class="form-group"><label>User ID *</label><input type="text" id="modal-user-id" value="${data.id}" ${isEdit ? 'readonly' : ''}></div>
-            <div class="form-group"><label>Full Name</label><input type="text" id="modal-user-name" value="${data.name || ''}"></div>
-            <div class="form-group"><label>Password *</label><input type="text" id="modal-user-pass" value="${data.password || ''}" placeholder="Set password"></div>
-            <div class="form-group"><label>Role</label>
-                <select id="modal-user-role" onchange="toggleUserPerms()">
-                    <option value="user" ${data.role==='user'?'selected':''}>User</option>
-                    <option value="master" ${data.role==='master'?'selected':''}>Master (Full Access)</option>
-                </select>
-            </div>
-        </div>
-        <div style="margin-top:10px;"><label style="font-weight:700;font-size:0.85rem;color:var(--text-light);">Tab Permissions (for Users)</label>${permHtml}</div>
-        <div style="margin-top:16px;text-align:right;">
-            <button class="btn btn-clear" onclick="closeModal('previewModal')">Cancel</button>
-            <button class="btn btn-quoted" onclick="saveUser(${idx})">💾 Save User</button>
-        </div>
-    `;
-    document.getElementById('modal-title').textContent = title;
-    document.getElementById('previewBody').innerHTML = html;
-    openModal('previewModal');
-}
-function toggleUserPerms() {
-    const role = document.getElementById('modal-user-role').value;
-    document.querySelectorAll('#previewBody .user-perm-cb').forEach(cb => {
-        cb.checked = role === 'master';
-        cb.disabled = role === 'master';
-        cb.closest('label').classList.toggle('disabled', role === 'master');
+    (db.rateSheet||[]).forEach(r=>{ if(!r.validTo)return; const d=new Date(r.validTo+'T23:59:59'); const days=Math.ceil((d-now)/86400000); if(days<0) push('rate-expired','⛔','Rate Expired',`${r.carrierName||r.carrier||'Carrier'} • ${r.pol||'-'} → ${r.pod||'-'}`,'ratesheet',r.id||r.carrierName,'critical'); else if(days<=7) push('rate-expiry','🟡','Rate Expiring',`${r.carrierName||r.carrier||'Carrier'} • ${days} day(s) remaining.`,'ratesheet',r.id||r.carrierName,'warning'); });
+    (db.plannerTasks||[]).forEach(t=>{ if(t.completed)return; if(t.dueDate){const d=new Date(t.dueDate+'T23:59:59'); if(d<now) push('task','📅','Planner Task Overdue',`${t.title||t.text||'Task'} • due ${t.dueDate}`,'planner',t.id,'warning'); } });
+    (db.shipments||[]).forEach(s=>{
+        const status=String(s.status||s.cargoStatus||'').toUpperCase();
+        if(status && !['COMPLETED','DELIVERED','CANCELLED'].includes(status) && !s.vessel && !s.etd) push('shipment','🚢','Shipment Data Incomplete',`${s.jobNo||s.shipmentNo||s.id||'Shipment'} is missing vessel/ETD data.`,'dsr',s.id,'info');
+        if(String(s.mode||s.type||'').toUpperCase()==='SEA') {
+            const dates=[
+                ['SI',s.siCutoff],['GATE',s.gateCutoff],['SB',s.sbCutoff],['GATE OPENING',s.gateOpening]
+            ];
+            const today=dateOnly(new Date());
+            dates.forEach(([type,d])=>{
+                if(!d) return;
+                const due=dateOnly(d);
+                const diff=Math.round((new Date(due+'T12:00:00')-new Date(today+'T12:00:00'))/86400000);
+                if(diff<0) push('cutoff-overdue','⛔',`${type} Cut-off Overdue`,`${s.jobNo||s.code||'Shipment'} • due ${due}`,'dsr',`${s.code||s.jobNo}|${type}`,'critical');
+                else if(diff===0) push('cutoff-today','🔴',`${type} Cut-off Today`,`${s.jobNo||s.code||'Shipment'} • ${shipmentCustomer(s)}`,'dsr',`${s.code||s.jobNo}|${type}`,'critical');
+                else if(diff===1) push('cutoff-tomorrow','🟠',`${type} Cut-off Tomorrow`,`${s.jobNo||s.code||'Shipment'} • ${shipmentCustomer(s)}`,'dsr',`${s.code||s.jobNo}|${type}`,'warning');
+            });
+        }
     });
+    return alerts.slice(0,80);
 }
-function saveUser(idx) {
-    const id = document.getElementById('modal-user-id').value.trim();
-    const name = document.getElementById('modal-user-name').value.trim();
-    let password = document.getElementById('modal-user-pass').value.trim();
-    const role = document.getElementById('modal-user-role').value;
-    if (!id) return alert('User ID is required.');
-    if (idx === null && !password) return alert('New users must have a password.');
-    if (idx !== null && !password) {
-        password = db.users[idx].password;
-    }
-    let permissions = [];
-    if (role !== 'master') {
-        document.querySelectorAll('#previewBody .user-perm-cb:checked').forEach(cb => permissions.push(cb.value));
-        if (permissions.length === 0) {
-            if (!confirm('User has no permissions assigned. They will not see any tabs. Continue?')) return;
-        }
-    } else {
-        permissions = 'all';
-    }
-    const userData = { id, name, password, role, permissions };
-    if (idx !== null && idx >= 0 && idx < db.users.length) {
-        if (db.users[idx].id === 'Shaikh Shahid' && role !== 'master') {
-            return alert('The Master user must remain Master.');
-        }
-        db.users[idx] = { ...db.users[idx], ...userData };
-    } else {
-        if (db.users.find(u => u.id === id)) return alert('User ID already exists.');
-        db.users.push(userData);
-    }
-    saveDB();
-    closeModal('previewModal');
-    renderUserTable();
-    alert('User saved successfully!');
+function renderAlertCenter(){
+    const list=document.getElementById('alert-center-list'), badge=document.getElementById('alert-count-badge'), summary=document.getElementById('alert-center-summary'); if(!list)return;
+    const alerts=collectERPAlerts(); if(badge){badge.textContent=alerts.length>99?'99+':String(alerts.length);badge.style.display=alerts.length?'inline-flex':'none';}
+    const badgeText=alerts.length>99?'99+':String(alerts.length); [document.getElementById('action-center-nav-badge'), document.getElementById('action-center-header-badge')].forEach(navBadge=>{ if(navBadge){navBadge.textContent=badgeText; navBadge.style.display=alerts.length?'inline-flex':'none';} });
+    if(summary) summary.textContent=alerts.length?`${alerts.length} active operational alert${alerts.length===1?'':'s'}`:'No active operational alerts';
+    if(!alerts.length){list.innerHTML='<div class="alert-empty">✓ SYSTEM CLEAR<br><small>No active alerts detected.</small></div>';return;}
+    window._shahidActiveAlerts=alerts;
+    list.innerHTML=alerts.map((a,i)=>`<div class="alert-item alert-${a.priority}" onclick="handleERPAlertByIndex(${i})"><div class="alert-icon">${a.icon}</div><div><div class="alert-title">${escapeHtml(a.title)}</div><div class="alert-detail">${escapeHtml(a.detail)}</div></div><div class="alert-time">${a.action==='followup'?'OPEN':''}</div></div>`).join('');
 }
-function deleteUser(idx) {
-    if (idx < 0 || idx >= db.users.length) return alert('User not found.');
-    const user = db.users[idx];
-    if (user.id === 'Shaikh Shahid') return alert('Cannot delete the Master user.');
-    if (!confirm(`Delete user "${user.id}"?`)) return;
-    db.users.splice(idx, 1);
-    saveDB();
-    renderUserTable();
+function handleERPAlertByIndex(i){ const a=window._shahidActiveAlerts?.[i]; if(a) handleERPAlert(a); }
+function handleERPAlert(a){
+    document.getElementById('alert-center-panel')?.classList.remove('open'); document.getElementById('alertCenterBtn')?.setAttribute('aria-expanded','false');
+    if(a.action==='rates'||a.action==='ratesheet'||a.action==='followup'||a.action==='planner'||a.action==='dsr') switchToTab(a.action);
 }
+function toggleAlertCenter(e){ e?.stopPropagation(); const panel=document.getElementById('alert-center-panel'); const btn=document.getElementById('alertCenterBtn'); if(!panel)return; alertCenterOpen=!panel.classList.contains('open'); panel.classList.toggle('open',alertCenterOpen); btn?.setAttribute('aria-expanded',String(alertCenterOpen)); if(alertCenterOpen)renderAlertCenter(); }
+function clearAllAlerts(){
+    const alerts=collectERPAlerts(); if(!alerts.length)return; const d=getAlertDismissals(); alerts.forEach(a=>d[alertKey(a)]=Date.now()); localStorage.setItem('erpAlertDismissals',JSON.stringify(d)); renderAlertCenter();
+}
+document.addEventListener('click',e=>{const wrap=document.querySelector('.alert-center-wrap'); if(alertCenterOpen&&wrap&&!wrap.contains(e.target)){document.getElementById('alert-center-panel')?.classList.remove('open');alertCenterOpen=false;}});
+function startAlertEngine(){ renderAlertCenter(); setInterval(renderAlertCenter,60000); }
 
 // ==================== SQLITE BACKUP ====================
 async function initSQLite() {
-    return new Promise((resolve, reject) => {
-        if (window.SQL) {
-            SQL = window.SQL;
-            resolve();
-            return;
+    if (window.__ERP_SQLITE_READY && window.SQL) return window.SQL;
+    if (window.__ERP_SQLITE_PROMISE) return window.__ERP_SQLITE_PROMISE;
+    window.__ERP_SQLITE_PROMISE = (async () => {
+        const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/';
+        let initFn = window.initSqlJs;
+        if (!initFn) {
+            // The HTML already loads sql-wasm.js. Do not inject the script a second time.
+            await new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = CDN + 'sql-wasm.js';
+                script.onload = resolve;
+                script.onerror = () => reject(new Error('SQLite JavaScript library failed to load.'));
+                document.head.appendChild(script);
+            });
+            initFn = window.initSqlJs;
         }
-        let attempts = 0;
-        const maxAttempts = MAX_SQLITE_ATTEMPTS;
-        const loadScript = () => {
-            attempts++;
-            const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js';
-            script.onload = () => {
-                if (window.SQL) {
-                    SQL = window.SQL;
-                    resolve();
-                } else {
-                    if (attempts < maxAttempts) {
-                        setTimeout(loadScript, 1000);
-                    } else {
-                        reject(new Error('SQLite library failed to load after ' + maxAttempts + ' attempts.'));
-                    }
-                }
-            };
-            script.onerror = () => {
-                if (attempts < maxAttempts) {
-                    setTimeout(loadScript, 1000);
-                } else {
-                    reject(new Error('SQLite library failed to load after ' + maxAttempts + ' attempts.'));
-                }
-            };
-            document.head.appendChild(script);
-        };
-        loadScript();
-    });
+        if (typeof initFn !== 'function') throw new Error('SQLite JavaScript library is unavailable.');
+        const sql = await initFn({ locateFile: file => CDN + file });
+        window.SQL = sql;
+        window.__ERP_SQLITE_READY = true;
+        return sql;
+    })().catch(err => { window.__ERP_SQLITE_PROMISE = null; throw err; });
+    return window.__ERP_SQLITE_PROMISE;
 }
+
 async function exportToSQLite() {
     try {
         await initSQLite();
@@ -8725,9 +9112,11 @@ async function exportToSQLite() {
         }
         const dbInstance = new SQL.Database();
         const createTables = `
-            CREATE TABLE IF NOT EXISTS rates (id TEXT, mode TEXT, client TEXT, carrier TEXT, pol TEXT, pod TEXT, incoterm TEXT, commodity TEXT, weight REAL, transit TEXT, validityDate TEXT, charges TEXT, totalSellINR REAL, totalBuyINR REAL, marginINR REAL, marginPct REAL, quoteNumber TEXT, status TEXT, timestamp TEXT, lastModified TEXT, followUpStatus TEXT, lostReason TEXT);
-            CREATE TABLE IF NOT EXISTS drafts (id TEXT, mode TEXT, client TEXT, carrier TEXT, pol TEXT, pod TEXT, incoterm TEXT, commodity TEXT, weight REAL, transit TEXT, validityDate TEXT, charges TEXT, totalSellINR REAL, totalBuyINR REAL, marginINR REAL, marginPct REAL, quoteNumber TEXT, status TEXT, timestamp TEXT, lastModified TEXT);
+            CREATE TABLE IF NOT EXISTS rates (id TEXT, mode TEXT, client TEXT, carrier TEXT, pol TEXT, pod TEXT, incoterm TEXT, commodity TEXT, weight REAL, transit TEXT, validityDate TEXT, charges TEXT, carrierRates TEXT, totalSellINR REAL, totalBuyINR REAL, marginINR REAL, marginPct REAL, quoteNumber TEXT, status TEXT, timestamp TEXT, lastModified TEXT, followUpStatus TEXT, lostReason TEXT);
+            CREATE TABLE IF NOT EXISTS drafts (id TEXT, mode TEXT, client TEXT, carrier TEXT, pol TEXT, pod TEXT, incoterm TEXT, commodity TEXT, weight REAL, transit TEXT, validityDate TEXT, charges TEXT, carrierRates TEXT, totalSellINR REAL, totalBuyINR REAL, marginINR REAL, marginPct REAL, quoteNumber TEXT, status TEXT, timestamp TEXT, lastModified TEXT);
             CREATE TABLE IF NOT EXISTS ratesheet (id TEXT, carrierName TEXT, freightType TEXT, pol TEXT, pod TEXT, containerType TEXT, currency TEXT, freightAmount REAL, transitTime TEXT, commodity TEXT, validFrom TEXT, validTo TEXT, remarks TEXT, createdAt TEXT, updatedAt TEXT);
+            CREATE TABLE IF NOT EXISTS carrier_charges_sea_lcl (id TEXT, mode TEXT, carrier TEXT, pol TEXT, pod TEXT, container TEXT, commodity TEXT, charges TEXT, updated TEXT);
+            CREATE TABLE IF NOT EXISTS carrier_charges_air (id TEXT, carrier TEXT, pol TEXT, pod TEXT, commodity TEXT, charges TEXT, updated TEXT);
             CREATE TABLE IF NOT EXISTS shipments (code TEXT, sr TEXT, date TEXT, type TEXT, liner TEXT, jobBkg TEXT, containerNo TEXT, shipper TEXT, pol TEXT, pod TEXT, commodity TEXT, weight REAL, incoterm TEXT, cargoStatus TEXT, docsStatus TEXT, dd TEXT, eta TEXT, dd2 TEXT, valid TEXT, sell REAL, buy REAL, sales TEXT, pickup TEXT, gatein TEXT, remarks TEXT, charges TEXT, createdAt TEXT, updatedAt TEXT);
             CREATE TABLE IF NOT EXISTS bldrafts (blNumber TEXT, shipmentCode TEXT, shipper TEXT, shipperAddr TEXT, consignee TEXT, consigneeAddr TEXT, notifyParty TEXT, vessel TEXT, voyage TEXT, pol TEXT, pod TEXT, placeOfDelivery TEXT, containers TEXT, marks TEXT, goodsDesc TEXT, freightType TEXT, freightAmount REAL, freightCurrency TEXT, numOriginals INTEGER, placeOfIssue TEXT, issueDate TEXT, signature TEXT, status TEXT, createdAt TEXT, updatedAt TEXT);
             CREATE TABLE IF NOT EXISTS master_pol (value TEXT);
@@ -8756,12 +9145,12 @@ async function exportToSQLite() {
         }
         const rates = [...db.rates.sea, ...db.rates.air, ...db.rates.lcl];
         insertData('rates', ['mode', 'client', 'carrier', 'pol', 'pod', 'incoterm', 'commodity', 'weight', 'transit',
-            'validityDate', 'charges', 'totalSellINR', 'totalBuyINR', 'marginINR', 'marginPct', 'quoteNumber', 'status',
+            'validityDate', 'charges', 'carrierRates', 'totalSellINR', 'totalBuyINR', 'marginINR', 'marginPct', 'quoteNumber', 'status',
             'timestamp', 'lastModified', 'followUpStatus', 'lostReason'
         ], rates.map(r => ({ ...r, mode: r.mode || 'SEA' })));
         const drafts = [...db.drafts.sea, ...db.drafts.air, ...db.drafts.lcl];
         insertData('drafts', ['mode', 'client', 'carrier', 'pol', 'pod', 'incoterm', 'commodity', 'weight', 'transit',
-            'validityDate', 'charges', 'totalSellINR', 'totalBuyINR', 'marginINR', 'marginPct', 'quoteNumber', 'status',
+            'validityDate', 'charges', 'carrierRates', 'totalSellINR', 'totalBuyINR', 'marginINR', 'marginPct', 'quoteNumber', 'status',
             'timestamp', 'lastModified'
         ], drafts.map(r => ({ ...r, mode: r.mode || 'SEA' })));
         insertData('ratesheet', ['id', 'carrierName', 'freightType', 'pol', 'pod', 'containerType', 'currency',
@@ -8781,6 +9170,8 @@ async function exportToSQLite() {
         insertData('master_incoterms', ['value'], db.incoterms.map(i => ({ value: i })));
         insertData('master_containers', ['value'], db.containers.map(c => ({ value: c })));
         insertData('master_carriers', ['value'], db.carriers.map(c => ({ value: c })));
+        insertData('carrier_charges_sea_lcl', ['id','mode','carrier','pol','pod','container','commodity','charges','updated'], (db.carrierChargesSeaLcl||[]).map((r,i)=>({id:r.id||`SLC-${i}`,...r})));
+        insertData('carrier_charges_air', ['id','carrier','pol','pod','commodity','charges','updated'], (db.carrierChargesAir||[]).map((r,i)=>({id:r.id||`AIR-${i}`,...r})));
         insertData('exchange_rates', ['currency', 'rate'], Object.entries(db.exchangeRates).map(([k, v]) => ({ currency: k,
             rate: v })));
         const data = dbInstance.export();
@@ -8812,7 +9203,15 @@ async function importFromSQLite(input) {
                 const uint8Array = new Uint8Array(arrayBuffer);
                 const dbInstance = new SQL.Database(uint8Array);
 
+                function tableExists(tableName) {
+                    const stmt = dbInstance.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?");
+                    stmt.bind([tableName]);
+                    const exists = stmt.step();
+                    stmt.free();
+                    return exists;
+                }
                 function readTable(tableName) {
+                    if (!tableExists(tableName)) return [];
                     const stmt = dbInstance.prepare(`SELECT * FROM ${tableName}`);
                     const rows = [];
                     while (stmt.step()) {
@@ -8830,6 +9229,8 @@ async function importFromSQLite(input) {
                 const newRates = readTable('rates');
                 const newDrafts = readTable('drafts');
                 const newRateSheet = readTable('ratesheet');
+                const newCarrierChargesSeaLcl = readTable('carrier_charges_sea_lcl');
+                const newCarrierChargesAir = readTable('carrier_charges_air');
                 const newShipments = readTable('shipments');
                 const newBLDrafts = readTable('bldrafts');
                 const newPol = readTable('master_pol').map(r => r.value);
@@ -8839,23 +9240,25 @@ async function importFromSQLite(input) {
                 const newCarriers = readTable('master_carriers').map(r => r.value);
                 const newExchangeRates = readTable('exchange_rates').reduce((acc, r) => { acc[r.currency] = r.rate; return acc; },
                 {});
-                db.rates = { sea: [], air: [], lcl: [] };
-                newRates.forEach(r => { const mode = (r.mode || 'SEA').toLowerCase(); if (db.rates[mode]) db.rates[mode].push(
-                        r); });
-                db.drafts = { sea: [], air: [], lcl: [] };
-                newDrafts.forEach(r => { const mode = (r.mode || 'SEA').toLowerCase(); if (db.drafts[mode]) db.drafts[mode].push(
-                        r); });
-                db.rateSheet = newRateSheet;
-                db.shipments = newShipments;
-                db.bldrafts = newBLDrafts;
-                db.pol = newPol;
-                db.pod = newPod;
-                db.incoterms = newIncoterms;
-                db.containers = newContainers;
-                db.carriers = newCarriers;
-                db.exchangeRates = newExchangeRates;
+                // IMPORTANT: SQLite import is MERGE-ONLY. Never replace/clear existing data.
+                // Stage the imported database and use the same non-destructive merge rules as JSON import.
+                const importedDb = {
+                    rates: {sea: [], air: [], lcl: []},
+                    drafts: {sea: [], air: [], lcl: []},
+                    rateSheet: newRateSheet,
+                    shipments: newShipments,
+                    bldrafts: newBLDrafts,
+                    pol: newPol, pod: newPod, incoterms: newIncoterms,
+                    containers: newContainers, carriers: newCarriers,
+                    exchangeRates: newExchangeRates,
+                    carrierChargesSeaLcl: newCarrierChargesSeaLcl,
+                    carrierChargesAir: newCarrierChargesAir
+                };
+                newRates.forEach(r => { const mode=(r.mode||'SEA').toLowerCase(); if(importedDb.rates[mode]) importedDb.rates[mode].push(r); });
+                newDrafts.forEach(r => { const mode=(r.mode||'SEA').toLowerCase(); if(importedDb.drafts[mode]) importedDb.drafts[mode].push(r); });
+                const summary = mergeDatabase(importedDb);
                 saveDB();
-                alert('SQLite import successful! Refreshing...');
+                alert('SQLite import completed as a NON-DESTRUCTIVE MERGE. Existing records were preserved.\n\n'+summary+'\n\nNo existing ERP data was deleted or replaced.');
                 location.reload();
             } catch (err) { alert('Import failed: ' + err.message); }
         };
@@ -9111,6 +9514,18 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Global HTML escape helper. Several legacy/final UI modules run in separate
+// IIFEs and therefore cannot access their local `esc()` helpers. Keep this
+// global and data-only so all renderers use the same safe encoder.
+function esc(v) {
+    const text = String(v ?? '');
+    if (typeof escapeHtml === 'function') return escapeHtml(text);
+    return text.replace(/[&<>"']/g, m => ({
+        '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+    }[m]));
+}
+window.esc = esc;
+
 function dateOnly(v) {
     if (!v) return '';
     const d = new Date(v);
@@ -9194,10 +9609,13 @@ function riskFor(s) {
 function cutoffsFor(s) {
     const map = [
         ['SI', s.siCutoff || s.siDeadline || s.siDate],
-        ['VGM', s.vgmCutoff || s.vgmDeadline || s.vgmDate],
-        ['CY', s.cyCutoff || s.cyDeadline || s.cyDate],
-        ['GATE', s.gateCutoff || s.gateDeadline || s.gateDate]
+        ['GATE', s.gateCutoff || s.gateDeadline || s.gateDate],
+        ['SB', s.sbCutoff || s.sbDeadline || s.sbDate],
+        ['GATE_OPENING', s.gateOpening || s.gateOpeningDate]
     ];
+    // Legacy VGM/CY values are retained only if an existing shipment already has them.
+    if (s.vgmCutoff || s.vgmDeadline || s.vgmDate) map.push(['VGM', s.vgmCutoff || s.vgmDeadline || s.vgmDate]);
+    if (s.cyCutoff || s.cyDeadline || s.cyDate) map.push(['CY', s.cyCutoff || s.cyDeadline || s.cyDate]);
     return map.filter(x => x[1]).map(([type, d]) => ({
         type,
         date: dateOnly(d),
@@ -9559,18 +9977,18 @@ function buildInvoicePreviewHTML(data, compact = false) {
         chargeRows = lines.map((l, i) => {
             const total = l.total || 0;
             grandTotal += total;
-            const basisDisplay = l.basis || 'Normal';
+            const basisDisplay = (mode === 'air' && String(l.name || '').trim().toUpperCase() === 'GATE PASS') ? 'AT Actual' : (l.basis || 'Normal');
             // Determine if this is a "Freight" type for highlighting (optional)
             const isFreight = l.name.toUpperCase().includes('FREIGHT');
             const rowStyle = isFreight ? 'background:#fee2e2;font-weight:700;color:#dc2626;' : '';
             return `
                 <tr style="${rowStyle}">
                     <td style="border:1px solid #d1d5db;padding:4px 7px;text-align:center;width:10%;">${i+1}</td>
-                    <td style="border:1px solid #d1d5db;padding:4px 7px;text-align:left;width:25%;font-weight:600;">${escapeHtml(l.name)}</td>
+                    <td style="border:1px solid #d1d5db;padding:4px 7px;text-align:left;width:26%;font-weight:600;">${escapeHtml(l.name)}</td>
                     <td style="border:1px solid #d1d5db;padding:4px 7px;text-align:center;width:10%;">${escapeHtml(l.currency || 'INR')}</td>
                     <td style="border:1px solid #d1d5db;padding:4px 7px;text-align:right;width:15%;">${Number(l.rate || 0).toLocaleString('en-IN')}</td>
                     <td style="border:1px solid #d1d5db;padding:4px 7px;text-align:center;width:10%;">${escapeHtml(basisDisplay)}</td>
-                    <td style="border:1px solid #d1d5db;padding:4px 7px;text-align:right;width:29%;font-weight:600;">${formatINR(total)}</td>
+                    <td style="border:1px solid #d1d5db;padding:4px 7px;text-align:right;width:28%;font-weight:600;">${formatINR(total)}</td>
                 </tr>
             `;
         }).join('');
@@ -9623,7 +10041,7 @@ function buildInvoicePreviewHTML(data, compact = false) {
     let chargeHtml = `
         <table style="width:100%;border-collapse:collapse;font-size:${baseFont};margin-top:8px;">
             <thead>
-                <tr><th colspan="6" style="border:1px solid #1e3a8a;padding:${thPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;height:${headerHeight};">Freight & Carrier Charges</th></tr>
+                <tr><th colspan="6" style="border:1px solid #1e3a8a;padding:${thPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;height:${headerHeight};">Sea Freight & Local Charges</th></tr>
                 <tr>
                     <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:10%;">Sr. No</th>
                     <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:25%;">Charge Type</th>
@@ -9686,7 +10104,7 @@ function buildInvoiceCompactHTML(data) {
         chargeRows = lines.map((l, i) => {
             const total = l.total || 0;
             grandTotal += total;
-            const basisDisplay = l.basis || 'Normal';
+            const basisDisplay = (mode === 'air' && String(l.name || '').trim().toUpperCase() === 'GATE PASS') ? 'AT Actual' : (l.basis || 'Normal');
             const isFreight = l.name.toUpperCase() === 'FREIGHT' || l.name.toUpperCase() === 'AIR FREIGHT';
             const rowStyle = isFreight ? 'background:#fee2e2;font-weight:700;color:#dc2626;' : '';
             return `
@@ -9696,7 +10114,7 @@ function buildInvoiceCompactHTML(data) {
                     <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:center;font-size:10px;line-height:1.4;vertical-align:middle;width:10%;">${escapeHtml(l.currency || 'INR')}</td>
                     <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:center;font-size:10px;line-height:1.4;vertical-align:middle;width:15%;">${Number(l.rate || 0).toLocaleString('en-IN')}</td>
                     <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:center;font-size:10px;line-height:1.4;vertical-align:middle;width:10%;">${escapeHtml(basisDisplay)}</td>
-                    <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:right;font-size:10px;line-height:1.4;vertical-align:middle;width:29%;font-weight:600;">${formatINR(total)}</td>
+                    <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:right;font-size:10px;line-height:1.4;vertical-align:middle;width:28%;font-weight:600;">${formatINR(total)}</td>
                 </tr>
             `;
         }).join('');
@@ -9943,10 +10361,12 @@ function renderCutoffCalendar() {
     source.forEach((s, idx) => {
         const map = [
             ['SI', s.siCutoff || s.siDeadline || s.siDate],
-            ['VGM', s.vgmCutoff || s.vgmDeadline || s.vgmDate],
-            ['CY', s.cyCutoff || s.cyDeadline || s.cyDate],
-            ['GATE', s.gateCutoff || s.gateDeadline || s.gateDate]
+            ['GATE', s.gateCutoff || s.gateDeadline || s.gateDate],
+            ['SB', s.sbCutoff || s.sbDeadline || s.sbDate],
+            ['GATE_OPENING', s.gateOpening || s.gateOpeningDate]
         ];
+        if (s.vgmCutoff || s.vgmDeadline || s.vgmDate) map.push(['VGM', s.vgmCutoff || s.vgmDeadline || s.vgmDate]);
+        if (s.cyCutoff || s.cyDeadline || s.cyDate) map.push(['CY', s.cyCutoff || s.cyDeadline || s.cyDate]);
         map.forEach(([t, d]) => {
             if (!d) return;
             const ds = dateOnly(d);
@@ -9998,6 +10418,34 @@ function clearCutoffFilters() {
 
 function printCutoffCalendar() { window.print(); }
 
+
+// ---------- LDB CONTAINER TRACKING ----------
+// Builds the user-requested LDB container tracking URL only when a container number exists.
+function normalizeContainerNo(value) {
+    return String(value || '').trim().toUpperCase();
+}
+
+function getLdbTrackingUrl(containerNo) {
+    const no = normalizeContainerNo(containerNo);
+    if (!no) return '';
+    return `https://ldb.co.in/ldb/containersearch/39/${encodeURIComponent(no)}`;
+}
+
+function buildLdbTrackingLink(containerNo, compact = false) {
+    const no = normalizeContainerNo(containerNo);
+    const url = getLdbTrackingUrl(no);
+    if (!no || !url) return '';
+    const label = compact ? 'LDB' : 'Track LDB';
+    return `<a class="ldb-track-btn ldb-track-inline" href="${url}" target="_blank" rel="noopener noreferrer" title="Track container ${escapeHtml(no)} on LDB">🔗 ${label} <span class="ldb-container-ref">${escapeHtml(no)}</span></a>`;
+}
+
+function updateLdbTrackingLink(inputId, targetId) {
+    const input = document.getElementById(inputId);
+    const target = document.getElementById(targetId);
+    if (!input || !target) return;
+    target.innerHTML = buildLdbTrackingLink(input.value, false);
+}
+
 // ---------- CONTAINER TRACKER ----------
 function renderContainerTracker() {
     const search = (document.getElementById('container-search')?.value || '').toLowerCase();
@@ -10034,7 +10482,7 @@ function renderContainerTracker() {
             <td><span class="feature-status ${['DELIVERED', 'EMPTY RETURNED'].includes(x.status) ? 'low' : x.status === 'GATED IN' ? 'high' : 'medium'}">${escapeHtml(x.status)}</span></td>
             <td>${fmtDate(x.etd)}</td>
             <td>${fmtDate(x.eta)}</td>
-            <td><button class="btn btn-sm btn-info" onclick="openShipmentTimeline(${(db.shipments || []).indexOf(x.raw)})">Timeline</button></td>
+            <td><div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;justify-content:center;"><button class="btn btn-sm btn-info" onclick="openShipmentTimeline(${(db.shipments || []).indexOf(x.raw)})">Timeline</button>${buildLdbTrackingLink(x.containerNo, true)}</div></td>
         </tr>
     `).join('') || '<tr><td colspan="10" class="report-empty">No container records.</td></tr>';
 }
@@ -10819,12 +11267,44 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 
+// ==================== BACKUP PATH RESTORE ====================
+// Safe loader for the saved backup-folder setting. The previous build called
+// loadBackupPath() during init but did not define it, which stopped login/init.
+function loadBackupPath() {
+    try {
+        const inputEl = document.getElementById('backup-folder-path-input');
+        const displayEl = document.getElementById('backup-folder-path');
+        const savedPath = String(db?.backupFolderPath || '').trim();
+
+        if (inputEl && savedPath) inputEl.value = savedPath;
+        if (displayEl && savedPath) displayEl.textContent = `📁 ${savedPath}`;
+
+        // Restore the previously selected File System Access handle when
+        // supported. Failure here must never block ERP startup/login.
+        if (typeof getFolderHandle === 'function') {
+            getFolderHandle().then(handle => {
+                if (!handle) return;
+                backupFolderHandle = handle;
+                if (displayEl) displayEl.textContent = `📁 ${handle.name}`;
+                if (inputEl) inputEl.value = handle.name;
+                try { startAutoBackup(); } catch (e) { console.warn('Auto-backup start:', e); }
+            }).catch(err => console.warn('Backup folder restore skipped:', err));
+        }
+    } catch (err) {
+        console.warn('Backup path load skipped:', err);
+    }
+}
+
 // ==================== INIT ====================
 function init() {
     const user = checkLogin();
     const overlay = document.getElementById('login-overlay');
     if (!user) {
         overlay.classList.remove('hidden');
+        const reason=sessionStorage.getItem('erpLogoutReason');
+        if(reason){ showLoginError(reason); sessionStorage.removeItem('erpLogoutReason'); }
+        updateLoginLockUI();
+        loadRememberedLogin();
         return;
     }
     overlay.classList.add('hidden');
@@ -10859,20 +11339,19 @@ function init() {
         renderCarrierChargesMaster(mode === 'sea' ? 'sealcl' : mode);
     }
 	
-	if (!localStorage.getItem('sea_split_migrated')) {
+	if (!localStorage.getItem('sea_split_migrated') && typeof migrateDefaultSeaChargesToSplit === 'function') {
     migrateDefaultSeaChargesToSplit();
-	}
-	
-	if (!localStorage.getItem('sea_default_migrated')) {
-    migrateDefaultSeaCharges();
-	}
-	
-	['sea', 'air', 'lcl'].forEach(mode => {buildChargesGrid(mode);
-    setValidityDefault(mode); });
+}
 
+if (!localStorage.getItem('sea_default_migrated') && typeof migrateDefaultSeaCharges === 'function') {
+    migrateDefaultSeaCharges();
+}
 	
-    ['sea', 'air', 'lcl'].forEach(mode => { buildChargesGrid(mode);
-        setValidityDefault(mode); });
+    // Multi-carrier renderer is the single source of truth for initial quote grids.
+    ['sea', 'air', 'lcl'].forEach(mode => {
+        if (typeof window.buildChargesGrid === 'function') window.buildChargesGrid(mode);
+        setValidityDefault(mode);
+    });
     if (backupFolderHandle) {
         startAutoBackup();
         document.getElementById('backup-folder-path').textContent = `📁 ${backupFolderHandle.name}`;
@@ -10890,6 +11369,9 @@ function init() {
 	});
 	
 	document.getElementById('backup-folder-path-input').removeAttribute('readonly');
+    startAuthWatchdog();
+    startAlertEngine();
+    console.log('🔐 Authentication watchdog and 🔔 Alert Center started.');
     console.log('🚢 Gateway EXIM Freight Quotation System loaded successfully.');
     console.log(
         `📊 ${db.rates.sea.length + db.rates.air.length + db.rates.lcl.length} quoted records, ${db.drafts.sea.length + db.drafts.air.length + db.drafts.lcl.length} drafts, ${db.shipments.length} shipments.`
@@ -11108,7 +11590,7 @@ function calcProduct() {
 
 }
 
-function createStuffingRow(index) {
+function legacy_createStuffingRow(index) {
     const row = document.createElement('tr');
     row.style.borderBottom = '1px solid var(--border)';
     row.style.background = index % 2 === 0 ? 'var(--bg)' : 'var(--card-bg)';
@@ -11149,7 +11631,7 @@ function addStuffingRow() {
     tbody.appendChild(row);
 }
 
-function removeStuffingRow(btn) {
+function legacy_removeStuffingRow(btn) {
     const row = btn.closest('tr');
     const tbody = document.getElementById('stuffing-table-body');
     if (tbody.children.length > 1) {
@@ -11197,7 +11679,7 @@ function updateStuffingDates(departureInput) {
     row.querySelector('.stuffing-si-cut').value = formatDate(siCut);
 }
 
-function initStuffingPlanning() {
+function legacy_initStuffingPlanning() {
     const tbody = document.getElementById('stuffing-table-body');
     if (tbody && tbody.children.length === 0) {
         addStuffingRow();
@@ -11507,6 +11989,7 @@ function getTruckingFormData() {
     const data = {
         origin: document.getElementById('truck-origin').value.trim().toUpperCase(),
         destination: document.getElementById('truck-dest').value.trim().toUpperCase(),
+        containerNo: normalizeContainerNo(document.getElementById('truck-container-no')?.value),
         inventory: parseInt(document.getElementById('truck-inventory').value) || 1,
         miles: parseFloat(document.getElementById('truck-miles').value) || 0,
         perMile: parseFloat(document.getElementById('truck-per-mile').value) || 0,
@@ -11531,6 +12014,8 @@ function getTruckingFormData() {
 function loadTruckingForm(data) {
     document.getElementById('truck-origin').value = data.origin || '';
     document.getElementById('truck-dest').value = data.destination || '';
+    document.getElementById('truck-container-no').value = normalizeContainerNo(data.containerNo);
+    updateLdbTrackingLink('truck-container-no','truck-ldb-track');
     document.getElementById('truck-inventory').value = data.inventory || 1;
     document.getElementById('truck-miles').value = data.miles || 0;
     document.getElementById('truck-per-mile').value = data.perMile || 0;
@@ -11574,6 +12059,8 @@ function saveTruckingShipment() {
 function clearTruckingForm() {
     document.getElementById('truck-origin').value = '';
     document.getElementById('truck-dest').value = '';
+    document.getElementById('truck-container-no').value = '';
+    updateLdbTrackingLink('truck-container-no','truck-ldb-track');
     document.getElementById('truck-inventory').value = 1;
     document.getElementById('truck-miles').value = '';
     document.getElementById('truck-per-mile').value = '';
@@ -11630,6 +12117,7 @@ function renderTruckingList() {
             <div class="info">
                 <h4>${s.origin} → ${s.destination}</h4>
                 <p>Inventory: ${s.inventory} | Miles: ${s.miles} | Grand Total: ${formatUSD(s.grandTotal)}</p>
+                ${s.containerNo ? `<div>${buildLdbTrackingLink(s.containerNo, false)}</div>` : ''}
                 <p>Status: <span class="status-badge ${statusClass}">${s.status}</span> | Saved: ${new Date(s.timestamp).toLocaleDateString('en-IN')}</p>
             </div>
             <div class="actions">
@@ -11733,6 +12221,7 @@ function previewTruckingShipment(idx = null) {
 }
 
 function buildTruckingPreviewHTML(data) {
+    const ldbTrackingHtml = data.containerNo ? buildLdbTrackingLink(data.containerNo, false) : '';
     const addRows = data.additional.map(a =>
         `<tr><td>${a.name}</td><td style="text-align:right;">${formatUSD(a.amount)}</td></tr>`).join('');
     return `
@@ -11774,7 +12263,7 @@ function downloadTruckingPDF(idx = null) {
     const html = buildTruckingPreviewHTML(data);
     const renderArea = document.getElementById('pdf-render-area');
     renderArea.innerHTML = html;
-    renderArea.style.cssText = 'position:fixed;left:0;top:0;width:800px;background:white;z-index:9999;opacity:1;padding:10px;font-family: Arial, sans-serif;';
+    renderArea.style.cssText = 'position:fixed;left:0;top:0;width:200mm;max-width:200mm;background:white;z-index:9999;opacity:1;padding:0;margin:0;box-sizing:border-box;font-family:Arial,sans-serif;';
 
     setTimeout(() => {
         // 🚀 FIX: Use scale 3 for ultra-high DPI
@@ -11800,17 +12289,17 @@ function downloadTruckingPDF(idx = null) {
                 imgWidth *= scale;
                 imgHeight *= scale;
             }
-            const x = (pdfWidth - imgWidth) / 2;
-            const y = (pdfHeight - imgHeight) / 2;
+            const x = margin;
+            const y = margin;
             pdf.addImage(imgData, 'JPEG', x, y, imgWidth, imgHeight);
             pdf.save(`Trucking_${data.origin}_${data.destination}.pdf`);
             
-            renderArea.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;background:white;z-index:-1;';
+            renderArea.style.cssText = 'position:fixed;left:-10000px;top:0;width:755px;min-width:755px;max-width:755px;background:white;z-index:-1;';
             renderArea.innerHTML = '';
         }).catch(err => {
             console.error(err);
             alert('PDF generation failed.');
-            renderArea.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;background:white;z-index:-1;';
+            renderArea.style.cssText = 'position:fixed;left:-10000px;top:0;width:755px;min-width:755px;max-width:755px;background:white;z-index:-1;';
             renderArea.innerHTML = '';
         });
     }, 500);
@@ -12511,7 +13000,7 @@ function downloadDetentionPDF(idx = null) {
     const html = buildDetentionPreviewHTML(data);
     const renderArea = document.getElementById('pdf-render-area');
     renderArea.innerHTML = html;
-    renderArea.style.cssText = 'position:fixed;left:0;top:0;width:800px;background:white;z-index:9999;opacity:1;padding:10px;';
+    renderArea.style.cssText = 'position:fixed;left:0;top:0;width:200mm;max-width:200mm;background:white;z-index:9999;opacity:1;padding:0;margin:0;box-sizing:border-box;font-family:Arial,sans-serif;';
     setTimeout(() => {
         html2canvas(renderArea, { scale: 1, useCORS: true, backgroundColor: '#ffffff' })
             .then(canvas => {
@@ -12531,11 +13020,11 @@ function downloadDetentionPDF(idx = null) {
                 const y = (pdfHeight - imgHeight) / 2;
                 pdf.addImage(imgData, 'JPEG', x, y, imgWidth, imgHeight);
                 pdf.save(`Detention_${data.lotName}_${data.pickup}.pdf`);
-                renderArea.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;background:white;z-index:-1;';
+                renderArea.style.cssText = 'position:fixed;left:-10000px;top:0;width:755px;min-width:755px;max-width:755px;background:white;z-index:-1;';
                 renderArea.innerHTML = '';
             }).catch(err => { console.error(err);
                 alert('PDF generation failed.');
-                renderArea.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;background:white;z-index:-1;';
+                renderArea.style.cssText = 'position:fixed;left:-10000px;top:0;width:755px;min-width:755px;max-width:755px;background:white;z-index:-1;';
                 renderArea.innerHTML = ''; });
     }, 500);
 }
@@ -12969,7 +13458,7 @@ function downloadFreightPDF(idx = null) {
     const html = buildFreightPreviewHTML(data);
     const renderArea = document.getElementById('pdf-render-area');
     renderArea.innerHTML = html;
-    renderArea.style.cssText = 'position:fixed;left:0;top:0;width:800px;background:white;z-index:9999;opacity:1;padding:10px;';
+    renderArea.style.cssText = 'position:fixed;left:0;top:0;width:200mm;max-width:200mm;background:white;z-index:9999;opacity:1;padding:0;margin:0;box-sizing:border-box;font-family:Arial,sans-serif;';
     setTimeout(() => {
         html2canvas(renderArea, { scale: 1, useCORS: true, backgroundColor: '#ffffff' })
             .then(canvas => {
@@ -12989,11 +13478,11 @@ function downloadFreightPDF(idx = null) {
                 const y = (pdfHeight - imgHeight) / 2;
                 pdf.addImage(imgData, 'JPEG', x, y, imgWidth, imgHeight);
                 pdf.save(`Freight_${data.carrier}_${data.origin}.pdf`);
-                renderArea.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;background:white;z-index:-1;';
+                renderArea.style.cssText = 'position:fixed;left:-10000px;top:0;width:755px;min-width:755px;max-width:755px;background:white;z-index:-1;';
                 renderArea.innerHTML = '';
             }).catch(err => { console.error(err);
                 alert('PDF generation failed.');
-                renderArea.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;background:white;z-index:-1;';
+                renderArea.style.cssText = 'position:fixed;left:-10000px;top:0;width:755px;min-width:755px;max-width:755px;background:white;z-index:-1;';
                 renderArea.innerHTML = ''; });
     }, 500);
 }
@@ -13019,7 +13508,7 @@ function populateFreightDropdowns() {
     }
 }
 // ==================== COMPACT EMAIL BUILDER ====================
-function buildCompactEmailHTML(data, mode) {
+function legacy_buildCompactEmailHTML(data, mode) {
     const modeLabel = { sea: 'SEA FREIGHT', air: 'AIR FREIGHT', lcl: 'LCL FREIGHT' }[mode];
     const validityDisplay = data.validityDate ? new Date(data.validityDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
     const transitDisplay = data.transit ? `${data.transit} Days` : '—';
@@ -13041,7 +13530,7 @@ function buildCompactEmailHTML(data, mode) {
             if (pallets > 0) {
                 const plies = pallets * 2;
                 const palletCharge = pallets * 1875;
-                const plyCharge = plies * 600;
+                const plyCharge = pallets * 1000;
                 totalSellAmt = Math.max(palletCharge, plyCharge);
                 totalBuyAmt = Math.max(totalBuyAmt, totalSellAmt);
             }
@@ -13103,13 +13592,13 @@ function buildCompactEmailHTML(data, mode) {
 
     // ---- HTML generation with inline widths ----
     const fontStack = "'Aptos', 'Segoe UI', Arial, sans-serif";
-    const dataSize = '10px';
-    const headingSize = '12px';
-    const titleSize = '13px';
+    const dataSize = '15px';
+    const headingSize = '17px';
+    const titleSize = '16px';
     const thPadding = '4px 8px';
     const tdPadding = '4px 8px';
-    const tableWidth = '15cm';
-    const maxTableWidth = '17cm';
+    const tableWidth = SHAHID_SIZE.quote;
+    const maxTableWidth = SHAHID_SIZE.quote;
 
     // ---- 1. Customer Details (inline widths) ----
 	const detailRows = [
@@ -13132,10 +13621,10 @@ function buildCompactEmailHTML(data, mode) {
 		const valueStyle1 = row[0] === 'Validity Date' ? 'color:#dc2626;font-weight:bold;' : '';
 		const valueStyle2 = row[2] === 'Validity Date' ? 'color:#dc2626;font-weight:bold;' : '';
 		detailHtml += `<tr style="background:${bg};">
-			<th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;width:15%;">${row[0]}</th>
-			<td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;width:35%;${valueStyle1}">${row[1]}</td>
-			<th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;background:#d2e5f7;font-weight:700;width:15%;">${row[2]}</th>
-			<td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;width:35%;${valueStyle2}">${row[3]}</td>
+			<th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;width:20%;">${row[0]}</th>
+			<td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;width:30%;${valueStyle1}">${row[1]}</td>
+			<th style="border:1px solid #d1d5db;padding:${thPadding};text-align:left;width:20%;">${row[2]}</th>
+			<td style="border:1px solid #d1d5db;padding:${tdPadding};text-align:left;width:30%;${valueStyle2}">${row[3]}</td>
 		</tr>`;
 	});
 	detailHtml += `</tbody></table><br>`;
@@ -13143,6 +13632,7 @@ function buildCompactEmailHTML(data, mode) {
     // ---- 2. Helper to build charge group with inline widths ----
     function buildGroupTableHTML(groupLabel, categoryNames, srStart) {
         const groupCharges = [];
+		
         categoryNames.forEach(cat => {
             if (order[cat]) {
                 order[cat].forEach(ch => {
@@ -13154,6 +13644,7 @@ function buildCompactEmailHTML(data, mode) {
         });
         if (groupCharges.length === 0) return { html: '', subtotal: 0, nextSr: srStart };
 
+		
         let html = `<table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
             <thead>
                 <tr><th colspan="6" style="border:1px solid #1e3a8a;padding:${thPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;">${groupLabel}</th></tr>
@@ -13182,7 +13673,7 @@ function buildCompactEmailHTML(data, mode) {
                     basisDisplay = 'Minimum';
                 } else {
                     if (charge === 'GATE PASS') {
-                        basisDisplay = 'At Actual';
+                        basisDisplay = 'AT Actual';
                     } else {
                         basisDisplay = 'Per KGS';
                     }
@@ -13212,7 +13703,7 @@ function buildCompactEmailHTML(data, mode) {
 
     // ---- 3. Build charge groups ----
     const groupMap = getChargeGroups(mode);
-    const group1Label = "Freight & Carrier Charges";
+    const group1Label = "Sea Freight & Local Charges";
     const group2Label = "CFS / Transport Charges";
     const group1Cats = groupMap.group1 || [];
     const group2Cats = groupMap.group2 || [];
@@ -13221,7 +13712,7 @@ function buildCompactEmailHTML(data, mode) {
     let chargeHtml = '';
     if (mode === 'air') {
         const combinedCats = group1Cats.concat(group2Cats);
-        const combinedTable = buildGroupTableHTML("AIR FREIGHT CHARGES", combinedCats, srStart);
+        const combinedTable = buildGroupTableHTML("Air Freight Charges", combinedCats, srStart);
         chargeHtml = combinedTable.html;
     } else {
         let table1 = buildGroupTableHTML(group1Label, group1Cats, srStart);
@@ -13234,8 +13725,8 @@ function buildCompactEmailHTML(data, mode) {
     if (chargeHtml) {
         chargeHtml += `<table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
             <tbody>
-                <tr style="background:#05964b;color:#edeef0;font-weight:800;font-size:15px;line-height:1;vertical-align:middle;">
-                    <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:right;width:71%;">GRAND TOTAL (INR) + GST additional</td>
+                <tr style="background:#05964b;color:#edeef0;font-weight:800;font-size:17px;line-height:1;vertical-align:middle;">
+                    <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:right;width:71%;">Grand Total (INR) + GST additional</td>
                     <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:left;width:29%;">${formatINR(grandTotal)}</td>
                 </tr>
             </tbody>
@@ -13245,7 +13736,7 @@ function buildCompactEmailHTML(data, mode) {
     // ---- 5. REMARKS: SPECIAL (Red, Bold, Highlighted) + STANDARD (static list) ----
     let specialRemarksHtml = '';
     if (data.remarks && data.remarks.trim()) {
-        specialRemarksHtml = `<div style="background:#fee2e2;border:2px solid #dc2626;border-radius:4px;padding:8px 12px;margin-bottom:8px;color:#991b1b;font-weight:700;font-size:${dataSize};">
+        specialRemarksHtml = `<div style="background:#fee2e2;border:2px solid #dc2626;border-radius:4px;padding:8px 12px;margin-bottom:8px;color:#991b1b;font-weight:700;font-size:${dataSize};text-transform:uppercase;">
             ${data.remarks}
         </div>`;
     }
@@ -13304,10 +13795,11 @@ function buildCompactEmailHTML(data, mode) {
     </table>`;
 
     // ---- 6. Final assembly ----
-    let html = `<div style="max-width:${maxTableWidth};min-width:${tableWidth};width:auto;margin:0 auto;font-family:${fontStack};background:#ffffff;padding:4px;box-sizing:border-box;color:#1a1a1a;font-size:${dataSize};">
+    let html = `<div style="max-width:${maxTableWidth};min-width:0;width:100%;margin:0 auto;font-family:${fontStack};background:#ffffff;padding:4px;box-sizing:border-box;color:#1a1a1a;font-size:${dataSize};">
         <p style="margin:0 0 4px 0;font-size:${titleSize};line-height:1.4;">Dear Sir / Madam,</p>
         <br>
         <p style="margin:0 0 10px 0;font-size:${titleSize};line-height:1.4;">Good day !</p>
+		<br>
         <div style="font-size:${titleSize};font-weight:800;color:#1e3a8a;">${modeLabel} QUOTATION / Quote: ${data.quoteNumber || 'DRAFT'}</div>
         <br>
         ${detailHtml}
@@ -14422,66 +14914,113 @@ function bulkImportLocalCharges(input) {
                 return Object.values(groups);
             }
 
-            // 1. Sea Default
+            // Merge imported groups into existing masters. Existing records are
+            // never replaced or deleted; only matching imported charge fields are updated.
+            const normImport = v => String(v ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
+            function mergeImportRecords(target, incoming, keyFields, makeRecord) {
+                if (!Array.isArray(target)) target = [];
+                incoming.forEach(group => {
+                    const incomingKey = keyFields.map(f => normImport(group[f])).join('||');
+                    let existingIndex = target.findIndex(rec =>
+                        keyFields.map(f => normImport(rec[f])).join('||') === incomingKey
+                    );
+                    if (existingIndex < 0) {
+                        target.push(makeRecord(group));
+                    } else {
+                        const existing = target[existingIndex];
+                        existing.charges = { ...(existing.charges || {}), ...(group.charges || {}) };
+                        if (existing.updated !== undefined) existing.updated = new Date().toISOString();
+                        if (existing.updatedAt !== undefined) existing.updatedAt = new Date().toISOString();
+                    }
+                });
+                return target;
+            }
+
+            // 1. Sea Default — MERGE, never overwrite old records.
             const seaDefaults = processSheet('Sea Default', ['Carrier', 'POL', 'Container', 'Commodity']);
             if (seaDefaults.length) {
-                db.defaultSeaCharges = seaDefaults.map(g => ({
-                    carrier: g.Carrier || 'ALL',
-                    pol: g.POL || '',
-                    container: g.Container || '',
-                    commodity: g.Commodity || '',
-                    charges: g.charges || {}
-                }));
+                db.defaultSeaCharges = mergeImportRecords(
+                    db.defaultSeaCharges,
+                    seaDefaults,
+                    ['carrier', 'pol', 'container', 'commodity'],
+                    g => ({
+                        carrier: g.Carrier || 'ALL',
+                        pol: g.POL || '',
+                        container: g.Container || '',
+                        commodity: g.Commodity || '',
+                        charges: { ...(g.charges || {}) }
+                    })
+                );
                 updated += seaDefaults.length;
             }
 
-            // 2. Air Default
+            // 2. Air Default — MERGE, never overwrite old records.
             const airDefaults = processSheet('Air Default', ['POL', 'Commodity']);
             if (airDefaults.length) {
-                db.defaultAirCharges = airDefaults.map(g => ({
-                    pol: g.POL || '',
-                    commodity: g.Commodity || '',
-                    charges: g.charges || {}
-                }));
+                db.defaultAirCharges = mergeImportRecords(
+                    db.defaultAirCharges,
+                    airDefaults,
+                    ['pol', 'commodity'],
+                    g => ({
+                        pol: g.POL || '',
+                        commodity: g.Commodity || '',
+                        charges: { ...(g.charges || {}) }
+                    })
+                );
                 updated += airDefaults.length;
             }
 
-            // 3. LCL Default
+            // 3. LCL Default — MERGE, never overwrite old records.
             const lclDefaults = processSheet('Lcl Default', ['POL', 'Commodity']);
             if (lclDefaults.length) {
-                db.defaultLclCharges = lclDefaults.map(g => ({
-                    pol: g.POL || '',
-                    commodity: g.Commodity || '',
-                    charges: g.charges || {}
-                }));
+                db.defaultLclCharges = mergeImportRecords(
+                    db.defaultLclCharges,
+                    lclDefaults,
+                    ['pol', 'commodity'],
+                    g => ({
+                        pol: g.POL || '',
+                        commodity: g.Commodity || '',
+                        charges: { ...(g.charges || {}) }
+                    })
+                );
                 updated += lclDefaults.length;
             }
 
-            // 4. Carrier Sea/Lcl
+            // 4. Carrier Sea/Lcl — MERGE, never overwrite old records.
             const carrierSL = processSheet('Carrier Sea/Lcl', ['Mode', 'Carrier', 'POL', 'Container', 'Commodity']);
             if (carrierSL.length) {
-                db.carrierChargesSeaLcl = carrierSL.map(g => ({
-                    mode: g.Mode || 'sea',
-                    carrier: g.Carrier || '',
-                    pol: g.POL || '',
-                    container: g.Container || '',
-                    commodity: g.Commodity || '',
-                    charges: g.charges || {},
-                    updated: new Date().toISOString()
-                }));
+                db.carrierChargesSeaLcl = mergeImportRecords(
+                    db.carrierChargesSeaLcl,
+                    carrierSL,
+                    ['mode', 'carrier', 'pol', 'container', 'commodity'],
+                    g => ({
+                        mode: g.Mode || 'sea',
+                        carrier: g.Carrier || '',
+                        pol: g.POL || '',
+                        container: g.Container || '',
+                        commodity: g.Commodity || '',
+                        charges: { ...(g.charges || {}) },
+                        updated: new Date().toISOString()
+                    })
+                );
                 updated += carrierSL.length;
             }
 
-            // 5. Carrier Air
+            // 5. Carrier Air — MERGE, never overwrite old records.
             const carrierAir = processSheet('Carrier Air', ['Carrier', 'POL', 'Commodity']);
             if (carrierAir.length) {
-                db.carrierChargesAir = carrierAir.map(g => ({
-                    carrier: g.Carrier || '',
-                    pol: g.POL || '',
-                    commodity: g.Commodity || '',
-                    charges: g.charges || {},
-                    updated: new Date().toISOString()
-                }));
+                db.carrierChargesAir = mergeImportRecords(
+                    db.carrierChargesAir,
+                    carrierAir,
+                    ['carrier', 'pol', 'commodity'],
+                    g => ({
+                        carrier: g.Carrier || '',
+                        pol: g.POL || '',
+                        commodity: g.Commodity || '',
+                        charges: { ...(g.charges || {}) },
+                        updated: new Date().toISOString()
+                    })
+                );
                 updated += carrierAir.length;
             }
 
@@ -14511,816 +15050,399 @@ function bulkImportLocalCharges(input) {
 // ============================================================
 
 // ---------- 1. Export Default Charges ----------
-function bulkExportDefaultCharges() {
-    if (typeof XLSX === 'undefined') {
-        alert('XLSX library not loaded. Please refresh and try again.');
-        return;
-    }
+// ============================================================================
+// LOCAL CHARGES IMPORT / EXPORT — STANDARDIZED ROUND-TRIP FORMAT
+// IMPORTANT: This block is isolated to Local Charges only.
+// Existing quotation/rate-sheet/preview/PDF logic is not changed.
+// Currency rule: value containing "$" = USD; otherwise = INR.
+// ============================================================================
 
-    // Determine active mode
-    let mode = 'sea';
-    if (document.getElementById('airlocal')?.classList.contains('active')) mode = 'air';
-    else if (document.getElementById('lcllocal')?.classList.contains('active')) mode = 'lcl';
-
-    console.log('🔹 Exporting default charges for mode:', mode);
-
-    let records = [];
-    if (mode === 'sea') records = db.defaultSeaCharges || [];
-    else if (mode === 'air') records = db.defaultAirCharges || [];
-    else if (mode === 'lcl') records = db.defaultLclCharges || [];
-
-    if (records.length === 0) {
-        alert(`No default charges found for ${mode.toUpperCase()}.`);
-        return;
-    }
-
-    // ---- For SEA: all charges are container-specific (if they have _20/_40 suffix) ----
-    // For AIR/LCL: no container suffix
-    const isSea = (mode === 'sea');
-
-    // Collect all base charge names (without suffix)
-    const chargeSet = new Set();
-    records.forEach(rec => {
-        Object.keys(rec.charges || {}).forEach(key => {
-            let base = key;
-            if (key.endsWith('_20') || key.endsWith('_40')) {
-                base = key.slice(0, -3);
-            }
-            chargeSet.add(base);
-        });
-    });
-    const chargeColumns = Array.from(chargeSet).sort();
-
-    // Build rows
-    const rows = [];
-    records.forEach(rec => {
-        const baseRow = {
-            MODE: mode.toUpperCase(),
-            POL: rec.pol || '',
-            COMMODITY: rec.commodity || ''
-        };
-
-        // Check which suffixes exist for this record
-        const has20 = Object.keys(rec.charges).some(k => k.endsWith('_20'));
-        const has40 = Object.keys(rec.charges).some(k => k.endsWith('_40'));
-
-        if (!isSea || (!has20 && !has40)) {
-            // AIR, LCL, or SEA with no container-specific charges: single row with CONTAINER = "ALL"
-            const row = { ...baseRow, CONTAINER: 'ALL' };
-            chargeColumns.forEach(col => {
-                const val = rec.charges?.[col];
-                row[col] = val?.amount || '';
-            });
-            rows.push(row);
-            return;
-        }
-
-        // ---- SEA: create separate rows for each container ----
-        // Row for 20 GP
-        if (has20) {
-            const row = { ...baseRow, CONTAINER: '20 GP' };
-            chargeColumns.forEach(col => {
-                const key = col + '_20'; // All charges get _20 suffix for 20 GP
-                const val = rec.charges?.[key];
-                row[col] = val?.amount || '';
-            });
-            rows.push(row);
-        }
-
-        // Row for 40 HC
-        if (has40) {
-            const row = { ...baseRow, CONTAINER: '40 HC' };
-            chargeColumns.forEach(col => {
-                const key = col + '_40'; // All charges get _40 suffix for 40 HC
-                const val = rec.charges?.[key];
-                row[col] = val?.amount || '';
-            });
-            rows.push(row);
-        }
-    });
-
-    if (rows.length === 0) {
-        alert('No data to export.');
-        return;
-    }
-
-    console.log(`📤 Exporting ${rows.length} rows. Sample:`, rows[0]);
-
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Default Charges Horizontal');
-    XLSX.writeFile(wb, `DefaultCharges_${mode.toUpperCase()}_${new Date().toISOString().split('T')[0]}.xlsx`);
-    alert(`✅ Exported ${rows.length} default charge rows.\nCheck console for details.`);
+function lcNormalize(value) {
+    return String(value ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
 }
 
+function lcParseMoney(value) {
+    if (value === undefined || value === null || String(value).trim() === '') return null;
+    const raw = String(value).trim();
+    const currency = raw.includes('$') ? 'USD' : 'INR';
+    const numeric = raw.replace(/,/g, '').replace(/[^0-9.\-]/g, '');
+    const amount = parseFloat(numeric);
+    if (!Number.isFinite(amount)) return null;
+    return { amount, currency };
+}
 
-// ---------- 3. Import Carrier-Specific Charges ----------
-function bulkImportDefaultCharges(input) {
-    if (!input.files || !input.files[0]) {
-        alert('Please select an Excel file.');
-        return;
+function lcFormatMoney(val) {
+    if (!val || val.amount === undefined || val.amount === null || val.amount === '') return '';
+    const n = Number(val.amount);
+    if (!Number.isFinite(n)) return '';
+    return val.currency === 'USD' ? `$${n}` : `${n}`;
+}
+
+function lcDateOnly(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value).slice(0, 10);
+    return d.toISOString().slice(0, 10);
+}
+
+function lcValidateDates(row, rowNo, errors, warnings) {
+    const from = String(row['VALID FROM'] ?? '').trim();
+    const to = String(row['VALID TO'] ?? '').trim();
+    if (!from) warnings.push(`Row ${rowNo}: VALID FROM is missing.`);
+    if (!to) warnings.push(`Row ${rowNo}: VALID TO is missing.`);
+    if (from && Number.isNaN(new Date(from).getTime())) errors.push(`Row ${rowNo}: invalid VALID FROM.`);
+    if (to && Number.isNaN(new Date(to).getTime())) errors.push(`Row ${rowNo}: invalid VALID TO.`);
+    if (from && to && new Date(from) > new Date(to)) errors.push(`Row ${rowNo}: VALID FROM is after VALID TO.`);
+}
+
+function lcDefaultColumns(mode) {
+    if (mode === 'sea') {
+        return ['CFS','CLEARANCE','HAZ STCKER','LASHING & CHOKING','LOLO','ON WHEEL','OTHER LOCALS','TOLL','VGM'];
     }
+    // AIR/LCL use the existing charge master names so no existing charge is lost.
+    const arr = getDefaultChargeTypes(mode) || [];
+    return [...new Set(arr.map(String))];
+}
 
-    const file = input.files[0];
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: 'array' });
+function lcCarrierColumns(mode) {
+    if (mode === 'sea') return ['SEAL','MUC','DOCS','SEAWAY BL','ETS','HAZ DOCS','AMS'];
+    return getHorizontalChargeColumns(mode).slice();
+}
 
-            // Try to find the sheet
-            let sheetName = 'Default Charges Horizontal';
-            let sheet = workbook.Sheets[sheetName];
-            if (!sheet) {
-                sheetName = workbook.SheetNames[0];
-                sheet = workbook.Sheets[sheetName];
-                console.warn(`Sheet "${'Default Charges Horizontal'}" not found, using "${sheetName}" instead.`);
-            }
-            if (!sheet) {
-                alert('❌ No sheets found in the Excel file.');
-                return;
-            }
+function lcGetDefaultRecords(mode) {
+    if (mode === 'sea') return db.defaultSeaCharges || [];
+    if (mode === 'air') return db.defaultAirCharges || [];
+    return db.defaultLclCharges || [];
+}
 
-            const rows = XLSX.utils.sheet_to_json(sheet);
-            if (!rows || rows.length === 0) {
-                alert('❌ No data rows found.');
-                return;
-            }
+function lcGetCarrierRecords(mode) {
+    if (mode === 'air') return db.carrierChargesAir || [];
+    return (db.carrierChargesSeaLcl || []).filter(r => r.mode === mode);
+}
 
-            console.log('📊 Importing', rows.length, 'rows from sheet:', sheetName);
+function lcDefaultValue(rec, charge, container) {
+    const c = container === '20 GP' ? rec.charges?.[charge + '_20'] :
+              container === '40 GP' || container === '40 HC' ? rec.charges?.[charge + '_40'] :
+              rec.charges?.[charge];
+    return c || null;
+}
 
-            function normalize(str) {
-                if (!str) return '';
-                return str.toString().trim().replace(/\s*,\s*/g, ', ').replace(/\s+/g, ' ').toUpperCase();
-            }
+function lcContainerRowsForDefault(mode, rec) {
+    if (mode !== 'sea') return [{ container: 'ALL', currency: null, charges: rec.charges || {} }];
+    const containers = [];
+    const keys = Object.keys(rec.charges || {});
+    if (keys.some(k => k.endsWith('_20'))) containers.push('20 GP');
+    if (keys.some(k => k.endsWith('_40'))) containers.push('40 HC');
+    if (!containers.length) containers.push('ALL');
+    return containers.map(container => {
+        const charges = {};
+        lcDefaultColumns(mode).forEach(col => {
+            const v = lcDefaultValue(rec, col, container);
+            if (v) charges[col] = v;
+        });
+        return { container, charges };
+    });
+}
 
-            // Detect mode from first row
-            const mode = normalize(rows[0].MODE || '');
-            if (!['SEA','AIR','LCL'].includes(mode)) {
-                alert(`❌ Invalid MODE "${mode}". Must be SEA, AIR, or LCL.`);
-                return;
-            }
-            const modeKey = mode.toLowerCase();
-            const isSea = (modeKey === 'sea');
+// --------------------------- STANDARDIZED LOCAL CHARGES IMPORT / EXPORT -------------------------------
+// Two workbooks are used by the four buttons:
+// 1) Export/Import Default  -> SEA - DEFAULT CHARGES, AIR - DEFAULT CHARGES, LCL - DEFAULT CHARGES
+// 2) Export/Import Carrier  -> SEA - LOCAL CHARGES, SEA - THC, AIR - LOCAL CHARGES, LCL - LOCAL CHARGES
+// Exported workbooks are directly reusable as import templates with identical sheet/column structures.
 
-            let targetArr;
-            if (isSea) targetArr = db.defaultSeaCharges;
-            else if (modeKey === 'air') targetArr = db.defaultAirCharges;
-            else targetArr = db.defaultLclCharges;
+function lcEnsureXLSX(){
+    if(typeof XLSX==='undefined'){ alert('XLSX library not loaded. Please refresh and try again.'); return false; }
+    return true;
+}
+function lcMoneyForCurrency(v,currency){
+    if(!v) return '';
+    const cur=String(v.currency||'INR').toUpperCase();
+    return cur===currency ? lcFormatMoney(v) : '';
+}
+function lcCreateSheet(rows, fallback){
+    return XLSX.utils.json_to_sheet(rows.length ? rows : [fallback]);
+}
 
-            // All columns except MODE, POL, COMMODITY, CONTAINER
-            const header = Object.keys(rows[0]);
-            const chargeColumns = header.filter(h => !['MODE','POL','COMMODITY','CONTAINER'].includes(h));
-
-            if (chargeColumns.length === 0) {
-                alert('❌ No charge columns found. Ensure the file has charge names as column headers.');
-                return;
-            }
-
-            console.log('📋 Charge columns found:', chargeColumns);
-
-            // Group rows by (POL, COMMODITY)
-            const groups = {};
-            rows.forEach((row, idx) => {
-                const pol = normalize(row.POL || '');
-                const commodity = normalize(row.COMMODITY || '');
-                if (!pol) {
-                    console.warn(`⚠️ Row ${idx+1} skipped: POL is empty.`);
-                    return;
-                }
-                const key = `${pol}||${commodity}`;
-                if (!groups[key]) {
-                    groups[key] = { pol, commodity, containerRows: [] };
-                }
-                // Store container and charges
-                const container = normalize(row.CONTAINER || '');
-                const charges = {};
-                chargeColumns.forEach(col => {
-                    const raw = row[col];
-                    if (raw === undefined || raw === null || raw === '') return;
-                    let strVal = String(raw).trim();
-                    let currency = 'INR';
-                    let numericStr = strVal;
-                    if (strVal.includes('$')) {
-                        currency = 'USD';
-                        numericStr = strVal.replace(/[^0-9.]/g, '');
-                    } else {
-                        numericStr = strVal.replace(/,/g, '').replace(/[^0-9.]/g, '');
-                    }
-                    const val = parseFloat(numericStr);
-                    if (isNaN(val) || val <= 0) return;
-                    charges[col] = { amount: val, currency, buyAmount: val, buyCurrency: currency };
+// ============================ DEFAULT EXPORT ============================
+// Default Charges currency is determined PER CELL.
+// A value containing "$" is USD; any numeric value without "$" is INR.
+// No Currency column and no separate INR/USD rows are used.
+function bulkExportDefaultCharges(){
+    if(!lcEnsureXLSX()) return;
+    const wb=XLSX.utils.book_new();
+    ['sea','air','lcl'].forEach(mode=>{
+        const records=lcGetDefaultRecords(mode)||[];
+        const columns=lcDefaultColumns(mode);
+        const rows=[];
+        records.forEach(rec=>{
+            lcContainerRowsForDefault(mode,rec).forEach(group=>{
+                const row={
+                    MODE:mode.toUpperCase(),
+                    POL:rec.pol||'',
+                    'HAZ / NON HAZ':rec.commodity||'',
+                    CONTAINER:group.container||'ALL',
+                    'VALID FROM':rec.validFrom||'',
+                    'VALID TO':rec.validTo||''
+                };
+                columns.forEach(col=>{
+                    const v=group.charges?.[col];
+                    // Preserve the exact currency indicator in every individual cell.
+                    row[col]=v ? lcFormatMoney(v) : '';
                 });
-                groups[key].containerRows.push({ container, charges });
-            });
-
-            console.log('📦 Groups found:', Object.keys(groups).length);
-
-            let imported = 0, updated = 0;
-
-            // Process each group
-            Object.values(groups).forEach(group => {
-                const { pol, commodity, containerRows } = group;
-                if (containerRows.length === 0) return;
-
-                // Merge all container rows into one charges object
-                const mergedCharges = {};
-                containerRows.forEach(cr => {
-                    const container = cr.container;
-                    Object.entries(cr.charges).forEach(([chargeName, chargeVal]) => {
-                        let key = chargeName;
-                        // For SEA, add suffix based on container
-                        if (isSea && container) {
-                            if (container === '20 GP') key = chargeName + '_20';
-                            else if (container === '40 HC') key = chargeName + '_40';
-                            // If container is "ALL", keep as base name (no suffix)
-                        }
-                        // If the charge already exists, keep the larger amount
-                        if (!mergedCharges[key]) {
-                            mergedCharges[key] = chargeVal;
-                        } else {
-                            if (chargeVal.amount > mergedCharges[key].amount) {
-                                mergedCharges[key].amount = chargeVal.amount;
-                                mergedCharges[key].buyAmount = chargeVal.buyAmount;
-                            }
-                            mergedCharges[key].currency = chargeVal.currency || mergedCharges[key].currency;
-                            mergedCharges[key].buyCurrency = chargeVal.buyCurrency || mergedCharges[key].buyCurrency;
-                        }
-                    });
-                });
-
-                if (Object.keys(mergedCharges).length === 0) return;
-
-                console.log(`📌 Merged charges for ${pol} | ${commodity}:`, Object.keys(mergedCharges));
-
-                // Find existing record
-                const existingIdx = targetArr.findIndex(r =>
-                    normalize(r.pol) === pol &&
-                    normalize(r.commodity || '') === commodity
-                );
-
-                if (existingIdx !== -1) {
-                    // Merge
-                    const existing = targetArr[existingIdx];
-                    Object.entries(mergedCharges).forEach(([key, val]) => {
-                        if (!existing.charges[key]) {
-                            existing.charges[key] = val;
-                        } else {
-                            if (val.amount > existing.charges[key].amount) {
-                                existing.charges[key].amount = val.amount;
-                                existing.charges[key].buyAmount = val.buyAmount;
-                            }
-                            existing.charges[key].currency = val.currency || existing.charges[key].currency;
-                            existing.charges[key].buyCurrency = val.buyCurrency || existing.charges[key].buyCurrency;
-                        }
-                    });
-                    existing.updatedAt = new Date().toISOString();
-                    updated++;
-                } else {
-                    // Create new
-                    const newRec = {
-                        pol,
-                        commodity,
-                        charges: mergedCharges,
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString()
-                    };
-                    targetArr.push(newRec);
-                    imported++;
-                }
-            });
-
-            saveDB();
-            renderDefaultChargesMaster(modeKey);
-            alert(`✅ Import completed.\nNew: ${imported}, Updated: ${updated}\nTotal: ${imported + updated}\nCheck console for details.`);
-            autoBackup();
-        } catch (err) {
-            alert('❌ Import failed: ' + err.message);
-            console.error('Import error:', err);
-        }
-    };
-    reader.readAsArrayBuffer(file);
-    input.value = '';
-}
-
-
-function bulkDeleteSelectedLocal() {
-    const selected = document.querySelectorAll('.dc-checkbox:checked, .cc-checkbox:checked');
-    if (selected.length === 0) {
-        alert('No entries selected.');
-        return;
-    }
-    if (!confirm(`Delete ${selected.length} selected entries? This cannot be undone.`)) return;
-
-    // Group by array type: 'default' or 'sealcl' or 'air'
-    const groups = {};
-    selected.forEach(cb => {
-        const type = cb.dataset.type;   // 'default' or 'sealcl' or 'air'
-        const mode = cb.dataset.mode;   // for default only: 'sea', 'air', 'lcl'
-        const idx = parseInt(cb.dataset.idx);
-        const key = (type === 'default') ? `default-${mode}` : type; // 'sealcl' or 'air'
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(idx);
-    });
-
-    for (const [key, indices] of Object.entries(groups)) {
-        const sorted = indices.sort((a, b) => b - a);
-        if (key.startsWith('default-')) {
-            const mode = key.replace('default-', '');
-            let arr;
-            if (mode === 'sea') arr = db.defaultSeaCharges;
-            else if (mode === 'air') arr = db.defaultAirCharges;
-            else if (mode === 'lcl') arr = db.defaultLclCharges;
-            if (arr) {
-                sorted.forEach(i => { if (i < arr.length) arr.splice(i, 1); });
-            }
-        } else if (key === 'sealcl') {
-            const arr = db.carrierChargesSeaLcl;
-            sorted.forEach(i => { if (i < arr.length) arr.splice(i, 1); });
-        } else if (key === 'air') {
-            const arr = db.carrierChargesAir;
-            sorted.forEach(i => { if (i < arr.length) arr.splice(i, 1); });
-        } else {
-            // fallback: treat as carrier? we can ignore.
-        }
-    }
-
-    saveDB();
-    // Refresh all tables
-    ['sea','air','lcl'].forEach(m => renderDefaultChargesMaster(m));
-    renderCarrierChargesMaster('sealcl');
-    renderCarrierChargesMaster('air');
-    renderCarrierChargesMaster('lcl');
-    updateSelectedCount();
-    alert('Selected entries deleted.');
-    autoBackup();
-}
-
-function populateSelect(id, options, selectedValue) {
-    const sel = document.getElementById(id);
-    if (!sel) return;
-    options = options || [];
-    // Sort alphabetically
-    const sorted = options.sort((a, b) => a.localeCompare(b));
-    sel.innerHTML = '<option value="">Select</option>' + sorted.map(o => `<option value="${o}">${o}</option>`).join('');
-    if (selectedValue && options.includes(selectedValue)) {
-        sel.value = selectedValue;
-    }
-}
-
-
-
-// Load saved path on page load
-async function loadBackupPath() {
-    const path = db.backupFolderPath || '';
-    const inputEl = document.getElementById('backup-folder-path-input');
-    const displayEl = document.getElementById('backup-folder-path');
-
-    if (inputEl) inputEl.value = path;
-
-    // Try to restore the folder handle from IndexedDB
-    try {
-        const handle = await getFolderHandle();
-        if (handle) {
-            backupFolderHandle = handle;
-            if (displayEl) {
-                displayEl.textContent = `📁 ${handle.name || path || 'Selected folder'} (auto-write enabled)`;
-            }
-            if (handle && !autoBackupInterval) startAutoBackup();
-        } else {
-            if (displayEl) {
-                displayEl.textContent = path ? `📁 ${path} (path saved)` : 'No folder selected';
-            }
-        }
-    } catch (e) {
-        console.warn('Could not restore folder handle:', e);
-        if (displayEl) {
-            displayEl.textContent = path ? `📁 ${path} (path saved)` : 'No folder selected';
-        }
-    }
-}
-
-
-
-
-function migrateDefaultSeaCharges() {
-    // Only run once – check if migration already done
-    if (localStorage.getItem('sea_default_migrated')) return;
-    
-    const oldCharges = db.defaultSeaCharges || [];
-    if (oldCharges.length === 0) return;
-
-    // Group by (pol, commodity)
-    const groups = {};
-    oldCharges.forEach(rec => {
-        const key = `${rec.pol}||${rec.commodity || ''}`;
-        if (!groups[key]) {
-            groups[key] = {
-                pol: rec.pol,
-                commodity: rec.commodity || '',
-                charges: {},
-                cfs20: 0,
-                cfs40: 0,
-                cfs20Buy: 0,
-                cfs40Buy: 0,
-                currency: 'INR'
-            };
-        }
-        // Collect other charges (excluding CFS)
-        Object.entries(rec.charges || {}).forEach(([chargeName, val]) => {
-            if (chargeName.toUpperCase() === 'CFS') {
-                // Store CFS based on container
-                if (rec.container === '20 GP') {
-                    groups[key].cfs20 = val.amount || 0;
-                    groups[key].cfs20Buy = val.buyAmount || 0;
-                    groups[key].currency = val.currency || 'INR';
-                } else if (rec.container === '40 HC' || rec.container === '40 GP') {
-                    groups[key].cfs40 = val.amount || 0;
-                    groups[key].cfs40Buy = val.buyAmount || 0;
-                    groups[key].currency = val.currency || 'INR';
-                }
-                // If no container, treat as both? We'll assign to both if only one record
-            } else {
-                // Add other charges (if not already present)
-                if (!groups[key].charges[chargeName]) {
-                    groups[key].charges[chargeName] = val;
-                }
-            }
-        });
-    });
-
-    // Build new defaultSeaCharges array
-    const newSeaCharges = [];
-    Object.values(groups).forEach(g => {
-        const charges = { ...g.charges };
-        // Add CFS_20 and CFS_40 as separate charges
-        if (g.cfs20 > 0) {
-            charges.CFS_20 = { amount: g.cfs20, buyAmount: g.cfs20Buy, currency: g.currency || 'INR' };
-        }
-        if (g.cfs40 > 0) {
-            charges.CFS_40 = { amount: g.cfs40, buyAmount: g.cfs40Buy, currency: g.currency || 'INR' };
-        }
-        newSeaCharges.push({
-            pol: g.pol,
-            commodity: g.commodity,
-            charges: charges,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        });
-    });
-
-    db.defaultSeaCharges = newSeaCharges;
-    saveDB();
-    localStorage.setItem('sea_default_migrated', 'true');
-    console.log('✅ Default Sea Charges migrated to new format (CFS_20 and CFS_40).');
-}
-
-function migrateDefaultSeaChargesToSplit() {
-    if (localStorage.getItem('sea_split_migrated')) return;
-    const records = db.defaultSeaCharges || [];
-    let changed = false;
-    records.forEach(rec => {
-        const newCharges = {};
-        Object.entries(rec.charges || {}).forEach(([key, val]) => {
-            // If it's already a split charge (ends with _20 or _40), keep as is
-            if (key.endsWith('_20') || key.endsWith('_40')) {
-                newCharges[key] = val;
-                return;
-            }
-            // For CFS, we already have CFS_20 and CFS_40 from previous migration, so skip
-            if (key === 'CFS') {
-                // Should have been already migrated, but if not, we'll handle here
-                // We'll create CFS_20 and CFS_40 with same value if missing
-                if (!rec.charges.CFS_20) {
-                    newCharges['CFS_20'] = { amount: val.amount || 0, buyAmount: val.buyAmount || 0, currency: val.currency || 'INR' };
-                }
-                if (!rec.charges.CFS_40) {
-                    newCharges['CFS_40'] = { amount: val.amount || 0, buyAmount: val.buyAmount || 0, currency: val.currency || 'INR' };
-                }
-                return;
-            }
-            // For other charges, create both _20 and _40 with the same value (user can edit later)
-            newCharges[key + '_20'] = { amount: val.amount || 0, buyAmount: val.buyAmount || 0, currency: val.currency || 'INR' };
-            newCharges[key + '_40'] = { amount: val.amount || 0, buyAmount: val.buyAmount || 0, currency: val.currency || 'INR' };
-        });
-        rec.charges = newCharges;
-        changed = true;
-    });
-    if (changed) {
-        db.defaultSeaCharges = records;
-        saveDB();
-        localStorage.setItem('sea_split_migrated', 'true');
-        console.log('✅ Default SEA charges migrated to split 20/40 format.');
-    }
-}
-
-
-function bulkExportCarrierCharges() {
-    if (typeof XLSX === 'undefined') {
-        alert('XLSX library not loaded. Please refresh and try again.');
-        return;
-    }
-
-    const rows = [];
-
-    function addCarrierChargeRow(mode, rec) {
-        const charges = rec.charges || {};
-        Object.entries(charges).forEach(([key, val]) => {
-            let container = '';
-            let chargeName = key;
-            if (key === 'THC_20') {
-                container = '20 GP';
-                chargeName = 'THC';
-            } else if (key === 'THC_40') {
-                container = '40 HC';
-                chargeName = 'THC';
-            }
-            rows.push({
-                'Mode': mode.toUpperCase(),
-                'Carrier': rec.carrier,
-                'POL': rec.pol,
-                'Commodity': rec.commodity || '',
-                'Charge Name': chargeName,
-                'Container': container,
-                'Sell Amount': val.amount || 0,
-                'Buy Amount': val.buyAmount || 0,
-                'Currency': val.currency || 'INR'
+                rows.push(row);
             });
         });
-    }
-
-    // SEA Carrier Charges
-    db.carrierChargesSeaLcl.forEach(r => {
-        if (r.mode === 'sea') addCarrierChargeRow('SEA', r);
-    });
-    // LCL Carrier Charges
-    db.carrierChargesSeaLcl.forEach(r => {
-        if (r.mode === 'lcl') addCarrierChargeRow('LCL', r);
-    });
-    // AIR Carrier Charges
-    db.carrierChargesAir.forEach(r => {
-        addCarrierChargeRow('AIR', r);
-    });
-
-    if (rows.length === 0) {
-        alert('⚠️ No carrier-specific charges found to export.');
-        return;
-    }
-
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Carrier Charges');
-    XLSX.writeFile(wb, `CarrierCharges_Backup_${new Date().toISOString().split('T')[0]}.xlsx`);
-    alert('✅ Carrier charges exported (vertical format – one row per charge).');
-}
-
-
-// ─────────────────────────────────────────────────────────────
-// Helper: returns the charge column names for a given mode
-// ─────────────────────────────────────────────────────────────
-function getHorizontalChargeColumns(mode) {
-    const map = {
-        sea: [
-            'THC 20', 'THC 40', 'SEAL', 'MUC', 'DOCS', 'SEAWAY BL',
-            'ETS', 'HAZ DOCS', 'AMS'
-        ],
-        lcl: [
-            'FREIGHT', 'THC', 'MUC', 'DOCS', 'SEAWAY BL',
-            'HAZ DOCS', 'AMS', 'CLEARANCE', 'VGM'
-        ],
-        air: [
-            'AIR FREIGHT', 'CARTAGE', 'MCC', 'XRAY', 'GATE PASS',
-            'ASI GMAX', 'AMS', 'PALLETISATION', 'PLY',
-            'LOADING & UNLOADING', 'DG FEES', 'DG AGENT FEE',
-            'REPACKING', 'AWB FEES', 'TEDI', 'ADD.SURCHARGE',
-            'TRANSPORTATION', 'CUSTOM CLEARANCE', 'TERMINAL TRANSFER'
-        ]
-    };
-    return map[mode] || [];
-}
-
-// ─────────────────────────────────────────────────────────────
-// EXPORT CARRIER CHARGES (Horizontal)
-// ─────────────────────────────────────────────────────────────
-function bulkExportCarrierCharges() {
-    if (typeof XLSX === 'undefined') {
-        alert('XLSX library not loaded. Please refresh and try again.');
-        return;
-    }
-
-    // Determine which local tab is active
-    let mode = 'sea';
-    if (document.getElementById('airlocal') && document.getElementById('airlocal').classList.contains('active')) mode = 'air';
-    else if (document.getElementById('lcllocal') && document.getElementById('lcllocal').classList.contains('active')) mode = 'lcl';
-
-    const chargeColumns = getHorizontalChargeColumns(mode);
-    let source;
-    if (mode === 'air') {
-        source = db.carrierChargesAir || [];
-    } else {
-        source = (db.carrierChargesSeaLcl || []).filter(r => r.mode === mode);
-    }
-
-    // Group by (carrier, pol, commodity)
-    const groups = {};
-    source.forEach(rec => {
-        const key = `${rec.carrier||''}||${rec.pol||''}||${(rec.commodity||'')}`;
-        if (!groups[key]) {
-            groups[key] = {
-                MODE: mode.toUpperCase(),
-                POL: rec.pol || '',
-                LINER: rec.carrier || '',
-                CARGO: rec.commodity || '',
-                charges: {}
-            };
-        }
-        // Map internal names to display columns
-        Object.entries(rec.charges || {}).forEach(([charge, val]) => {
-            let displayName = charge;
-            if (charge === 'THC_20') displayName = 'THC 20';
-            else if (charge === 'THC_40') displayName = 'THC 40';
-            groups[key].charges[displayName] = val.amount || 0;
-        });
-    });
-
-    // Build rows
-    const rows = [];
-    Object.values(groups).forEach(g => {
-        const row = {
-            MODE: g.MODE,
-            POL: g.POL,
-            LINER: g.LINER,
-            CARGO: g.CARGO
+        const fallback={
+            MODE:mode.toUpperCase(), POL:'', 'HAZ / NON HAZ':'',
+            CONTAINER:mode==='sea'?'20 GP':'ALL', 'VALID FROM':'','VALID TO':''
         };
-        chargeColumns.forEach(col => {
-            // If amount is 0, leave empty (not 0)
-            row[col] = g.charges[col] || '';
-        });
-        rows.push(row);
+        columns.forEach(c=>fallback[c]='');
+        XLSX.utils.book_append_sheet(
+            wb,
+            lcCreateSheet(rows,fallback),
+            `${mode.toUpperCase()} - DEFAULT CHARGES`
+        );
     });
-
-    if (rows.length === 0) {
-        alert(`No carrier charges found for ${mode.toUpperCase()}.`);
-        return;
-    }
-
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Carrier Charges Horizontal');
-    XLSX.writeFile(wb, `CarrierCharges_${mode.toUpperCase()}_${new Date().toISOString().split('T')[0]}.xlsx`);
-    alert(`✅ Exported ${rows.length} carrier charge groups (horizontal format).`);
+    XLSX.writeFile(wb,`LOCAL_CHARGES_DEFAULT_${new Date().toISOString().slice(0,10)}.xlsx`);
+    alert('✅ Default Charges exported with 3 separate sheets.\n\nCurrency is cell-based: values containing $ are USD; values without $ are INR.\nNo Currency column or separate INR/USD rows are used.\n\nThe same workbook can be imported directly with Import Default.');
 }
 
-// ─────────────────────────────────────────────────────────────
-// IMPORT CARRIER CHARGES (Horizontal) with currency detection
-// ─────────────────────────────────────────────────────────────
-function bulkImportCarrierCharges(input) {
-    if (!input.files || !input.files[0]) {
-        alert('Please select an Excel file.');
-        return;
-    }
+// ============================ DEFAULT IMPORT =============================
+function bulkImportDefaultCharges(input){
+    if(!input.files||!input.files[0]) return alert('Please select an Excel file.');
+    if(!lcEnsureXLSX()) return;
+    const file=input.files[0];
+    const reader=new FileReader();
+    reader.onload=function(e){
+        try{
+            const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});
+            const errors=[],warnings=[];
+            const stats={new:0,merged:0,duplicates:0,values:0,skippedValues:0};
+            const sheetMap={sea:'SEA - DEFAULT CHARGES',air:'AIR - DEFAULT CHARGES',lcl:'LCL - DEFAULT CHARGES'};
+            let sheetsProcessed=0;
 
-    const file = input.files[0];
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: 'array' });
-            const sheet = workbook.Sheets['Carrier Charges Horizontal'];
-            if (!sheet) {
-                alert('❌ Sheet "Carrier Charges Horizontal" not found. Available: ' + workbook.SheetNames.join(', '));
-                return;
-            }
+            Object.entries(sheetMap).forEach(([mode,sheetName])=>{
+                const sheet=wb.Sheets[sheetName];
+                if(!sheet){ warnings.push(`Missing sheet: ${sheetName}`); return; }
+                sheetsProcessed++;
+                const rows=XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false});
+                if(!rows.length){ warnings.push(`${sheetName}: no data rows.`); return; }
 
-            const rows = XLSX.utils.sheet_to_json(sheet);
-            if (!rows.length) {
-                alert('❌ No data found.');
-                return;
-            }
+                const required=['MODE','POL','HAZ / NON HAZ','CONTAINER'];
+                const headers=Object.keys(rows[0]);
+                required.filter(h=>!headers.includes(h)).forEach(h=>errors.push(`${sheetName}: missing column ${h}`));
+                if(required.some(h=>!headers.includes(h))) return;
 
-            function normalize(str) {
-                if (!str) return '';
-                return str.toString().trim().replace(/\s*,\s*/g, ', ').replace(/\s+/g, ' ').toUpperCase();
-            }
+                const columns=lcDefaultColumns(mode);
+                const importedKeys=new Set();
 
-            // Determine mode from first row
-            const mode = normalize(rows[0].MODE || '');
-            if (!['SEA','LCL','AIR'].includes(mode)) {
-                alert('❌ Invalid MODE. Must be SEA, LCL, or AIR.');
-                return;
-            }
-            const modeKey = mode.toLowerCase();
-            const chargeColumns = getHorizontalChargeColumns(modeKey);
-            const targetArr = modeKey === 'air' ? db.carrierChargesAir : db.carrierChargesSeaLcl;
+                rows.forEach((row,i)=>{
+                    const n=i+2;
+                    const rowMode=lcNormalize(row.MODE).toLowerCase();
+                    const pol=lcNormalize(row.POL);
+                    const haz=lcNormalize(row['HAZ / NON HAZ']);
+                    const raw=lcNormalize(row.CONTAINER);
+                    const container=mode==='sea'
+                        ?(raw==='20GP'||raw==='20 GP'?'20 GP':raw==='40GP'||raw==='40 GP'?'40 GP':raw==='40HC'||raw==='40 HC'?'40 HC':raw)
+                        :'ALL';
 
-            let imported = 0, updated = 0;
+                    lcValidateDates(row,n,errors,warnings);
+                    if(rowMode!==mode) errors.push(`${sheetName} Row ${n}: MODE must be ${mode.toUpperCase()}.`);
+                    if(!pol) errors.push(`${sheetName} Row ${n}: POL is missing.`);
+                    if(!['HAZ','NON HAZ'].includes(haz)) errors.push(`${sheetName} Row ${n}: HAZ / NON HAZ must be HAZ or NON HAZ.`);
+                    if(mode==='sea'&&!['20 GP','40 GP','40 HC','ALL'].includes(container)) errors.push(`${sheetName} Row ${n}: invalid CONTAINER ${raw}.`);
 
-            rows.forEach(row => {
-                const pol = normalize(row.POL || '');
-                const liner = normalize(row.LINER || '');
-                const cargo = normalize(row.CARGO || '');
-                if (!pol || !liner) return; // skip invalid rows
+                    const parsed={};
+                    columns.forEach(col=>{
+                        const rawCell=row[col];
+                        if(rawCell===undefined || rawCell===null || String(rawCell).trim()==='') return;
+                        const v=lcParseMoney(rawCell);
+                        if(!v){
+                            errors.push(`${sheetName} Row ${n}: invalid amount in ${col} (${rawCell}).`);
+                            return;
+                        }
+                        // Currency is determined independently from the cell itself.
+                        // '$' anywhere in the cell => USD; otherwise INR.
+                        parsed[col]=v;
+                        stats.values++;
+                    });
+                    if(!Object.keys(parsed).length) warnings.push(`${sheetName} Row ${n}: no charge values found.`);
 
-                // Build charges object (sell = buy)
-                const charges = {};
-                chargeColumns.forEach(col => {
-                    const raw = row[col];
-                    if (raw === undefined || raw === null || raw === '') return;
+                    // IMPORTANT: Container is part of the imported row, but NOT the base
+                    // database record. SEA container-specific values are merged into the
+                    // same POL + HAZ/NON HAZ record using _20 / _40 suffixes.
+                    const logicalKey=`${mode}|${pol}|${haz}`;
+                    const rowKey=`${logicalKey}|${container}`;
+                    if(importedKeys.has(rowKey)) stats.duplicates++;
+                    importedKeys.add(rowKey);
 
-                    let strVal = String(raw).trim();
-                    let currency = 'INR';
-                    let numericStr = strVal;
+                    let arr=mode==='sea'?db.defaultSeaCharges:mode==='air'?db.defaultAirCharges:db.defaultLclCharges;
+                    let rec=arr.find(r=>lcNormalize(r.pol)===pol&&lcNormalize(r.commodity)===haz);
 
-                    // Check for $ symbol → USD
-                    if (strVal.includes('$')) {
-                        currency = 'USD';
-                        numericStr = strVal.replace(/[^0-9.]/g, '');
-                    } else {
-                        // Remove commas (Indian format) and any non-digit except decimal
-                        numericStr = strVal.replace(/,/g, '').replace(/[^0-9.]/g, '');
+                    if(!rec){
+                        rec={pol,commodity:haz,charges:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+                        arr.push(rec);
+                        stats.new++;
+                    }else{
+                        stats.merged++;
                     }
 
-                    const val = parseFloat(numericStr);
-                    if (isNaN(val) || val <= 0) return;
+                    if(row['VALID FROM'] && !rec.validFrom) rec.validFrom=String(row['VALID FROM']).trim();
+                    if(row['VALID TO'] && !rec.validTo) rec.validTo=String(row['VALID TO']).trim();
 
-                    let key = col;
-                    if (col === 'THC 20') key = 'THC_20';
-                    else if (col === 'THC 40') key = 'THC_40';
-
-                    charges[key] = {
-                        amount: val,
-                        currency: currency,
-                        buyAmount: val,
-                        buyCurrency: currency
-                    };
-                });
-
-                if (Object.keys(charges).length === 0) return;
-
-                // Find existing record (case‑insensitive)
-                let idx = -1;
-                if (modeKey === 'air') {
-                    idx = targetArr.findIndex(r =>
-                        normalize(r.carrier) === liner &&
-                        normalize(r.pol) === pol &&
-                        normalize(r.commodity || '') === cargo
-                    );
-                } else {
-                    idx = targetArr.findIndex(r =>
-                        r.mode === modeKey &&
-                        normalize(r.carrier) === liner &&
-                        normalize(r.pol) === pol &&
-                        normalize(r.commodity || '') === cargo
-                    );
-                }
-
-                if (idx !== -1) {
-                    // Merge: update existing charges
-                    const existing = targetArr[idx];
-                    Object.entries(charges).forEach(([key, val]) => {
-                        if (!existing.charges[key]) {
-                            existing.charges[key] = val;
-                        } else {
-                            // Keep larger amount if conflict
-                            if (val.amount > existing.charges[key].amount) {
-                                existing.charges[key].amount = val.amount;
-                                existing.charges[key].buyAmount = val.buyAmount;
+                    Object.entries(parsed).forEach(([charge,val])=>{
+                        if(mode==='sea'){
+                            const suffix=container==='20 GP'?'_20':(container==='40 GP'||container==='40 HC'?'_40':'');
+                            const key=charge+suffix;
+                            // Non-destructive: never overwrite an existing populated value.
+                            if(!rec.charges[key] || Number(rec.charges[key].amount||0)===0){
+                                rec.charges[key]={amount:val.amount,currency:val.currency,buyAmount:val.amount,buyCurrency:val.currency};
+                            }else{
+                                stats.skippedValues++;
                             }
-                            existing.charges[key].currency = val.currency || existing.charges[key].currency;
-                            existing.charges[key].buyCurrency = val.buyCurrency || existing.charges[key].buyCurrency;
+                        }else{
+                            // AIR/LCL: preserve existing charge value; add only missing values.
+                            if(!rec.charges[charge] || Number(rec.charges[charge].amount||0)===0){
+                                rec.charges[charge]={amount:val.amount,currency:val.currency,buyAmount:val.amount,buyCurrency:val.currency};
+                            }else{
+                                stats.skippedValues++;
+                            }
                         }
                     });
-                    existing.updated = new Date().toISOString();
-                    updated++;
-                } else {
-                    // Create new record
-                    const newRec = {
-                        carrier: liner,
-                        pol: pol,
-                        commodity: cargo,
-                        charges: charges,
-                        updated: new Date().toISOString()
-                    };
-                    if (modeKey !== 'air') newRec.mode = modeKey;
-                    targetArr.push(newRec);
-                    imported++;
-                }
+                    rec.updatedAt=new Date().toISOString();
+                });
             });
 
+            if(!sheetsProcessed) throw new Error('No recognized Default Charges sheets found.');
+            if(errors.length){
+                alert(`❌ Import Default validation failed.\n\n${errors.slice(0,25).join('\n')}${errors.length>25?'\n...more errors':''}`);
+                return;
+            }
+
             saveDB();
-            // Refresh the correct table
-            const displayMode = modeKey === 'air' ? 'air' : (modeKey === 'lcl' ? 'lcl' : 'sealcl');
-            renderCarrierChargesMaster(displayMode);
-            alert(`✅ Import completed.\nNew: ${imported}, Updated: ${updated}`);
+            renderDefaultChargesMaster(currentLocalTab||'sea');
             autoBackup();
-        } catch (err) {
-            alert('❌ Import failed: ' + err.message);
+            alert(`✅ Import Default completed.\nSheets processed: ${sheetsProcessed}/3\nNew records: ${stats.new}\nMerged existing records: ${stats.merged}\nDuplicate import rows: ${stats.duplicates}\nCharge values read: ${stats.values}\nExisting values preserved: ${stats.skippedValues}\nWarnings: ${warnings.length}${warnings.length?'\n\n'+warnings.slice(0,8).join('\n'):''}`);
+        }catch(err){
             console.error(err);
-        }
+            alert('❌ Import Default failed: '+err.message);
+        }finally{input.value='';}
     };
     reader.readAsArrayBuffer(file);
-    input.value = '';
 }
+
+// ============================ CARRIER EXPORT =============================
+function bulkExportCarrierCharges(){
+    if(!lcEnsureXLSX()) return;
+    const wb=XLSX.utils.book_new();
+    const modes=[
+        {mode:'sea',sheet:'SEA - LOCAL CHARGES'},
+        {mode:'air',sheet:'AIR - LOCAL CHARGES'},
+        {mode:'lcl',sheet:'LCL - LOCAL CHARGES'}
+    ];
+    modes.forEach(({mode,sheet})=>{
+        const records=lcGetCarrierRecords(mode)||[];
+        const columns=lcCarrierColumns(mode);
+        const groups={};
+        records.forEach(rec=>{
+            const key=`${rec.carrier||''}|${rec.commodity||''}`;
+            if(!groups[key]) groups[key]={rec,charges:{}};
+            Object.entries(rec.charges||{}).forEach(([k,v])=>{if(/^THC(?:_|$)/i.test(k))return;groups[key].charges[k]=v;});
+        });
+        const rows=Object.values(groups).map(g=>{
+            const rec=g.rec;
+            const row={MODE:mode.toUpperCase(),CARRIER:rec.carrier||'',CARGO:rec.commodity||'','VALID FROM':rec.validFrom||'','VALID TO':rec.validTo||''};
+            columns.forEach(col=>row[col]=lcFormatMoney(g.charges[col]));
+            return row;
+        });
+        const fallback={MODE:mode.toUpperCase(),CARRIER:'',CARGO:'NON HAZ','VALID FROM':'','VALID TO':''};
+        columns.forEach(c=>fallback[c]='');
+        XLSX.utils.book_append_sheet(wb,lcCreateSheet(rows,fallback),sheet);
+    });
+    const thcRows=(db.seaTHCRates||[]).map(r=>({MODE:'SEA',CARRIER:r.carrier||'',POL:r.pol||'',CARGO:r.commodity||'',CURRENCY:r.currency||'INR','THC 20 GP':r.thc20??'','THC 40 HC':r.thc40??'','VALID FROM':r.validFrom||'','VALID TO':r.validTo||''}));
+    XLSX.utils.book_append_sheet(wb,lcCreateSheet(thcRows,{MODE:'SEA',CARRIER:'',POL:'',CARGO:'HAZ',CURRENCY:'INR','THC 20 GP':'','THC 40 HC':'','VALID FROM':'','VALID TO':''}),'SEA - THC');
+    XLSX.writeFile(wb,`LOCAL_CHARGES_CARRIER_${new Date().toISOString().slice(0,10)}.xlsx`);
+    alert('✅ Carrier/Local Charges exported with 4 separate sheets:\nSEA - LOCAL CHARGES\nSEA - THC\nAIR - LOCAL CHARGES\nLCL - LOCAL CHARGES\n\nThe same workbook can be imported directly with Import Carrier.');
+}
+
+// ============================ CARRIER IMPORT =============================
+function bulkImportCarrierCharges(input){
+    if(!input.files||!input.files[0]) return alert('Please select an Excel file.');
+    if(!lcEnsureXLSX()) return;
+    const file=input.files[0];
+    const reader=new FileReader();
+    reader.onload=function(e){
+        try{
+            const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+            const errors=[],warnings=[],stats={new:0,updated:0,duplicates:0,values:0};
+            const modeSheets={sea:'SEA - LOCAL CHARGES',air:'AIR - LOCAL CHARGES',lcl:'LCL - LOCAL CHARGES'};
+            let sheetsProcessed=0;
+            Object.entries(modeSheets).forEach(([mode,sheetName])=>{
+                const sheet=wb.Sheets[sheetName]; if(!sheet){warnings.push(`Missing sheet: ${sheetName}`);return;}
+                sheetsProcessed++; const rows=XLSX.utils.sheet_to_json(sheet,{defval:''}); if(!rows.length){warnings.push(`${sheetName}: no data rows.`);return;}
+                const required=['MODE','CARRIER','CARGO']; const headers=Object.keys(rows[0]); required.filter(h=>!headers.includes(h)).forEach(h=>errors.push(`${sheetName}: missing column ${h}`));
+                if(required.some(h=>!headers.includes(h))) return;
+                const columns=lcCarrierColumns(mode); const seen=new Set();
+                rows.forEach((row,i)=>{
+                    const n=i+2, rowMode=lcNormalize(row.MODE).toLowerCase(), carrier=lcNormalize(row.CARRIER), cargo=lcNormalize(row.CARGO);
+                    lcValidateDates(row,n,errors,warnings);
+                    if(rowMode!==mode) errors.push(`${sheetName} Row ${n}: MODE must be ${mode.toUpperCase()}.`);
+                    if(!carrier) errors.push(`${sheetName} Row ${n}: CARRIER is missing.`);
+                    if(!['HAZ','NON HAZ'].includes(cargo)) errors.push(`${sheetName} Row ${n}: CARGO must be HAZ or NON HAZ.`);
+                    const parsed={}; columns.forEach(col=>{const v=lcParseMoney(row[col]);if(v){parsed[col]=v;stats.values++;}});
+                    if(!Object.keys(parsed).length) warnings.push(`${sheetName} Row ${n}: no carrier charge values found.`);
+                    const key=`${mode}|${carrier}|${cargo}`; if(seen.has(key))stats.duplicates++; seen.add(key);
+                    const arr=mode==='air'?db.carrierChargesAir:(db.carrierChargesSeaLcl||(db.carrierChargesSeaLcl=[]));
+                    let rec=arr.find(r=>(mode==='air'||r.mode===mode)&&lcNormalize(r.carrier)===carrier&&lcNormalize(r.commodity)===cargo);
+                    if(!rec){rec={carrier,commodity:cargo,charges:{},updated:new Date().toISOString()};if(mode!=='air')rec.mode=mode;arr.push(rec);stats.new++;}else{stats.updated++;}
+                    // Carrier-specific charges are global across POL/locations. Remove legacy location/container keys.
+                    rec.pol=''; rec.container=''; rec.pod='';
+                    if(row['VALID FROM'])rec.validFrom=String(row['VALID FROM']).trim();
+                    if(row['VALID TO'])rec.validTo=String(row['VALID TO']).trim();
+                    Object.entries(parsed).forEach(([k,v])=>rec.charges[k]={amount:v.amount,currency:v.currency,buyAmount:v.amount,buyCurrency:v.currency});
+                    delete rec.charges.THC; delete rec.charges.THC_20; delete rec.charges.THC_40;
+                    rec.updated=new Date().toISOString();
+                });
+            });
+            // Dedicated SEA THC sheet. THC remains the only carrier charge that uses POL.
+            const thcSheet=wb.Sheets['SEA - THC'];
+            if(thcSheet){
+                sheetsProcessed++; const rows=XLSX.utils.sheet_to_json(thcSheet,{defval:''});
+                if(rows.length){
+                    const required=['MODE','CARRIER','POL','CARGO','CURRENCY','THC 20 GP','THC 40 HC']; const headers=Object.keys(rows[0]); required.filter(h=>!headers.includes(h)).forEach(h=>errors.push(`SEA - THC: missing column ${h}`));
+                    const seen=new Set();
+                    rows.forEach((row,i)=>{
+                        const n=i+2,mode=lcNormalize(row.MODE).toLowerCase(),carrier=lcNormalize(row.CARRIER),pol=lcNormalize(row.POL),cargo=lcNormalize(row.CARGO),currency=lcNormalize(row.CURRENCY);
+                        if(mode!=='sea')errors.push(`SEA - THC Row ${n}: MODE must be SEA.`);
+                        if(!carrier)errors.push(`SEA - THC Row ${n}: CARRIER is missing.`);
+                        if(!pol)errors.push(`SEA - THC Row ${n}: POL is missing.`);
+                        if(!['HAZ','NON HAZ'].includes(cargo))errors.push(`SEA - THC Row ${n}: CARGO must be HAZ or NON HAZ.`);
+                        if(!['INR','USD'].includes(currency))errors.push(`SEA - THC Row ${n}: CURRENCY must be INR or USD.`);
+                        const v20=lcParseMoney(row['THC 20 GP']),v40=lcParseMoney(row['THC 40 HC']);
+                        if(!v20&&!v40)warnings.push(`SEA - THC Row ${n}: no THC value found.`);
+                        if(v20&&v20.currency!==currency)errors.push(`SEA - THC Row ${n}: THC 20 GP currency does not match CURRENCY.`);
+                        if(v40&&v40.currency!==currency)errors.push(`SEA - THC Row ${n}: THC 40 HC currency does not match CURRENCY.`);
+                        lcValidateDates(row,n,errors,warnings);
+                        const key=`${carrier}|${pol}|${cargo}|${currency}`;if(seen.has(key))stats.duplicates++;seen.add(key);
+                        let rec=(db.seaTHCRates||[]).find(r=>normSafe(r.carrier)===carrier&&normSafe(r.pol)===pol&&normSafe(r.commodity)===cargo&&normSafe(r.currency)===currency);
+                        if(!rec){rec={mode:'sea',carrier,pol,commodity:cargo,currency,thc20:null,thc40:null,validFrom:'',validTo:'',updated:new Date().toISOString()};(db.seaTHCRates||(db.seaTHCRates=[])).push(rec);stats.new++;}else stats.updated++;
+                        if(v20)rec.thc20=v20.amount;if(v40)rec.thc40=v40.amount;if(row['VALID FROM'])rec.validFrom=String(row['VALID FROM']).trim();if(row['VALID TO'])rec.validTo=String(row['VALID TO']).trim();rec.updated=new Date().toISOString();
+                    });
+                }else warnings.push('SEA - THC: no data rows.');
+            }else warnings.push('Missing sheet: SEA - THC');
+            if(!sheetsProcessed)throw new Error('No recognized Carrier/Local Charge sheets found.');
+            if(errors.length){alert(`❌ Import Carrier validation failed.\n\n${errors.slice(0,30).join('\n')}${errors.length>30?'\n...more errors':''}`);return;}
+            saveDB();
+            if(typeof ensureSharedCarrierCharges==='function')ensureSharedCarrierCharges();
+            renderCarrierChargesMaster(currentLocalTab==='sea'?'sealcl':currentLocalTab||'air');
+            if(currentLocalTab==='sea')renderSeaTHCMaster();
+            autoBackup();
+            alert(`✅ Import Carrier completed.\nSheets processed: ${sheetsProcessed}/4\nNew records: ${stats.new}\nUpdated/merged: ${stats.updated}\nDuplicate rows: ${stats.duplicates}\nCharge values: ${stats.values}\nWarnings: ${warnings.length}${warnings.length?'\n\n'+warnings.slice(0,10).join('\n'):''}`);
+        }catch(err){console.error(err);alert('❌ Import Carrier failed: '+err.message);}finally{input.value='';}
+    };
+    reader.readAsArrayBuffer(file);
+}
+function normSafe(v){return String(v??'').trim().replace(/\s+/g,' ').toUpperCase();}
 
 // ===== 1. selectBackupFolder – stores ONLY the handle, does NOT change the saved path =====
 async function selectBackupFolder() {
@@ -15826,7 +15948,7 @@ function buildRateRequestPreviewHTML(data) {
                 <div style="font-family:'Courier New',monospace;color:#d97706;font-weight:700;font-size:0.85rem;background:#fffbeb;padding:4px 10px;border-radius:4px;">${new Date().toLocaleDateString('en-IN')}</div>
             </div>
         </div>
-        <p style="font-size:0.85rem;color:#1a1a1a;margin:4px 0 10px 0;">Please assist to quote the rates as per below.</p>
+        <p style="font-size:1.5 rem;color:#1a1a1a;margin:4px 0 10px 0;">Please assist to quote the rates as per below.</p>
         <table style="width:100%;border-collapse:collapse;font-size:0.78rem;">
             <thead>
                 <tr><th colspan="2" style="background:#1e3a8a;color:white;padding:4px 7px;font-size:0.78rem;text-align:center;">Rate Request Details</th></tr>
@@ -15902,21 +16024,21 @@ function buildRateRequestCompactEmailHTML(data) {
 
     let rowsHtml = rows.map(([label, value]) => `
         <tr>
-            <td style="border:1px solid #d1d5db;padding:4px 8px;font-weight:700;width:30%;background:#f8fafc;">${label}</td>
-            <td style="border:1px solid #d1d5db;padding:4px 8px;width:70%;">${value}</td>
+            <td style="border:1px solid #d1d5db;padding:4px 8px;font-weight:700;width:35%;background:#f8fafc;">${label}</td>
+            <td style="border:1px solid #d1d5db;padding:4px 8px;width:65%;">${value}</td>
         </tr>
     `).join('');
 
     let html = `<div style="font-family:'Aptos','Segoe UI',Arial,sans-serif;max-width:17cm;min-width:6cm;width:auto;margin:0 auto;background:#ffffff;padding:4px;box-sizing:border-box;color:#1a1a1a;font-size:10px;">
-        <p style="margin:0 0 4px 0;font-size:13px;line-height:1.4;">Dear Sir/Madam,</p>
+        <p style="margin:0 0 4px 0;font-size:17px;line-height:1.4;">Dear Sir/Madam,</p>
         <br>
-        <p style="margin:0 0 10px 0;font-size:13px;line-height:1.4;">Good Day !</p>
-        <p style="font-size:12px;color:#1a1a1a;margin:-4px 0 10px 0;">Please assist to quote the rates as per below.</p>
-        <div style="font-size:13px;font-weight:800;color:#1e3a8a;">RATE REQUEST — ${data.mode === 'AIR' ? '✈️ AIR' : '🚢 SEA'}</div>
+        <p style="margin:0 0 15px 0;font-size:17px;line-height:1.4;">Good Day !</p>
+        <p style="font-size:17px;color:#1a1a1a;margin:-4px 0 10px 0;">Please assist to quote the rates as per below.</p>
+        <div style="font-size:17px;font-weight:800;color:#1e3a8a;">RATE REQUEST — ${data.mode === 'AIR' ? '✈️ AIR' : '🚢 SEA'}</div>
         <br>
-        <table style="width:15cm;min-width:15cm;max-width:100%;border-collapse:collapse;margin-top:0;font-size:10px;">
+        <table style="width:15cm;min-width:15cm;max-width:100%;border-collapse:collapse;margin-top:0;font-size:15px;">
             <thead>
-                <tr><th colspan="2" style="border:1px solid #1e3a8a;padding:4px 8px;text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:12px;line-height:1.4;vertical-align:middle;">Rate Request Details</th></tr>
+                <tr><th colspan="2" style="border:1px solid #1e3a8a;padding:4px 8px;text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:17px;line-height:1.4;vertical-align:middle;">Rate Request Details</th></tr>
             </thead>
             <tbody>
                 ${rowsHtml}
@@ -15926,8 +16048,10 @@ function buildRateRequestCompactEmailHTML(data) {
     // ---- 🆕 ADD REMARKS (if present) ----
     if (data.remarks) {
         html += `
-        <div style="margin-top:6px; font-size:10px; border-top:1px solid #e2e8f0; padding-top:4px;">
-            <strong>📝 Remarks:</strong> ${data.remarks}
+		<br>
+		<div style="margin-top:6px; font-size:17px; border-top:1px solid #e2e8f0; padding-top:4px;">
+			<strong>📝 Remarks:</strong> 
+			<strong style="color:#fa1500;">${data.remarks}</strong>
         </div>`;
     }
 
@@ -17733,6 +17857,44 @@ window.switchToTab = function(tab) {
 
 let currentLocalTab = 'sea';
 
+function bulkDeleteSelectedLocal(){
+    const selected=[...document.querySelectorAll('.dc-checkbox:checked,.cc-checkbox:checked')];
+    if(!selected.length) return alert('Please select at least one Local Charges record.');
+    if(!confirm(`Delete ${selected.length} selected Local Charges record(s)? This cannot be undone.`)) return;
+
+    const dcByMode={sea:[],air:[],lcl:[]};
+    selected.filter(x=>x.classList.contains('dc-checkbox')).forEach(x=>{
+        const mode=x.dataset.mode;
+        const idx=Number(x.dataset.idx);
+        if(dcByMode[mode] && Number.isInteger(idx)) dcByMode[mode].push(idx);
+    });
+    Object.entries(dcByMode).forEach(([mode,indices])=>{
+        const arr=mode==='sea'?db.defaultSeaCharges:mode==='air'?db.defaultAirCharges:db.defaultLclCharges;
+        const remove=new Set(indices);
+        const kept=arr.filter((_,i)=>!remove.has(i));
+        if(mode==='sea') db.defaultSeaCharges=kept;
+        else if(mode==='air') db.defaultAirCharges=kept;
+        else db.defaultLclCharges=kept;
+    });
+
+    // Carrier-specific records are stored in the shared master.
+    const ccIndices=[...new Set(selected.filter(x=>x.classList.contains('cc-checkbox')).map(x=>Number(x.dataset.idx)).filter(Number.isInteger))].sort((a,b)=>b-a);
+    if(ccIndices.length && Array.isArray(db.carrierSpecificCharges)){
+        ccIndices.forEach(idx=>{
+            if(idx>=0 && idx<db.carrierSpecificCharges.length) db.carrierSpecificCharges.splice(idx,1);
+        });
+    }
+
+    saveDB();
+    const mode=currentLocalTab||'sea';
+    renderDefaultChargesMaster(mode);
+    if(mode==='sea') renderSeaTHCMaster();
+    renderCarrierChargesMaster(mode==='sea'?'sealcl':mode);
+    updateSelectedCount();
+    autoBackup();
+    alert(`✅ Deleted ${selected.length} selected Local Charges record(s).`);
+}
+
 function switchLocalTab(mode) {
     currentLocalTab = mode;
 
@@ -17748,5 +17910,4863 @@ function switchLocalTab(mode) {
 
     // Render the appropriate charges
     renderDefaultChargesMaster(mode);
+    if (mode === 'sea') renderSeaTHCMaster();
     renderCarrierChargesMaster(mode === 'sea' ? 'sealcl' : mode);
 }
+/* ============================================================================
+   MULTI-CARRIER QUOTE ENGINE v1
+   SEA / AIR / LCL — 3 carrier columns, existing row/input styling retained.
+   Currency rule: numeric input = INR; any $ in input = USD.
+   ============================================================================ */
+(function () {
+    const MC_COUNT = 3;
+
+    function getSeaComparisonMode() {
+        return document.getElementById('sea-comparison-mode')?.value === 'container' ? 'container' : 'carrier';
+    }
+    function getSeaComparisonContainers() {
+        return [
+            (document.getElementById('sea-container')?.value || '').trim(),
+            (document.getElementById('sea-container-2')?.value || '').trim(),
+            (document.getElementById('sea-container-3')?.value || '').trim()
+        ];
+    }
+    function updateSeaComparisonUI() {
+        const containerMode = getSeaComparisonMode() === 'container';
+        const c2 = document.getElementById('sea-carrier-2');
+        const c3 = document.getElementById('sea-carrier-3');
+        const k2 = document.getElementById('sea-container-2');
+        const k3 = document.getElementById('sea-container-3');
+        if (c2) c2.disabled = containerMode;
+        if (c3) c3.disabled = containerMode;
+        if (k2) k2.disabled = !containerMode;
+        if (k3) k3.disabled = !containerMode;
+
+        // Visual state: GREEN = active/editable, RED = locked/not applicable.
+        // Keep this strictly limited to SEA comparison inputs.
+        [[c2, !containerMode], [c3, !containerMode], [k2, containerMode], [k3, containerMode]].forEach(([el, active]) => {
+            if (!el) return;
+            el.classList.toggle('comparison-active', !!active);
+            el.classList.toggle('comparison-locked', !active);
+            el.setAttribute('aria-disabled', active ? 'false' : 'true');
+        });
+        updateCarrierHeaders('sea', getCarrierNames('sea'));
+    }
+    function onSeaComparisonChange() {
+        updateSeaComparisonUI();
+        markUnsaved('sea');
+        // Switching comparison mode changes the rate key. Do NOT carry the
+        // previous grid values into the new comparison basis.
+        window.buildChargesGrid('sea', [{},{},{}], null, {arrays:[{},{},{}]});
+        window.onCarrierPolChangeInternal('sea', { arrays: [{}, {}, {}] });
+    }
+    function onSeaContainerComparisonChange(slot) {
+        if (getSeaComparisonMode() !== 'container') return;
+        markUnsaved('sea');
+        // Container 2/3 are independent rate keys under Carrier 1. Always
+        // rebuild all three columns from the selected container values.
+        // No previous/manual charge array is allowed to overwrite a fresh
+        // container-specific lookup.
+        onCarrierPolChangeInternal('sea', { arrays: [{}, {}, {}] });
+        setTimeout(() => updateCarrierHeaders('sea', getCarrierNames('sea')), 0);
+    }
+
+    function safeKey(charge) { return String(charge).replace(/[^A-Z0-9]/gi, '_'); }
+    function carrierFieldId(mode, idx) {
+        if (idx === 0) return `${mode}-carrier`;
+        return `${mode}-carrier-${idx + 1}`;
+    }
+    function getCarrierNames(mode) {
+        return [0,1,2].map(i => (document.getElementById(carrierFieldId(mode, i))?.value || '').trim()).map(v => v.toUpperCase());
+    }
+    function setCarrierNames(mode, names) {
+        [0,1,2].forEach(i => {
+            const el = document.getElementById(carrierFieldId(mode, i));
+            if (el) el.value = names?.[i] || '';
+        });
+        updateCarrierHeaders(mode, names || getCarrierNames(mode));
+    }
+    function updateCarrierHeaders(mode, names) {
+        const vals = names || getCarrierNames(mode);
+        const containerMode = mode === 'sea' && getSeaComparisonMode() === 'container';
+        const containers = containerMode ? getSeaComparisonContainers() : [];
+        [0,1,2].forEach(i => {
+            const el = document.querySelector(`[data-carrier-header="${mode}-${i+1}"]`);
+            if (!el) return;
+            const label = containerMode ? (containers[i] || `Container ${i+1}`) : (vals[i] || `Carrier ${i+1}`);
+            el.querySelector('strong')?.replaceChildren(document.createTextNode(label));
+            el.querySelector('small')?.replaceChildren(document.createTextNode(containerMode ? 'CONTAINER RATE' : 'SELL AMT | BUY AMT | MARGIN %'));
+            el.classList.toggle('carrier-empty', containerMode ? !containers[i] : !vals[i]);
+        });
+    }
+
+    function parseRateInput(raw, fallbackCurrency = 'INR') {
+        const text = String(raw ?? '').trim();
+        if (!text) return { amount: 0, currency: fallbackCurrency || 'INR', raw: '' };
+        const isUSD = text.includes('$');
+        const cleaned = text.replace(/[$,\s]/g, '');
+        const amount = parseFloat(cleaned) || 0;
+        return { amount, currency: isUSD ? 'USD' : 'INR', raw: text };
+    }
+    function formatRateInput(amount, currency) {
+        if (amount === '' || amount === null || amount === undefined || Number(amount) === 0) return '';
+        const n = Number(amount);
+        return currency === 'USD' ? `$${n}` : `${n}`;
+    }
+    function getRateDisplay(amount, currency) {
+        if (!amount) return '—';
+        const n = Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return currency === 'USD' ? `$${n}` : `₹${n}`;
+    }
+
+    function normalizeChargeValue(v) {
+        if (!v) return { amount: 0, currency: 'INR', buyAmount: 0, buyCurrency: 'INR', basis: 'Normal' };
+        const sell = typeof v.amount === 'string' && /\$/.test(v.amount)
+            ? parseRateInput(v.amount, 'INR')
+            : { amount: Number(v.amount) || 0, currency: v.currency || 'INR' };
+        const buy = typeof v.buyAmount === 'string' && /\$/.test(v.buyAmount)
+            ? parseRateInput(v.buyAmount, 'INR')
+            : { amount: Number(v.buyAmount) || 0, currency: v.buyCurrency || 'INR' };
+        return {
+            amount: sell.amount,
+            currency: sell.currency,
+            buyAmount: buy.amount,
+            buyCurrency: buy.currency,
+            basis: v.basis || 'Normal'
+        };
+    }
+
+    function findCarrierCharges(mode, carrier, pol, commodity, container) {
+        if (!carrier || !pol) return {};
+        const carrierName = carrier.toUpperCase();
+        const list = mode === 'air' ? (db.carrierChargesAir || []) : (db.carrierChargesSeaLcl || []);
+        const modeMatches = mode === 'air'
+            ? list.filter(r => String(r.carrier || '').toUpperCase() === carrierName && String(r.pol || '').toUpperCase() === String(pol).toUpperCase())
+            : list.filter(r => String(r.mode || '').toLowerCase() === mode && String(r.carrier || '').toUpperCase() === carrierName && String(r.pol || '').toUpperCase() === String(pol).toUpperCase());
+        if (!modeMatches.length) return {};
+
+        // SEA rate selection MUST use the exact container record when a
+        // container is supplied.  The previous implementation selected the
+        // first carrier/POL/commodity record and therefore Container 2/3
+        // could change the heading without changing the fetched rates.
+        let rec;
+        if (mode === 'sea' && container) {
+            const wantedContainer = String(container).trim().toUpperCase();
+            const exactContainerRows = modeMatches.filter(r =>
+                String(r.container || '').trim().toUpperCase() === wantedContainer
+            );
+            const exactContainerCommodity = exactContainerRows.find(r =>
+                String(r.commodity || '').toUpperCase() === String(commodity || '').toUpperCase()
+            );
+            const exactContainerBlankCommodity = exactContainerRows.find(r => !r.commodity);
+            rec = exactContainerCommodity || exactContainerBlankCommodity || exactContainerRows[0];
+        }
+
+        // If no exact container record exists, retain the existing commodity
+        // fallback behaviour. Do not invent/estimate a rate.
+        if (!rec) {
+            const exactCommodity = modeMatches.find(r => String(r.commodity || '').toUpperCase() === String(commodity || '').toUpperCase());
+            const blankCommodity = modeMatches.find(r => !r.commodity);
+            rec = exactCommodity || blankCommodity || modeMatches[0];
+        }
+
+        let charges = JSON.parse(JSON.stringify(rec?.charges || {}));
+
+        if (mode === 'sea') {
+            let suffix = '';
+            if (container === '20 GP') suffix = '_20';
+            else if (container === '40 GP' || container === '40 HC') suffix = '_40';
+            if (suffix && charges[`THC${suffix}`]) charges.THC = charges[`THC${suffix}`];
+            delete charges.THC_20;
+            delete charges.THC_40;
+        }
+        return charges;
+    }
+
+    function normalizeSeaContainerValue(value) {
+        return String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+    }
+
+    function findGenericDefault(mode, pol, commodity, container) {
+        let list = [];
+        if (mode === 'sea') list = db.defaultSeaCharges || [];
+        if (mode === 'air') list = db.defaultAirCharges || [];
+        if (mode === 'lcl') list = db.defaultLclCharges || [];
+
+        const wantedPol = String(pol || '').trim().toUpperCase();
+        const wantedCommodity = String(commodity || '').trim().toUpperCase();
+        let rec = null;
+
+        if (mode === 'sea') {
+            const wantedContainer = normalizeSeaContainerValue(container);
+            if (!wantedContainer) return {};
+            const matches = list.filter(r =>
+                String(r.pol || '').trim().toUpperCase() === wantedPol &&
+                String(r.commodity || '').trim().toUpperCase() === wantedCommodity
+            );
+            rec = matches.find(r => normalizeSeaContainerValue(r.container) === wantedContainer);
+            if (!rec && matches.length && matches.every(r => !normalizeSeaContainerValue(r.container))) rec = matches[0];
+            if (!rec) return {};
+        } else {
+            const exact = list.find(r =>
+                String(r.pol || '').trim().toUpperCase() === wantedPol &&
+                String(r.commodity || '').trim().toUpperCase() === wantedCommodity
+            );
+            const blank = list.find(r => String(r.pol || '').trim().toUpperCase() === wantedPol && !r.commodity);
+            rec = exact || blank;
+            if (!rec) return {};
+        }
+
+        let charges = JSON.parse(JSON.stringify(rec?.charges || {}));
+        if (mode === 'sea') {
+            const wantedContainer = normalizeSeaContainerValue(container);
+            let suffix = '';
+            if (wantedContainer === '20 GP') suffix = '_20';
+            else if (wantedContainer === '40 GP' || wantedContainer === '40 HC') suffix = '_40';
+            if (suffix) {
+                Object.keys(charges).forEach(k => { if (k.endsWith(suffix)) charges[k.slice(0, -3)] = charges[k]; });
+                Object.keys(charges).forEach(k => { if (/_20$|_40$/.test(k)) delete charges[k]; });
+            }
+        }
+        return charges;
+    }
+
+    function getSelectedChargeSources(mode, names, pol, commodity, container, previous) {
+        const containerMode = mode === 'sea' && getSeaComparisonMode() === 'container';
+        const comparisonContainers = containerMode ? getSeaComparisonContainers() : [];
+        const baseCarrier = names[0] || '';
+        return names.map((carrier, idx) => {
+            const slotCarrier = containerMode ? baseCarrier : carrier;
+            const slotContainer = containerMode ? (comparisonContainers[idx] || '') : container;
+            if (!slotCarrier) return {};
+            const generic = findGenericDefault(mode, pol, commodity, slotContainer);
+            const specific = findCarrierCharges(mode, slotCarrier, pol, commodity, slotContainer);
+            const merged = { ...generic, ...specific };
+            const manual = previous?.arrays ? (previous.arrays[idx] || {}) : (previous?.[slotCarrier] || {});
+            Object.keys(manual).forEach(ch => {
+                if (manual[ch] && (manual[ch].amount > 0 || manual[ch].buyAmount > 0)) merged[ch] = manual[ch];
+            });
+            const freightCurrency = getFreightDefaultCurrency(mode);
+            ['FREIGHT','AIR FREIGHT'].forEach(f => {
+                if (merged[f]) merged[f] = { ...merged[f], currency: freightCurrency, buyCurrency: freightCurrency };
+            });
+            return merged;
+        });
+    }
+
+    function collectMultiCarrierGridData(mode) {
+        const names = getCarrierNames(mode);
+        const out = [ {}, {}, {} ];
+        document.querySelectorAll(`#${mode}-charges-grid .charge-row`).forEach(row => {
+            const charge = row.getAttribute('data-charge');
+            const safe = safeKey(charge);
+            const basis = row.querySelector('.charge-basis')?.value || 'Normal';
+            [0,1,2].forEach(idx => {
+                const sellEl = document.getElementById(`${mode}-c${idx+1}-amt-${safe}`);
+                const buyEl = document.getElementById(`${mode}-c${idx+1}-buyAmt-${safe}`);
+                if (!sellEl && !buyEl) return;
+                const isFreight =
+    charge === 'FREIGHT' ||
+    charge === 'AIR FREIGHT';
+
+const freightCurrency = getFreightDefaultCurrency(mode);
+const sell = parseRateInput(
+    sellEl?.value || '',
+    isFreight ? freightCurrency : 'INR'
+);
+const buy = parseRateInput(
+    buyEl?.value || '',
+    isFreight ? freightCurrency : 'INR'
+);
+                if (sell.amount > 0 || buy.amount > 0) {
+                    out[idx][charge] = { amount: sell.amount, currency: sell.currency, buyAmount: buy.amount, buyCurrency: buy.currency, basis };
+                }
+            });
+        });
+        const byCarrier = {};
+        names.forEach((name, i) => { if (name) byCarrier[name] = out[i]; });
+        return { names, byCarrier, arrays: out };
+    }
+
+    function buildChargesGrid(mode, savedCharges = {}, customOrder = null, multiCarrierData = null) {
+        const grid = document.getElementById(`${mode}-charges-grid`);
+        if (!grid) return;
+        const names = getCarrierNames(mode);
+        updateCarrierHeaders(mode, names);
+        const categories = chargeCategories[mode];
+        let orderedCategories = {};
+        Object.entries(categories).forEach(([cat, charges]) => { orderedCategories[cat] = [...charges]; });
+        if (customOrder) {
+            orderedCategories = {};
+            Object.entries(customOrder).forEach(([cat, charges]) => { orderedCategories[cat] = charges; });
+            Object.entries(categories).forEach(([cat, charges]) => {
+                if (!orderedCategories[cat]) orderedCategories[cat] = [];
+                charges.forEach(ch => { if (!Object.values(orderedCategories).flat().includes(ch)) orderedCategories[cat].push(ch); });
+            });
+        }
+
+        let sourceArrays = [ {}, {}, {} ];
+        if (multiCarrierData?.arrays) sourceArrays = multiCarrierData.arrays;
+        else if (Array.isArray(savedCharges)) sourceArrays = savedCharges;
+        else sourceArrays[0] = savedCharges || {};
+
+        let html = '';
+        Object.entries(orderedCategories).forEach(([category, charges]) => {
+            if (!charges.length) return;
+            const safeCategory = (typeof window.mcAttr==='function' ? window.mcAttr(category) : String(category).replace(/[&<>"']/g,''));
+            html += `<div class="charge-category-header" data-category="${safeCategory}" ondragover="handleDragOver(event)" ondragenter="handleDragEnter(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'${mode}','${safeCategory}')">${typeof window.mcAttr==='function'?window.mcAttr(category):category}</div>`;
+            charges.forEach(charge => {
+                const safe = safeKey(charge);
+                const safeCharge = (typeof window.mcAttr==='function' ? window.mcAttr(charge) : String(charge).replace(/[&<>"']/g,''));
+                const isFreight = charge === 'FREIGHT' || charge === 'AIR FREIGHT';
+                const freightClass = isFreight ? ' freight-row' : '';
+                let basisVal = 'Normal';
+                let placeholder = '0.00';
+                if (mode === 'air') {
+                    if (charge === 'AIR FREIGHT') basisVal = 'Per KGS';
+                    else if (['CARTAGE','MCC','XRAY'].includes(charge)) { basisVal = 'Per KGS'; placeholder = 'Rate per KGS (min ' + AIR_MIN_THRESHOLDS[charge] + ')'; }
+                    else if (charge === 'GATE PASS') { basisVal = 'Per KGS × 4'; placeholder = 'Rate per KGS ×4 (min ' + AIR_MIN_THRESHOLDS[charge] + ')'; }
+                    else if (charge === 'PALLETISATION' || charge === 'PLY') basisVal = 'Normal';
+                } else if (mode === 'lcl' && (charge === 'FREIGHT' || charge === 'THC')) basisVal = 'Per CBM';
+                const existingBasis = sourceArrays.find(a => a?.[charge]?.basis)?.[charge]?.basis;
+                if (existingBasis) basisVal = existingBasis;
+                let opts = `<option value="Normal" ${basisVal==='Normal'?'selected':''}>Normal</option>`;
+                if (mode === 'air') opts = ['Normal','Per KGS','Per KGS × 3','Per KGS × 4','Per CBM'].map(b=>`<option value="${b}" ${basisVal===b?'selected':''}>${b}</option>`).join('');
+                if (mode === 'lcl') opts = ['Normal','Per KGS','Per CBM'].map(b=>`<option value="${b}" ${basisVal===b?'selected':''}>${b}</option>`).join('');
+                let row = `<div class="charge-row${freightClass}" data-charge="${charge}" data-category="${category}" draggable="true" ondragstart="handleDragStart(event,'${mode}','${charge}')" ondragover="handleDragOver(event)" ondragenter="handleDragEnterRow(event)" ondragleave="handleDragLeave(event)" ondrop="handleDropRow(event,'${mode}','${charge}')">`;
+                row += `<span class="charge-name"><span class="charge-name-wrap"><span>${charge}</span></span></span>`;
+                [0,1,2].forEach(idx => {
+                    let v = normalizeChargeValue(sourceArrays[idx]?.[charge]);
+                    if (isFreight) {
+    const freightCurrency = getFreightDefaultCurrency(mode);
+    v = {
+        ...v,
+        currency: freightCurrency,
+        buyCurrency: freightCurrency
+    };
+}
+                    const sellValue = formatRateInput(v.amount, v.currency);
+                    const buyValue = formatRateInput(v.buyAmount, v.buyCurrency);
+                    row += `<div class="carrier-rate-cell carrier-${idx+1}">
+                        <input type="text" class="sell-amt carrier-sell-amt" id="${mode}-c${idx+1}-amt-${safe}" value="${sellValue}" placeholder="${placeholder}" oninput="recalcCharge('${mode}','${safeCharge}',${idx})" onblur="evaluateFormula(this,'${mode}','${safeCharge}',${idx})" onfocus="highlightInput(this)" />
+                        <input type="text" class="buy-input carrier-buy-amt" id="${mode}-c${idx+1}-buyAmt-${safe}" value="${buyValue}" placeholder="0.00" oninput="recalcCharge('${mode}','${safeCharge}',${idx})" onblur="evaluateFormula(this,'${mode}','${safeCharge}',${idx})" onfocus="highlightInput(this)" />
+                        <span class="charge-margin carrier-margin-pct" id="${mode}-c${idx+1}-marginPct-${safe}">—</span>
+                    </div>`;
+                });
+                row += `<select class="charge-basis" onchange="recalcAllCarrierCharges('${mode}','${safeCharge}')">${opts}</select><button class="charge-delete-btn" type="button" onclick="removeChargeRow('${mode}','${safeCharge}')">×</button></div>`;
+                html += row;
+            });
+        });
+        grid.innerHTML = html;
+        recalcAllCarrierCharges(mode);
+    }
+
+    function effectiveCharge(mode, charge, idx) {
+        const safe = safeKey(charge);
+        const row = document.querySelector(`#${mode}-charges-grid .charge-row[data-charge="${CSS.escape(charge)}"]`);
+        const basis = row?.querySelector('.charge-basis')?.value || 'Normal';
+        const sellEl = document.getElementById(`${mode}-c${idx+1}-amt-${safe}`);
+        const buyEl = document.getElementById(`${mode}-c${idx+1}-buyAmt-${safe}`);
+        const sell = parseRateInput(sellEl?.value || '', 'INR');
+        const buy = parseRateInput(buyEl?.value || '', 'INR');
+        let sellAmount = sell.amount, buyAmount = buy.amount;
+        if (mode === 'air') {
+            const weight = parseFloat(document.getElementById('air-weight')?.value) || 0;
+            const pallets = parseFloat(document.getElementById('air-pallets')?.value) || 0;
+            if (charge === 'PALLETISATION' && pallets > 0) sellAmount = pallets * 1875;
+            if (charge === 'PLY' && pallets > 0) sellAmount = pallets * 1000;
+            if (basis === 'Per KGS') { sellAmount *= weight; buyAmount *= weight; }
+            if (basis === 'Per KGS × 3') { sellAmount *= weight * 3; buyAmount *= weight * 3; }
+            if (basis === 'Per KGS × 4') { sellAmount *= weight * 4; buyAmount *= weight * 4; }
+            if (basis === 'Per CBM') { const vol = parseFloat(document.getElementById('air-volume')?.value) || 0; sellAmount *= vol; buyAmount *= vol; }
+            if (charge !== 'PALLETISATION' && charge !== 'PLY' && AIR_MIN_THRESHOLDS[charge] && (basis === 'Per KGS' || basis === 'Per KGS × 4')) {
+                sellAmount = Math.max(sellAmount, AIR_MIN_THRESHOLDS[charge]);
+                buyAmount = Math.max(buyAmount, AIR_MIN_THRESHOLDS[charge]);
+            }
+        }
+        if (mode === 'lcl' && (charge === 'FREIGHT' || charge === 'THC') && basis === 'Normal') {
+            const vol = parseFloat(document.getElementById('lcl-volume')?.value) || 0;
+            if (vol > 0) { sellAmount *= vol; buyAmount *= vol; }
+        }
+        return { sellAmount, buyAmount, sellCurrency: sell.currency, buyCurrency: buy.currency, basis };
+    }
+
+    function recalcCharge(mode, charge, idx = 0) {
+        const x = effectiveCharge(mode, charge, idx);
+        const safe = safeKey(charge);
+        const marginINR = toINR(x.sellAmount, x.sellCurrency) - toINR(x.buyAmount, x.buyCurrency);
+        const sellINR = toINR(x.sellAmount, x.sellCurrency);
+        const pct = sellINR > 0 ? (marginINR / sellINR) * 100 : 0;
+        const el = document.getElementById(`${mode}-c${idx+1}-marginPct-${safe}`);
+        if (el) {
+            el.textContent = sellINR > 0 ? pct.toFixed(2) + '%' : '—';
+            el.style.color = marginINR < 0 ? 'var(--danger)' : marginINR > 0 ? 'var(--success)' : 'var(--text)';
+        }
+        recalcTotal(mode);
+    }
+
+    function recalcAllCarrierCharges(mode, charge) {
+        const rows = charge ? [document.querySelector(`#${mode}-charges-grid .charge-row[data-charge="${CSS.escape(charge)}"]`)].filter(Boolean) : Array.from(document.querySelectorAll(`#${mode}-charges-grid .charge-row`));
+        rows.forEach(row => {
+            const ch = row.getAttribute('data-charge');
+            [0,1,2].forEach(i => recalcCharge(mode, ch, i));
+        });
+        recalcTotal(mode);
+    }
+
+    function recalcTotal(mode) {
+        const totals = [0,0,0].map(() => ({ sell:0, buy:0, margin:0 }));
+        document.querySelectorAll(`#${mode}-charges-grid .charge-row`).forEach(row => {
+            const ch = row.getAttribute('data-charge');
+            [0,1,2].forEach(i => {
+                const x = effectiveCharge(mode, ch, i);
+                totals[i].sell += toINR(x.sellAmount, x.sellCurrency);
+                totals[i].buy += toINR(x.buyAmount, x.buyCurrency);
+            });
+        });
+        totals.forEach(t => t.margin = t.sell - t.buy);
+        // Keep the existing total cards as Carrier 1 totals for backward compatibility.
+        const t = totals[0];
+        document.getElementById(`${mode}-totalSell`) && (document.getElementById(`${mode}-totalSell`).textContent = formatINR(t.sell));
+        document.getElementById(`${mode}-totalBuy`) && (document.getElementById(`${mode}-totalBuy`).textContent = formatINR(t.buy));
+        document.getElementById(`${mode}-totalMargin`) && (document.getElementById(`${mode}-totalMargin`).textContent = formatINR(t.margin));
+        document.getElementById(`${mode}-totalMarginPct`) && (document.getElementById(`${mode}-totalMarginPct`).textContent = t.sell > 0 ? ((t.margin/t.sell)*100).toFixed(2)+'%' : '0.00%');
+        const warning = document.getElementById(`${mode}-margin-warning`);
+        if (warning) warning.classList.toggle('show', totals.some(t => t.margin < 0 && (t.sell || t.buy)));
+        return totals;
+    }
+
+    function onMultiCarrierChange(mode) {
+        markUnsaved(mode);
+        if (mode === 'sea') {
+            updateSeaComparisonUI();
+            onCarrierPolChangeInternal('sea', null);
+            return;
+        }
+        const previous = collectMultiCarrierGridData(mode).byCarrier;
+        onCarrierPolChangeInternal(mode, previous);
+    }
+
+    function onCarrierChange(mode) {
+        markUnsaved(mode);
+        onCarrierPolChangeInternal(mode, collectMultiCarrierGridData(mode).byCarrier);
+    }
+    function onPolChange(mode) { markUnsaved(mode); onCarrierPolChangeInternal(mode, collectMultiCarrierGridData(mode).byCarrier); }
+    function onContainerChange(mode) { markUnsaved(mode); onCarrierPolChangeInternal(mode, collectMultiCarrierGridData(mode).byCarrier); }
+
+    function onCarrierPolChangeInternal(mode, previousByCarrier = null) {
+        const pol = document.getElementById(`${mode}-pol`)?.value || '';
+        const commodity = document.getElementById(`${mode}-commodity`)?.value || '';
+        const container = document.getElementById(`${mode}-container`)?.value || '';
+        const names = getCarrierNames(mode);
+        const ownCfs = mode === 'sea' ? document.getElementById('sea-own-cfs')?.checked : false;
+        let prev = previousByCarrier || collectMultiCarrierGridData(mode).byCarrier;
+        let arrays = getSelectedChargeSources(mode, names, pol, commodity, container, prev);
+        if (mode === 'sea' && ownCfs) {
+            // Preserve the existing CFS toggle behaviour by removing the CFS category from the display later.
+        }
+        let order = JSON.parse(JSON.stringify(chargeCategories[mode]));
+        if (mode === 'sea' && ownCfs) delete order['CFS / Transport Charges'];
+        Object.keys(order).forEach(cat => { if (!order[cat]?.length) delete order[cat]; });
+        chargesOrder[mode] = order;
+        buildChargesGrid(mode, arrays, order, { arrays });
+        setTimeout(() => recalcAllCarrierCharges(mode), 0);
+    }
+
+    function getFormData(mode) {
+        const data = { mode: mode.toUpperCase(), timestamp: new Date().toISOString(), lastModified: new Date().toISOString() };
+        data.autoDate = new Date().toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+        data.sales = getLoggedInUserName() || db.defaultUser || 'N/A';
+        const fields = ['client','pol','pod','incoterm','commodity','weight','transit','validityDate'];
+        if (mode === 'sea') fields.push('container');
+        if (mode === 'air' || mode === 'lcl') fields.push('volume');
+        if (mode === 'air') fields.push('pallets');
+        fields.forEach(f => { const el=document.getElementById(`${mode}-${f}`); if(el && el.value) data[f]=el.value; });
+        data.carrier = getCarrierNames(mode)[0] || '';
+        data.carriers = getCarrierNames(mode).filter(Boolean);
+        if (mode === 'sea') {
+            data.comparisonMode = getSeaComparisonMode();
+            data.comparisonContainers = getSeaComparisonContainers();
+        }
+        const remarksEl = document.getElementById(`${mode}-remarks`); if (remarksEl?.value) data.remarks = remarksEl.value;
+
+        const gridData = collectMultiCarrierGridData(mode);
+        if (mode === 'sea' && getSeaComparisonMode() === 'container') {
+            const baseCarrier = gridData.names[0] || '';
+            data.carrierRates = [0,1,2].map(idx => ({ carrier: baseCarrier, charges: gridData.arrays[idx] || {} })).filter(x => x.carrier);
+        } else {
+            data.carrierRates = gridData.names.map((name, idx) => ({ carrier: name || '', charges: gridData.arrays[idx] || {} })).filter(x => x.carrier);
+        }
+        data.charges = data.carrierRates[0]?.charges || {};
+        data.chargesOrder = chargesOrder[mode] || getCurrentChargesOrder(mode);
+
+        if (mode === 'sea') {
+            data.freightSurcharges = { '20': {}, '40': {} };
+            ['20','40'].forEach(row => ['oft','subc','haz','ow','other','other2','other3','trk','ddp'].forEach(k => data.freightSurcharges[row][k]=parseFloat(document.getElementById(`sea-fs-${k}-${row}`)?.value)||0));
+        }
+        if (mode === 'air') {
+            data.freightSurcharges = {};
+            ['frt','fuel','carting','mcc','xray','other'].forEach(k => data.freightSurcharges[k]=parseFloat(document.getElementById(`air-fs-${k}`)?.value)||0);
+        }
+        data.carrierTotals = [0,1,2].map(idx => {
+            let sell=0,buy=0;
+            Object.keys(gridData.arrays[idx]||{}).forEach(ch => {
+                const v=gridData.arrays[idx][ch]; sell+=toINR(v.amount,v.currency); buy+=toINR(v.buyAmount,v.buyCurrency);
+            });
+            const margin=sell-buy;
+            const totalLabel = (mode === 'sea' && getSeaComparisonMode() === 'container')
+                ? (getSeaComparisonContainers()[idx] || `Container ${idx+1}`)
+                : (data.carrierRates.find(x=>x.carrier===gridData.names[idx])?.carrier || gridData.names[idx] || '');
+            return { carrier:totalLabel, totalSellINR:sell,totalBuyINR:buy,marginINR:margin,marginPct:sell?(margin/sell)*100:0 };
+        });
+        const first = data.carrierTotals[0] || {totalSellINR:0,totalBuyINR:0,marginINR:0,marginPct:0};
+        data.totalSellINR=first.totalSellINR; data.totalBuyINR=first.totalBuyINR; data.marginINR=first.marginINR; data.marginPct=first.marginPct;
+        return data;
+    }
+
+    function editRecord(target, mode, idx) {
+        const rec = db[target]?.[mode]?.[idx];
+        if (!rec) return alert('Record not found.');
+        if (mode === 'rr') return;
+        document.querySelectorAll('.tab-btn-vertical').forEach(b=>b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+        document.querySelector(`.tab-btn-vertical[data-tab="${mode}"]`)?.classList.add('active');
+        document.getElementById(mode)?.classList.add('active');
+        ['client','pol','pod','incoterm','commodity','weight','transit','validityDate'].forEach(f=>{const el=document.getElementById(`${mode}-${f}`); if(el) el.value=rec[f]||'';});
+        if(mode==='sea'){
+            const el=document.getElementById('sea-container');if(el)el.value=rec.container||'';
+            const modeEl=document.getElementById('sea-comparison-mode'); if(modeEl) modeEl.value=rec.comparisonMode==='container'?'container':'carrier';
+            const cmp=Array.isArray(rec.comparisonContainers)?rec.comparisonContainers:[];
+            const c2=document.getElementById('sea-container-2'); if(c2)c2.value=cmp[1]||'';
+            const c3=document.getElementById('sea-container-3'); if(c3)c3.value=cmp[2]||'';
+            updateSeaComparisonUI();
+        }
+        if(mode==='air'||mode==='lcl'){const el=document.getElementById(`${mode}-volume`);if(el)el.value=rec.volume||'';}
+        if(mode==='air'){const el=document.getElementById('air-pallets');if(el)el.value=rec.pallets||'';}
+        const rem=document.getElementById(`${mode}-remarks`); if(rem) rem.value=rec.remarks||'';
+        const names = rec.carriers?.length ? rec.carriers : (rec.carrierRates?.map(x=>x.carrier).filter(Boolean) || [rec.carrier||'']);
+        setCarrierNames(mode, [names[0]||'',names[1]||'',names[2]||'']);
+        let arrays=[{}, {}, {}];
+        if(Array.isArray(rec.carrierRates)) rec.carrierRates.slice(0,3).forEach((r,i)=>arrays[i]=r.charges||{});
+        else arrays[0]=rec.charges||{};
+        chargesOrder[mode]=rec.chargesOrder||null;
+        buildChargesGrid(mode, arrays, chargesOrder[mode], {arrays});
+        if (rec.freightSurcharges) {
+            if(mode==='sea') ['20','40'].forEach(row=>['oft','subc','haz','ow','other','other2','other3','trk','ddp'].forEach(k=>{const el=document.getElementById(`sea-fs-${k}-${row}`);if(el)el.value=rec.freightSurcharges[row]?.[k]||0;}));
+            if(mode==='air') ['frt','fuel','carting','mcc','xray','other'].forEach(k=>{const el=document.getElementById(`air-fs-${k}`);if(el)el.value=rec.freightSurcharges[k]||0;});
+        }
+        if(mode==='air') setValidityDefault('air');
+        if(rec.quoteNumber){document.getElementById(`${mode}-qn-value`).textContent=rec.quoteNumber;document.getElementById(`${mode}-qn-box`).classList.add('show');}
+        editingRecord={target,mode,index:idx,originalQN:rec.quoteNumber}; hasUnsavedChanges[mode]=false;
+    }
+
+    function clearForm(mode) {
+        const panel=document.getElementById(mode); if(!panel)return;
+        panel.querySelectorAll('input,select,textarea').forEach(el=>{if(el.tagName==='SELECT')el.selectedIndex=0;else el.value='';});
+        if (mode === 'sea') { const cm=document.getElementById('sea-comparison-mode'); if(cm) cm.value='carrier'; updateSeaComparisonUI(); }
+        // Restore carrier 1/2/3 UI explicitly.
+        setCarrierNames(mode,['','','']);
+        if(mode==='sea'){document.querySelectorAll('#sea .fs-input').forEach(el=>el.value='');calcSeaFSTotal();}
+        if(mode==='air'){document.querySelectorAll('#air .fs-input-air').forEach(el=>el.value='');calcAirFSTotal();}
+        document.getElementById(`${mode}-qn-box`)?.classList.remove('show');
+        document.getElementById(`${mode}-dup-alert`)?.classList.remove('show');
+        document.getElementById(`${mode}-margin-warning`)?.classList.remove('show');
+        chargesOrder[mode]=null; buildChargesGrid(mode, [{},{},{}]); editingRecord=null; hasUnsavedChanges[mode]=false; setValidityDefault(mode);
+    }
+
+    function saveLocalCharges(mode) {
+        const pol=document.getElementById(`${mode}-pol`)?.value||'';
+        const container=document.getElementById(`${mode}-container`)?.value||'';
+        const names=getCarrierNames(mode);
+        if(!pol || !names[0]) return alert('Please select Carrier 1 and POL first.');
+        const data=collectMultiCarrierGridData(mode);
+        let saved=0;
+        names.forEach((carrier,idx)=>{
+            if(!carrier)return;
+            const charges=data.arrays[idx]||{};
+            if(!Object.values(charges).some(c=>c.amount||c.buyAmount))return;
+            if(mode==='air'){
+                const arr=db.carrierChargesAir||[]; const existing=arr.findIndex(c=>c.carrier===carrier&&c.pol===pol&&String(c.commodity||'')===String(document.getElementById(`${mode}-commodity`)?.value||''));
+                const entry={carrier,pol,commodity:document.getElementById(`${mode}-commodity`)?.value||'',charges,updated:new Date().toISOString()};
+                if(existing>=0)arr[existing]=entry;else arr.push(entry);
+            } else {
+                const arr=db.carrierChargesSeaLcl||[]; const existing=arr.findIndex(c=>c.mode===mode&&c.carrier===carrier&&c.pol===pol&&(c.container||'')===container&&String(c.commodity||'')===String(document.getElementById(`${mode}-commodity`)?.value||''));
+                const entry={mode,carrier,pol,container,commodity:document.getElementById(`${mode}-commodity`)?.value||'',charges,updated:new Date().toISOString()};
+                if(existing>=0)arr[existing]=entry;else arr.push(entry);
+            }
+            saved++;
+        });
+        saveDB(); autoBackup(); alert(`Local charges saved for ${saved} carrier(s).`);
+    }
+
+    function saveFreightRate(mode) {
+        const pol=document.getElementById(`${mode}-pol`)?.value||'', pod=document.getElementById(`${mode}-pod`)?.value||'', container=document.getElementById(`${mode}-container`)?.value||'', transit=document.getElementById(`${mode}-transit`)?.value||'', validityDate=document.getElementById(`${mode}-validityDate`)?.value||'', commodity=document.getElementById(`${mode}-commodity`)?.value||'';
+        const names=getCarrierNames(mode); const data=collectMultiCarrierGridData(mode);
+        if(!pol||!pod||!names[0])return alert('Please select Carrier 1, POL, and POD first.');
+        names.forEach((carrier,idx)=>{
+            if(!carrier)return;
+            const freight=data.arrays[idx]?.['FREIGHT'] || data.arrays[idx]?.['AIR FREIGHT']; if(!freight?.buyAmount)return;
+            const arr=db.rateSheet||[]; const freightType=mode.toUpperCase();
+            const exists=arr.some(r=>r.carrierName===carrier&&r.freightType===freightType&&r.pol===pol&&r.pod===pod&&r.containerType===container&&parseFloat(r.freightAmount)===Number(freight.buyAmount)&&r.currency===freight.buyCurrency);
+            if(!exists)arr.push({id:'RS-'+Date.now()+'-'+idx,carrierName:carrier,freightType,pol,pod,containerType:container,currency:freight.buyCurrency||'INR',freightAmount:Number(freight.buyAmount),transitTime:transit?`${transit} days`:'',validFrom:new Date().toISOString().split('T')[0],validTo:validityDate,commodity,remarks:'Auto-saved from multi-carrier quote',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),source:'quote'});
+        });
+        saveDB(); alert('Freight rates saved for selected carriers.');
+    }
+
+    // Override updateRateSheetFromQuote so each selected carrier can feed the rate sheet.
+    function updateRateSheetFromQuote(data, mode) {
+        if (!Array.isArray(data.carrierRates)) return;
+        data.carrierRates.forEach((cr, idx)=>{
+            const freightKey=mode==='air'?'AIR FREIGHT':'FREIGHT'; const freight=cr.charges?.[freightKey]; if(!freight?.buyAmount)return;
+            const freightAmount=Number(freight.buyAmount)||0; if(!freightAmount)return;
+            const freightCurrency=freight.buyCurrency||'INR';
+            const exists=(db.rateSheet||[]).some(r=>r.carrierName===cr.carrier&&r.freightType===mode.toUpperCase()&&r.pol===data.pol&&r.pod===data.pod&&r.containerType===(data.container||'')&&Number(r.freightAmount)===freightAmount&&r.currency===freightCurrency);
+            if(!exists)db.rateSheet.push({id:'RS-'+Date.now()+'-'+idx,carrierName:cr.carrier,freightType:mode.toUpperCase(),pol:data.pol||'',pod:data.pod||'',containerType:data.container||'',currency:freightCurrency,freightAmount,transitTime:data.transit?`${data.transit} days`:'',validFrom:new Date().toISOString().split('T')[0],validTo:data.validityDate||'',commodity:data.commodity||'',remarks:`Auto-saved from quote ${data.quoteNumber||'N/A'}`,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),source:'quote',quoteNumber:data.quoteNumber});
+        });
+        saveDB();
+    }
+
+    // Replace the old single-carrier functions with the multi-carrier versions.
+    window.buildChargesGrid=buildChargesGrid;
+    window.recalcCharge=recalcCharge;
+    window.recalcAllCarrierCharges=recalcAllCarrierCharges;
+    window.recalcTotal=recalcTotal;
+    window.onCarrierChange=onCarrierChange;
+    window.onPolChange=onPolChange;
+    window.onContainerChange=onContainerChange;
+    window.onMultiCarrierChange=onMultiCarrierChange;
+    window.onCarrierPolChangeInternal=onCarrierPolChangeInternal;
+    window.getFormData=getFormData;
+    window.__multiGetFormData=getFormData;
+    window.__multiCollectGridData=collectMultiCarrierGridData;
+    window.editRecord=editRecord;
+    window.clearForm=clearForm;
+    window.saveLocalCharges=saveLocalCharges;
+    window.saveFreightRate=saveFreightRate;
+    window.updateRateSheetFromQuote=updateRateSheetFromQuote;
+    // Required by SEA Quote inline handlers. Keep these functions SEA-only.
+    window.onSeaComparisonChange=onSeaComparisonChange;
+    window.onSeaContainerComparisonChange=onSeaContainerComparisonChange;
+    window.updateSeaComparisonUI=updateSeaComparisonUI;
+
+    // Initial header names + initial charge render after existing initialization.
+    setTimeout(()=>{
+        ['sea','air','lcl'].forEach(mode=>{
+            updateCarrierHeaders(mode);
+            const names=getCarrierNames(mode);
+            if(names[0]) onCarrierPolChangeInternal(mode);
+        });
+    }, 150);
+})();
+
+// Multi-carrier selector state: prevents old Carrier-2/3 manual values from being
+// accidentally transferred when a carrier selection is replaced.
+window.__multiCarrierState = window.__multiCarrierState || {};
+function __mcNames(mode) {
+    return [0,1,2].map(i => {
+        const id = i===0 ? `${mode}-carrier` : `${mode}-carrier-${i+1}`;
+        return (document.getElementById(id)?.value || '').trim().toUpperCase();
+    });
+}
+function __mcRawArrays(mode) {
+    const out=[{},{},{}];
+    document.querySelectorAll(`#${mode}-charges-grid .charge-row`).forEach(row=>{
+        const charge=row.getAttribute('data-charge');
+        const safe=String(charge).replace(/[^A-Z0-9]/gi,'_');
+        const basis=row.querySelector('.charge-basis')?.value||'Normal';
+        [0,1,2].forEach(i=>{
+            const sell=document.getElementById(`${mode}-c${i+1}-amt-${safe}`)?.value||'';
+            const buy=document.getElementById(`${mode}-c${i+1}-buyAmt-${safe}`)?.value||'';
+            const parse=(v)=>{const t=String(v).trim();const usd=t.includes('$');const n=parseFloat(t.replace(/[$,\s]/g,''))||0;return {amount:n,currency:usd?'USD':'INR'};};
+            const s=parse(sell), b=parse(buy);
+            if(s.amount||b.amount) out[i][charge]={amount:s.amount,currency:s.currency,buyAmount:b.amount,buyCurrency:b.currency,basis};
+        });
+    });
+    return out;
+}
+function __mcSyncState(mode) {
+    window.__multiCarrierState[mode]={names:__mcNames(mode)};
+}
+function __mcChange(mode) {
+    markUnsaved(mode);
+    const state=window.__multiCarrierState[mode]||{names:['','','']};
+    const raw=__mcRawArrays(mode);
+    const previous={};
+    state.names.forEach((name,i)=>{if(name)previous[name]=raw[i]||{};});
+    const names=__mcNames(mode);
+    window.__multiCarrierState[mode]={names};
+    onCarrierPolChangeInternal(mode, previous);
+}
+window.onMultiCarrierChange=__mcChange;
+window.onCarrierChange=function(mode){ markUnsaved(mode); __mcChange(mode); };
+window.onPolChange=function(mode){
+    markUnsaved(mode);
+    // POL change = new rate key. Always fetch fresh charges instead of
+    // carrying manual values from the previous route.
+    onCarrierPolChangeInternal(mode, { arrays: [{}, {}, {}] });
+};
+window.onContainerChange=function(mode){
+    markUnsaved(mode);
+    // Main Container change = new rate key. In SEA container comparison mode
+    // this also changes Container 1, so all comparison columns must refresh.
+    onCarrierPolChangeInternal(mode, { arrays: [{}, {}, {}] });
+};
+window.evaluateFormula=function(input,mode,charge,idx=0){
+    const val=String(input?.value||'').trim();
+    // Currency symbols are allowed, but formulas are only evaluated when the
+    // expression contains arithmetic characters and no currency symbol.
+    if(val && !val.includes('$') && /^[\d+\-*/.()\s]+$/.test(val)){
+        try{const result=Function('"use strict";return ('+val+')')();if(Number.isFinite(result)){input.value=result;recalcCharge(mode,charge,idx);return;}}catch(e){}
+    }
+    recalcCharge(mode,charge,idx);
+};
+['sea','air','lcl'].forEach(mode=>setTimeout(()=>{window.__multiCarrierState[mode]={names:__mcNames(mode)}; if(mode==='sea') updateSeaComparisonUI();},200));
+
+/* ============================================================================
+   MULTI-CARRIER PREVIEW / PDF / EMAIL OUTPUT
+   ============================================================================ */
+function mcEsc(v){
+    if (typeof escapeHtml === 'function') return escapeHtml(String(v ?? ''));
+    return String(v ?? '').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function mcMoney(amount,currency){
+    const n=Number(amount)||0;
+    if(!n) return '—';
+    const formatted=n.toLocaleString('en-IN',{minimumFractionDigits:0,maximumFractionDigits:2});
+    return currency==='USD' ? `$ ${formatted}` : `₹ ${formatted}`;
+}
+function mcNormalizeOutput(data,mode){
+    if(Array.isArray(data.carrierRates) && data.carrierRates.length) return data.carrierRates.slice(0,3).map(x=>({carrier:x.carrier||'',charges:x.charges||{}})).filter(x=>x.carrier);
+    if(data.carrier) return [{carrier:data.carrier,charges:data.charges||{}}];
+    return [];
+}
+function mcBuildCustomerShipmentHTML(data, mode, carriers, compact=false) {
+    const esc = (v) => mcEsc(v == null || v === '' ? '-' : String(v));
+    const validityDisplay = data.validityDate
+        ? new Date(data.validityDate).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
+        : '—';
+    const transitDisplay = data.transit ? `${esc(data.transit)} Days` : '—';
+    const carrierNames = (mode==='sea' && data.comparisonMode==='container' && Array.isArray(data.comparisonContainers))
+        ? data.comparisonContainers.filter(Boolean).join(' / ')
+        : ((Array.isArray(carriers) && carriers.length)
+            ? carriers.map(c => c.carrier).filter(Boolean).join(' / ')
+            : (data.carrier || '—'));
+    const containerOrVolume = mode === 'sea'
+        ? (data.container || '—')
+        : (data.volume !== undefined && data.volume !== '' ? data.volume : '—');
+
+    // OLD Customer & Shipment Details visual template is intentionally preserved.
+    const baseFont = '15px';
+    const headingSize = '17px';
+    const thPadding = '4px 8px';
+    const tdPadding = '4px 8px';
+    const headerHeight = 'auto';
+    const rows = [
+        ['Client', esc(data.client), 'Ex. Rates', `1 USD = ${Number(db.exchangeRates?.USD || 0).toFixed(2)} INR`],
+        ['POL', esc(data.pol), 'POD', esc(data.pod)],
+        ['Commodity', esc(data.commodity), mode === 'sea' ? 'Container' : 'Volume (CBM)', esc(containerOrVolume)],
+        ['Weight (KGS)', esc(data.weight || '-'), 'Incoterm', esc(data.incoterm)],
+        ['Carrier', esc(carrierNames), 'Transit Time', transitDisplay],
+        ['Quote Date', esc(data.autoDate || data.quoteDate || '-'), 'Validity Date', validityDisplay]
+    ];
+    const tableWidth = SHAHID_SIZE.quote;
+    let html = `<table class="pdf-detail-table" style="width:${tableWidth};min-width:${tableWidth};max-width:${tableWidth};border-collapse:collapse;font-size:${baseFont};margin-top:0;table-layout:fixed;">
+        <thead><tr><th colspan="4" class="pdf-section-heading" style="border:1px solid #1e3a8a;padding:${thPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;height:${headerHeight};white-space:nowrap;">Customer &amp; Shipment Details</th></tr></thead><tbody>`;
+    rows.forEach((r,i)=>{
+        const bg=i%2===0?'#f1f5f9':'white';
+        const v1=r[0]==='Validity Date'?'color:#dc2626;font-weight:bold;':'';
+        const v2=r[2]==='Validity Date'?'color:#dc2626;font-weight:bold;':'';
+        html += `<tr style="background:${bg};">
+            <td style="border:1px solid #d1d5db;padding:${tdPadding};font-weight:700;width:20%;">${r[0]}</td>
+            <td style="border:1px solid #d1d5db;padding:${tdPadding};width:30%;${v1}">${r[1]}</td>
+            <td style="border:1px solid #d1d5db;padding:${tdPadding};font-weight:700;width:20%;">${r[2]}</td>
+            <td style="border:1px solid #d1d5db;padding:${tdPadding};width:30%;${v2}">${r[3]}</td>
+        </tr>`;
+    });
+    html += `</tbody></table>`;
+    return html;
+}
+
+
+/* ============================================================
+   V21 — AIR QUOTE: NO AMOUNT SUBTOTAL/TOTAL
+   Amount remains a line-level rate only. AIR subtotal and Grand Total
+   are displayed exclusively under INR Equivalent.
+   ============================================================ */
+
+/* ============================================================
+   V18 — FREIGHT DEFAULT CURRENCY RULE
+   SEA  = USD
+   AIR  = INR
+   LCL  = USD
+   Explicit "$" input still overrides to USD.
+   ============================================================ */
+
+/* ============================================================
+   V19 — AIR COPY COMPACT / PREVIEW LOGIC
+   Based on the supplied legacy AIR JS logic.
+   Amount = unit/entered rate.
+   INR Equivalent = calculated final amount.
+   Basis = actual applied calculation rule.
+   ============================================================ */
+function airCompactDisplayLogic(charge, raw, data) {
+    const name = String(charge || '').toUpperCase();
+    const unit = Number(raw?.amount ?? raw?.sellAmount ?? 0) || 0;
+    const weight = Number(data?.weight || 0) || 0;
+    const volume = Number(data?.volume || 0) || 0;
+
+    let basis = raw?.basis || 'Normal';
+    let finalINR = unit;
+
+    if (name === 'AIR FREIGHT') {
+        basis = 'Per KGS';
+        finalINR = unit * weight;
+        return { unit, basis, finalINR, minApplied: false };
+    }
+
+    if (name === 'CARTAGE') {
+        basis = 'Per KGS';
+        finalINR = unit * weight;
+        if (finalINR < 450) {
+            finalINR = 450;
+            basis = 'Minimum';
+        }
+        return { unit, basis, finalINR, minApplied: basis === 'Minimum' };
+    }
+
+    if (name === 'MCC') {
+        basis = 'Per KGS';
+        finalINR = unit * weight;
+        if (finalINR < 550) {
+            finalINR = 550;
+            basis = 'Minimum';
+        }
+        return { unit, basis, finalINR, minApplied: basis === 'Minimum' };
+    }
+
+    if (name === 'XRAY') {
+        basis = 'Per KGS';
+        finalINR = unit * weight;
+        if (finalINR < 850) {
+            finalINR = 850;
+            basis = 'Minimum';
+        }
+        return { unit, basis, finalINR, minApplied: basis === 'Minimum' };
+    }
+
+    if (name === 'GATE PASS') {
+        // Calculation rule remains Per KGS × 4.
+        finalINR = unit * weight * 4;
+        if (finalINR < 850) {
+            finalINR = 850;
+            return { unit, basis: 'Minimum', finalINR, minApplied: true };
+        }
+        // Display rule for Preview / PDF / Copy Compact.
+        return { unit, basis: 'AT Actual', finalINR, minApplied: false };
+    }
+
+    if (name === 'PALLETISATION') {
+        const pallets = Number(data?.pallets || 0) || 0;
+        const plies = pallets * 2;
+        const palletCharge = pallets * 1875;
+        const plyCharge = pallets * 1000;
+        finalINR = pallets > 0 ? Math.max(palletCharge, plyCharge) : unit;
+        return { unit: pallets > 0 ? palletCharge : unit, basis: '1', finalINR, minApplied: false };
+    }
+
+    if (name === 'PLY') {
+        const pallets = Number(data?.pallets || 0) || 0;
+        const plies = pallets * 2;
+        finalINR = pallets > 0 ? pallets * 1000 : unit;
+        return { unit: pallets > 0 ? pallets * 1000 : unit, basis: '1', finalINR, minApplied: false };
+    }
+
+    // Other AIR charges: honor explicitly stored basis where possible.
+    if (basis === 'Per KGS') finalINR = unit * weight;
+    else if (basis === 'Per KGS × 3') finalINR = unit * weight * 3;
+    else if (basis === 'Per KGS × 4') finalINR = unit * weight * 4;
+    else if (basis === 'Per CBM') finalINR = unit * volume;
+    else finalINR = unit;
+
+    return { unit, basis: basis === 'Normal' ? '1' : basis, finalINR, minApplied: false };
+}
+
+function getFreightDefaultCurrency(mode) {
+    return 'USD';
+}
+
+function mcOutputChargeGroups(data, mode) {
+    if (mode === 'sea') return {
+        first:{label:'Sea Freight & Local Charges', categories:['Freight','Carrier Charges']},
+        second:{label:'CFS / Transport Charges', categories:['CFS / Transport Charges']}
+    };
+    if (mode === 'air') return {
+        first:{label:'Air Freight & Local Charges + CFS / Transport Charges', categories:['Freight','Origin Charges','Local Charges','CFS / Transport Charges']},
+        second:{label:'', categories:[]}
+    };
+    return {
+        first:{label:'LCL Freight & Local Charges', categories:['Freight','Origin Charges']},
+        second:{label:'CFS / Transport Charges', categories:['CFS / Transport Charges','Local Charges']}
+    };
+}
+
+function mcChargeListForCategories(data, categories) {
+    const mode = data.mode?.toLowerCase?.() || 'sea';
+    const order = data.chargesOrder || getCurrentChargesOrder(mode) || {};
+    const wanted = new Set(categories || []);
+    const out = [];
+
+    // First use the authoritative saved category order. A charge belongs to
+    // exactly one category in the output renderer.
+    (categories || []).forEach(cat => {
+        (order[cat] || []).forEach(ch => {
+            if (ch && !out.includes(ch)) out.push(ch);
+        });
+    });
+
+    // Recover dynamic/saved charges only when their canonical category belongs
+    // to the current section. NEVER append an unknown charge to every section.
+    const categoryMap = {};
+    Object.entries(chargeCategories[mode] || {}).forEach(([cat, list]) => {
+        list.forEach(ch => { categoryMap[String(ch).toUpperCase()] = cat; });
+    });
+    const carrierRates = Array.isArray(data.carrierRates) ? data.carrierRates : [];
+    const known = new Set(out);
+    carrierRates.forEach(cr => {
+        Object.entries(cr?.charges || {}).forEach(([charge, raw]) => {
+            if (!charge || known.has(charge)) return;
+            const explicit = raw?.category || raw?.chargeCategory || '';
+            const canonical = explicit || categoryMap[String(charge).toUpperCase()] || '';
+            if (!wanted.has(canonical)) return;
+            out.push(charge);
+            known.add(charge);
+        });
+    });
+    return out;
+}
+
+function mcOutputCarriers(data, mode) {
+    if (Array.isArray(data.carrierRates) && data.carrierRates.length) {
+        if (mode === 'sea' && data.comparisonMode === 'container') {
+            const containers = Array.isArray(data.comparisonContainers) ? data.comparisonContainers : [];
+            const list = data.carrierRates.slice(0,3).map((x,i)=>({
+                carrier: containers[i] || '',
+                charges: x?.charges || {}
+            })).filter(x => x.carrier);
+            return list;
+        }
+        return data.carrierRates.slice(0,3)
+            .filter(x=>x && x.carrier)
+            .map(x=>({carrier:x.carrier,charges:x.charges||{}}));
+    }
+    if (mode === 'sea' && data.comparisonMode === 'container') {
+        const containers = Array.isArray(data.comparisonContainers) ? data.comparisonContainers : [];
+        const charges = data.charges || {};
+        return containers.slice(0,3).filter(Boolean).map(c => ({carrier:c,charges}));
+    }
+    if (data.carrier) return [{carrier:data.carrier,charges:data.charges||{}}];
+    return [];
+}
+
+function mcOutputRowData(data, mode, carrier, charge) {
+    const raw = carrier?.charges?.[charge] || {};
+    const basis = raw.basis || 'Normal';
+    const calc = mcBasisValue(mode, charge, basis, raw, data);
+    const isFreight =
+    String(charge || '').toUpperCase() === 'FREIGHT' ||
+    String(charge || '').toUpperCase() === 'AIR FREIGHT';
+const freightCurrency = getFreightDefaultCurrency(mode);
+const sellCur = isFreight ? freightCurrency : (raw.currency || 'INR');
+const buyCur = isFreight ? freightCurrency : (raw.buyCurrency || 'INR');
+    const sellINR = toINR(calc.sell, sellCur);
+    const buyINR = toINR(calc.buy, buyCur);
+    return { raw, x:calc, sellCur, buyCur, sellINR, buyINR, marginINR:sellINR-buyINR };
+}
+
+function mcBasisValue(mode, charge, basis, raw={}, data={}) {
+    // Canonical output calculation for the multi-carrier renderer.
+    // It intentionally mirrors the active quote-grid calculation rules so
+    // Preview/PDF/Email/Copy use the same sell/buy basis as the quote screen.
+    const r = raw || {};
+    const b = basis || r.basis || 'Normal';
+    let sell = Number(r.amount) || 0;
+    let buy = Number(r.buyAmount) || 0;
+
+    if (mode === 'air') {
+        const weight = parseFloat(document.getElementById('air-weight')?.value) || parseFloat(data.weight) || 0;
+        const pallets = parseFloat(document.getElementById('air-pallets')?.value) || parseFloat(data.pallets) || 0;
+        const volume = parseFloat(document.getElementById('air-volume')?.value) || parseFloat(data.volume) || 0;
+
+        if (charge === 'PALLETISATION' && pallets > 0) {
+            sell = pallets * 1875;
+        }
+        if (charge === 'PLY' && pallets > 0) {
+            sell = pallets * 1000;
+        }
+        if (b === 'Per KGS') {
+            sell *= weight;
+            buy *= weight;
+        }
+        if (b === 'Per KGS × 3') {
+            sell *= weight * 3;
+            buy *= weight * 3;
+        }
+        if (b === 'Per KGS × 4') {
+            sell *= weight * 4;
+            buy *= weight * 4;
+        }
+        if (b === 'Per CBM') {
+            sell *= volume;
+            buy *= volume;
+        }
+
+        if (charge !== 'PALLETISATION' && charge !== 'PLY' &&
+            AIR_MIN_THRESHOLDS && AIR_MIN_THRESHOLDS[charge] &&
+            (b === 'Per KGS' || b === 'Per KGS × 4')) {
+            sell = Math.max(sell, AIR_MIN_THRESHOLDS[charge]);
+            buy = Math.max(buy, AIR_MIN_THRESHOLDS[charge]);
+        }
+    }
+
+    if (mode === 'lcl' && (charge === 'FREIGHT' || charge === 'THC') && b === 'Normal') {
+        const volume = parseFloat(document.getElementById('lcl-volume')?.value) || parseFloat(data.volume) || 0;
+        if (volume > 0) {
+            sell *= volume;
+            buy *= volume;
+        }
+    }
+
+    return { sell, buy };
+}
+
+function mcBasisDisplay(mode, charge, basis, data, raw={}) {
+    let b = basis || 'Normal';
+    if (b === 'Normal' || b === '') b = '1';
+    if (mode === 'air' && String(charge || '').trim().toUpperCase() === 'GATE PASS') {
+        return 'AT Actual';
+    }
+    if (mode === 'air' && AIR_MIN_THRESHOLDS && AIR_MIN_THRESHOLDS[charge]) {
+        if (raw && raw.basis === 'Per KGS') return 'Per KGS';
+        if (raw && raw.basis === 'Per KGS × 4') return 'Per KGS × 4';
+    }
+    return b;
+}
+
+function mcBasisForCarriers(data, mode, charge, carriers) {
+    const vals=(carriers||[]).map(c=>mcBasisDisplay(mode,charge,c?.charges?.[charge]?.basis||'Normal',data,c?.charges?.[charge]||{}));
+    const clean=vals.filter(Boolean);
+    if(!clean.length) return '1';
+    const unique=[...new Set(clean)];
+    return unique.length===1 ? unique[0] : unique.join(' / ');
+}
+
+function mcHasOutputSell(data, mode, carrier, charge) {
+    const raw = carrier?.charges?.[charge] || {};
+    const entered = Number(raw.amount) || 0;
+    if (entered > 0) return true;
+    // These charges can be system-calculated from operational inputs rather than
+    // a manually entered sell rate. Keep them visible only when the calculation
+    // actually produces a positive sell value.
+    const upper = String(charge || '').toUpperCase();
+    if (mode === 'air' && (upper === 'PALLETISATION' || upper === 'PLY')) {
+        return mcOutputRowData(data, mode, carrier, charge).x.sell > 0;
+    }
+    return false;
+}
+
+function mcBuildSectionHTML(data, mode, section, carriers, srStart, compact=false) {
+    if(!carriers.length) return {html:'',nextSr:srStart,totals:[]};
+
+    const allCharges = mcChargeListForCategories(data, section.categories);
+    const charges = allCharges.filter(charge =>
+        carriers.some(carrier => mcHasOutputSell(data, mode, carrier, charge))
+    );
+    if(!charges.length) return {html:'',nextSr:srStart,totals:carriers.map(()=>0)};
+
+    const multi = carriers.length > 1;
+    const airMulti = multi && mode === 'air';
+    const baseFont = '15px';
+    const headingSize = '17px';
+    const thPadding = '4px 8px';
+    const tdPadding = '4px 8px';
+    const headerHeight = 'auto';
+
+    // EXACT COPY-COMPACT TYPOGRAPHY / GRID.
+    // Single carrier: 10 / 30 / 10 / 15 / 10 / 29 = 104% in the legacy markup,
+    // so the equivalent fixed 100% grid is normalized to 10 / 29 / 10 / 15 / 10 / 26.
+    // For the active canonical Preview grid we preserve the approved visual proportions
+    // while keeping the table mathematically at 100%.
+    const srWidth = '10%';
+    const chargeWidth = '29%';
+    const currencyOrBasisWidth = '10%';
+    const amountWidth = '15%';
+    const basisWidth = '10%';
+    const inrWidth = '26%';
+    const carrierWidth = carriers.length === 1 ? inrWidth : (carriers.length === 2 ? '25.5%' : '17%');
+
+    const heading = mcEsc(section.label);
+    const headBg = '#3896d9';
+    const border = '#d1d5db';
+
+    const sectionStyle =
+        `border:1px solid #1e3a8a;padding:${thPadding};text-align:center;background:#1e3a8a;`+
+        `color:white;font-weight:700;font-size:${headingSize};line-height:1.4;vertical-align:middle;height:${headerHeight};`;
+
+    const thBase =
+        `border:1px solid ${border};padding:${thPadding};text-align:center;background:${headBg};`+
+        `color:white;font-weight:700;font-size:${baseFont};line-height:1.4;vertical-align:middle;`+
+        `white-space:nowrap;overflow:hidden;text-overflow:clip;overflow-wrap:normal;word-break:normal;box-sizing:border-box;`;
+
+    const tdBase =
+        `border:1px solid ${border};padding:${tdPadding};font-size:${baseFont};line-height:1.4;`+
+        `vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:clip;overflow-wrap:normal;word-break:normal;box-sizing:border-box;`;
+
+    const tableWidth = SHAHID_SIZE.quote;
+    const lclMulti = mode === 'lcl' && multi;
+    const cols = (airMulti || lclMulti) ? 3 + (carriers.length * 2) : (multi ? 3 + carriers.length : 6);
+    const airCarrierWidth = carriers.length === 2 ? '25.5%' : '17%';
+    const airSubWidth = carriers.length === 2 ? '12.75%' : '8.5%';
+    const lclCarrierWidth = carriers.length === 2 ? '25.5%' : '17%';
+    const lclSubWidth = carriers.length === 2 ? '12.75%' : '8.5%';
+    const colWidths = (airMulti || lclMulti)
+        ? [srWidth, chargeWidth, currencyOrBasisWidth, ...carriers.flatMap(()=>[airMulti ? airSubWidth : lclSubWidth, airMulti ? airSubWidth : lclSubWidth])]
+        : (multi
+            ? [srWidth, chargeWidth, currencyOrBasisWidth, ...carriers.map(()=>carrierWidth)]
+            : [srWidth, chargeWidth, currencyOrBasisWidth, amountWidth, basisWidth, inrWidth]);
+
+    const colgroup = `<colgroup>${colWidths.map(w=>`<col style="width:${w};">`).join('')}</colgroup>`;
+    let html = `<table class="quote-table shahid-master-quote-table" style="width:100%;max-width:${tableWidth};min-width:0;border-collapse:collapse;`+
+        `font-size:${baseFont};margin:0 auto;table-layout:fixed;">${colgroup}
+        <thead>
+            <tr><th colspan="${cols}" class="pdf-section-heading" style="${sectionStyle}">${heading}</th></tr>
+            <tr>
+                <th style="${thBase}width:${srWidth};white-space:nowrap;">SR. NO</th>
+                <th style="${thBase}width:${chargeWidth};text-align:left;">Charge Type</th>
+                <th style="${thBase}width:${currencyOrBasisWidth};">${multi ? 'Basis' : 'Currency'}</th>`;
+
+    if(airMulti || lclMulti){
+        const groupWidth = airMulti ? airCarrierWidth : lclCarrierWidth;
+        const subWidth = airMulti ? airSubWidth : lclSubWidth;
+        carriers.forEach(c => {
+            html += `<th colspan="2" style="${thBase}width:${groupWidth};white-space:nowrap;">${mcEsc(c.carrier)}</th>`;
+        });
+        html += `</tr><tr>
+            <th style="${thBase}padding:0;border-top:0;"></th>
+            <th style="${thBase}padding:0;border-top:0;"></th>
+            <th style="${thBase}padding:0;border-top:0;"></th>`;
+        carriers.forEach(() => {
+            html += `<th style="${thBase}width:${subWidth};white-space:nowrap;">Amount</th>` +
+                    `<th style="${thBase}width:${subWidth};white-space:nowrap;">INR Equivalent</th>`;
+        });
+    } else if(multi){
+        carriers.forEach(c => {
+            html += `<th style="${thBase}width:${carrierWidth};white-space:nowrap;">${mcEsc(c.carrier)}</th>`;
+        });
+    } else {
+        html += `<th style="${thBase}text-align:right;width:${amountWidth};white-space:nowrap;">Amount</th>`+
+                `<th style="${thBase}width:${basisWidth};white-space:nowrap;">Basis</th>`+
+                `<th style="${thBase}text-align:right;width:${inrWidth};white-space:nowrap;">INR Equivalent</th>`;
+    }
+
+    html += `</tr></thead><tbody>`;
+
+    const totals = carriers.map(()=>0);
+    let sr = srStart;
+
+    charges.forEach(charge => {
+        const isFreight =
+            String(charge).toUpperCase()==='FREIGHT' ||
+            String(charge).toUpperCase()==='AIR FREIGHT';
+        const rowStyle = isFreight ? 'background:#fee2e2;font-weight:700;color:#dc2626;' : '';
+
+        html += `<tr style="${rowStyle}">
+            <td style="${tdBase}text-align:center;width:${srWidth};white-space:nowrap;">${sr}</td>
+            <td style="${tdBase}text-align:left;width:${chargeWidth};">${mcEsc(String(charge).toUpperCase())}</td>`;
+
+        if(multi){
+            let basisText;
+            if (mode === 'air') {
+                const firstCarrier = carriers[0];
+                const firstRaw = firstCarrier?.charges?.[charge] || {};
+                basisText = airCompactDisplayLogic(charge, firstRaw, data).basis;
+            } else {
+                basisText = mcBasisForCarriers(data,mode,charge,carriers);
+            }
+            html += `<td style="${tdBase}text-align:center;width:${currencyOrBasisWidth};">${mcEsc(basisText)}</td>`;
+            carriers.forEach((carrier,i)=>{
+                const d = mcOutputRowData(data,mode,carrier,charge);
+                if (airMulti) {
+                    const air = airCompactDisplayLogic(charge, d.raw, data);
+                    totals[i] += Number(air.finalINR) || 0;
+                    html += `<td style="${tdBase}text-align:right;width:${airSubWidth};white-space:nowrap;overflow:visible;">${air.unit ? mcMoney(air.unit,'INR') : '—'}</td>` +
+                            `<td style="${tdBase}text-align:right;width:${airSubWidth};white-space:nowrap;overflow:visible;">${formatINR(Number(air.finalINR)||0)}</td>`;
+                } else if (lclMulti) {
+                    totals[i] += Number(d.sellINR) || 0;
+                    html += `<td style="${tdBase}text-align:right;width:${lclSubWidth};white-space:nowrap;overflow:visible;">${d.x && d.x.sell ? mcMoney(d.x.sell,d.sellCur) : '—'}</td>` +
+                            `<td style="${tdBase}text-align:right;width:${lclSubWidth};white-space:nowrap;overflow:visible;">${formatINR(Number(d.sellINR)||0)}</td>`;
+                } else {
+                    totals[i] += Number(d.sellINR)||0;
+                    html += `<td style="${tdBase}text-align:right;width:${carrierWidth};white-space:nowrap;overflow:visible;">${d.x && d.x.sell ? mcMoney(d.x.sell,d.sellCur) : '—'}</td>`;
+                }
+            });
+        } else {
+            const d = mcOutputRowData(data,mode,carriers[0],charge);
+            if (mode === 'air') {
+                const air = airCompactDisplayLogic(charge, d.raw, data);
+                totals[0] += Number(air.finalINR) || 0;
+                html += `<td style="${tdBase}text-align:center;width:${currencyOrBasisWidth};white-space:nowrap;">INR</td>`+
+                        `<td style="${tdBase}text-align:right;width:${amountWidth};white-space:nowrap;overflow:visible;">${air.unit ? mcMoney(air.unit,'INR') : '—'}</td>`+
+                        `<td style="${tdBase}text-align:center;width:${basisWidth};">${mcEsc(air.basis)}</td>`+
+                        `<td style="${tdBase}text-align:right;width:${inrWidth};white-space:nowrap;overflow:visible;">${formatINR(Number(air.finalINR)||0)}</td>`;
+            } else {
+                totals[0] += Number(d.sellINR)||0;
+                html += `<td style="${tdBase}text-align:center;width:${currencyOrBasisWidth};white-space:nowrap;">${mcEsc(d.sellCur)}</td>`+
+                        `<td style="${tdBase}text-align:right;width:${amountWidth};white-space:nowrap;overflow:visible;">${d.x && d.x.sell ? mcMoney(d.x.sell,d.sellCur) : '—'}</td>`+
+                        `<td style="${tdBase}text-align:center;width:${basisWidth};">${mcEsc(mcBasisDisplay(mode,charge,d.raw.basis||'Normal',data,d.raw))}</td>`+
+                        `<td style="${tdBase}text-align:right;width:${inrWidth};white-space:nowrap;overflow:visible;">${formatINR(Number(d.sellINR)||0)}</td>`;
+            }
+        }
+        html += `</tr>`;
+        sr++;
+    });
+
+    // SUBTOTAL: exact same column geometry as the main table.
+    html += `<tfoot><tr style="font-weight:700;background:#e6f7e6;">`;
+    if(multi){
+        const labelWidth = `${10 + 29 + 10}%`;
+        html += `<td colspan="3" style="${tdBase}text-align:right;width:${labelWidth};white-space:nowrap;">Subtotal (INR)</td>`;
+        if (airMulti || lclMulti) {
+            const subWidth = airMulti ? airSubWidth : lclSubWidth;
+            totals.forEach(v=>{
+                // AIR: Amount is the displayed unit/entered rate only.
+                // Never show an Amount subtotal/total. Only INR Equivalent is totalled.
+                if (airMulti) {
+                    html += `<td style="${tdBase}text-align:right;width:${subWidth};white-space:nowrap;"></td>` +
+                            `<td style="${tdBase}text-align:right;width:${subWidth};white-space:nowrap;">${formatINR(v)}</td>`;
+                } else {
+                    html += `<td style="${tdBase}text-align:right;width:${subWidth};white-space:nowrap;">${formatINR(v)}</td>` +
+                            `<td style="${tdBase}text-align:right;width:${subWidth};white-space:nowrap;">${formatINR(v)}</td>`;
+                }
+            });
+        } else {
+            totals.forEach(v=>{
+                html += `<td style="${tdBase}text-align:right;width:${carrierWidth};white-space:nowrap;">${formatINR(v)}</td>`;
+            });
+        }
+    } else {
+        html += `<td colspan="5" style="${tdBase}text-align:right;width:74%;white-space:nowrap;">Subtotal (INR)</td>`+
+                `<td style="${tdBase}text-align:right;width:26%;white-space:nowrap;">${formatINR(totals[0])}</td>`;
+    }
+    html += `</tr></tfoot></table>`;
+    return {html,nextSr:sr,totals};
+}
+
+function mcCalculateGrandTotals(data, mode, carriers) {
+    const totals = (carriers || []).map(() => 0);
+    if (!totals.length) return totals;
+
+    const groups = mcOutputChargeGroups(data, mode);
+    const uniqueCharges = [];
+    [groups.first || [], groups.second || []].forEach(section => {
+        (mcChargeListForCategories(data, section.categories) || []).forEach(ch => {
+            if (ch && !uniqueCharges.includes(ch)) uniqueCharges.push(ch);
+        });
+    });
+
+    uniqueCharges.forEach(charge => {
+        (carriers || []).forEach((carrier, i) => {
+            if (mcHasOutputSell(data, mode, carrier, charge)) {
+                const row = mcOutputRowData(data, mode, carrier, charge);
+                totals[i] += Number(row.sellINR) || 0;
+            }
+        });
+    });
+    return totals;
+}
+
+function mcBuildGrandTotalHTML(carriers, totals, compact=false, mode="sea") {
+    if(!Array.isArray(carriers) || !carriers.length) return '';
+
+    const baseFont = '15px';
+    const tdPadding = '4px 8px';
+    const td =
+        `border:1px solid #d1d5db;padding:${tdPadding};line-height:1.35;`+
+        `vertical-align:middle;box-sizing:border-box;`;
+
+    const tableStyle =
+        `width:100%;max-width:${SHAHID_SIZE.quote};min-width:0;`+
+        `border-collapse:collapse;table-layout:fixed;font-size:${baseFont};margin:0 auto;`;
+
+    // EXACT SAME GRID AS MAIN TABLE
+    if (carriers.length === 1) {
+        return `<table class="quote-table" style="${tableStyle}">
+            <tbody>
+              <tr class="pdf-grand-total" style="background:#05964b;color:#edeef0;font-weight:800;font-size:17px;line-height:1.4;">
+                <td style="${td}text-align:right;width:74%;white-space:nowrap;">
+                    Grand Total (INR) + GST additional
+                </td>
+                <td style="${td}text-align:right;width:26%;white-space:nowrap;">
+                    ${formatINR(Number(totals[0])||0)}
+                </td>
+              </tr>
+            </tbody>
+        </table>`;
+    }
+
+    const carrierWidth = carriers.length === 2 ? '25.5%' : '17%';
+    if (mode === 'air') {
+        const airSubWidth = carriers.length === 2 ? '12.75%' : '8.5%';
+        return `<table class="quote-table" style="${tableStyle}">
+            <tbody>
+              <tr class="pdf-grand-total" style="background:#05964b;color:#edeef0;font-weight:800;font-size:1.05rem;line-height:1.35;">
+                <td colspan="3" style="${td}text-align:right;width:49%;white-space:nowrap;">Grand Total (INR) + GST additional</td>
+                ${carriers.map((carrier,i)=>`<td style="${td}text-align:right;width:${airSubWidth};white-space:nowrap;"></td><td style="${td}text-align:right;width:${airSubWidth};white-space:nowrap;">${formatINR(Number(totals[i])||0)}</td>`).join('')}
+              </tr>
+            </tbody>
+        </table>`;
+    }
+
+    return `<table class="quote-table" style="${tableStyle}">
+        <tbody>
+          <tr class="pdf-grand-total" style="background:#05964b;color:#edeef0;font-weight:800;font-size:1.05rem;line-height:1.35;">
+            <td colspan="3" style="${td}text-align:right;width:49%;white-space:nowrap;">
+                Grand Total (INR) + GST additional
+            </td>
+            ${carriers.map((carrier,i)=>`
+              <td style="${td}text-align:right;width:${carrierWidth};white-space:nowrap;overflow:visible;">
+                ${formatINR(Number(totals[i])||0)}
+              </td>`).join('')}
+          </tr>
+        </tbody>
+    </table>`;
+}
+
+function buildMultiCarrierChargeHTML(data,mode,compact=false){
+    const carriers=mcOutputCarriers(data,mode);
+    if(!carriers.length) return '';
+    const groups=mcOutputChargeGroups(data,mode);
+    let sr=1,html='';
+    // IMPORTANT: Grand Total must be the sum of the exact section subtotals
+    // that are actually rendered. This prevents hidden/filtered/duplicate
+    // charges from causing a mismatch between Subtotal and Grand Total.
+    const overall = carriers.map(()=>0);
+    [groups.first,groups.second].forEach(section=>{
+        const r=mcBuildSectionHTML(data,mode,section,carriers,sr,compact);
+        if(r.html){
+            if(html) html += shahidSectionGapHTML();
+            html += r.html;
+            sr=r.nextSr;
+            (r.totals||[]).forEach((v,i)=>{ overall[i] += Number(v)||0; });
+        }
+    });
+    if(html) html += shahidSectionGapHTML();
+    html += mcBuildGrandTotalHTML(carriers,overall,compact,mode);
+    return html;
+}
+
+function mcStandardRemarks(mode, baseFont, headingSize, tdPadding, tableWidth='100%', specialRemark='') {
+    const standard = mode==='air' ? [
+        '1. Rate Subject To Booking Acceptance',
+        '2. 100% Of Total Freight Charges applicable if Shipments Cancelled Within 48 Hours Before The Delivery Cut-Off Time',
+        '3. GST At Actual',
+        '4. Rest other charges if any at actual as per receipt.',
+        '5. Above rates are valid for 3 days',
+        '6. THC:0.95/KG – ac actual',
+        '7. For Air cargo payment term will be 15 Days from the date of invoice.',
+        '8. Surcharges are at cost and subject to change. This rate QUOTED for prepaid shipment.',
+        '9. This rate is quote valid for 1.1 General cargo, Stackable and Normal dimension cargo.',
+        '10. This rate is not valid for DG/UB /ODC / Fragile/ Special cargo.',
+        '11. Acceptance of shipment would be subject to space availability at the time of booking .',
+        '12. EY reserves the right to select routing as per space availability',
+        '13. Spot rates offered are valid only for two days from the date of quotation.',
+        '14. Under current scenario rates are subject to change without prior notice .',
+        '15. Reduction in weight by more than 15% would lead to revision in ad Noc rates.'
+    ] : [
+        '1. Rates are valid as per vessel sailing.',
+        '2. Rates are subject to ACD, SEAL, GRI, PSS, Toll + Local Charges.',
+        '3. Rates are Subject to space and inventory availability.',
+        '4. Rates are Subject to cargo acceptance and Haz approval.',
+        '5. All Govt. taxes are applicable at the time of shipment (GST Applicable).',
+        '6. Booking cancellation charges will be applicable as per carrier guidelines for general & SPOT booking.',
+        '7. Rates are subject to THC as per tariff if container pick-up from ICD locations.',
+        '8. Rates are subject to Standard free time and for additional free time charges will be applicable.',
+        '9. Rates are subject to POL - THC, Documentation charges and local charges, as per Tariff.',
+        '10. SPOT rates are subject to change at the time of booking.'
+    ];
+    const special = String(specialRemark||'').trim();
+    const specialRow = special ? `<tr><td class="special-remark-inline" style="border:1px solid #d1d5db;padding:${tdPadding};background:#fff;color:#dc2626;font-weight:800;font-size:${baseFont};line-height:1.4;white-space:nowrap;text-transform:uppercase;text-align:left;">SPECIAL REMARK: ${mcEsc(special.toUpperCase())}</td></tr>` : '';
+    const list=standard.map(x=>`<p style="margin:2px 0;font-size:${baseFont};line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:clip;">${mcEsc(x)}</p>`).join('');
+    return `<table class="pdf-remarks-table" style="width:${tableWidth};border-collapse:collapse;font-size:${baseFont};margin-top:8px;table-layout:fixed;"><tbody><tr><th class="pdf-remarks-heading" style="border:1px solid #1e3a8a;padding:${tdPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.2;vertical-align:middle;height:auto;white-space:nowrap;">Remarks</th></tr>${specialRow}<tr><td style="border:1px solid #d1d5db;padding:${tdPadding};background:#fff;font-size:${baseFont};line-height:1.25;vertical-align:top;white-space:normal;">${list}</td></tr></tbody></table>`;
+}
+
+/* SHAHID_FINAL_SIZE_CONSTANTS */
+/* SHAHID_FINAL_SIZE_CONSTANTS */
+const SHAHID_SIZE = Object.freeze({
+  rateRequestTable: '15cm',
+  rateRequestOuter: '17cm',
+  quote: '22cm',
+  previewQuote: '24cm',
+  pdfUsableWidth: '220mm',
+  pdfMargin: '5mm',
+  sectionGap: '10px'
+});
+function shahidQuoteTableStyle(extra=''){
+  return `width:100%;min-width:0;max-width:${SHAHID_SIZE.quote};box-sizing:border-box;margin-left:auto;margin-right:auto;${extra}`;
+}
+function shahidRateRequestTableStyle(extra=''){
+  return `width:${SHAHID_SIZE.rateRequestTable};min-width:${SHAHID_SIZE.rateRequestTable};max-width:${SHAHID_SIZE.rateRequestTable};box-sizing:border-box;margin-left:auto;margin-right:auto;${extra}`;
+}
+
+
+/* V20 — LEGACY SPECIAL REMARK */
+// Preview Special Remark: red header, pale-red body, uppercase content, separate table.
+function buildPreviewHTML(data,mode,maxWidth='100%',compact=false){
+    // CANONICAL QUOTATION VIEW:
+    // Preview / Print / PDF intentionally use the same table geometry as Copy Compact.
+    // Only the outer company/title header differs in non-compact Preview.
+    const modeLabel={sea:'SEA FREIGHT',air:'AIR FREIGHT',lcl:'LCL FREIGHT'}[mode]||'FREIGHT';
+    const carriers=mcOutputCarriers(data,mode);
+    const detail=mcBuildCustomerShipmentHTML(data,mode,carriers,true);
+    const baseFont='15px';
+    const headingSize='17px';
+    const titleFont='16px';
+    const thPadding='4px 8px';
+    const tdPadding='4px 8px';
+    const tableWidth=SHAHID_SIZE.quote;
+    const maxTableWidth=SHAHID_SIZE.quote;
+    const specialRemark=data.remarks&&String(data.remarks).trim()?String(data.remarks).trim().toUpperCase():'';
+    const remarksHtml=mcStandardRemarks(mode,baseFont,headingSize,tdPadding,tableWidth,specialRemark);
+    const chargeHtml=buildMultiCarrierChargeHTML(data,mode,true);
+    const sectionGap=shahidSectionGapHTML();
+
+    // The Preview itself must look like Copy Compact: same tables, same widths,
+    // same paddings, same section gaps, same remarks structure and no wrapping.
+    const tablesOnly=`${detail}${sectionGap}${chargeHtml}${sectionGap}${remarksHtml}`;
+
+    if(compact){
+        return `<div style="width:${tableWidth};max-width:${tableWidth};min-width:${tableWidth};margin:0 auto;font-family:'Aptos','Segoe UI',Arial,sans-serif;background:#fff;padding:4px;box-sizing:border-box;color:#1a1a1a;font-size:${baseFont};overflow:hidden;white-space:normal;">
+            <p style="margin:0 0 4px 0;font-size:${titleFont};line-height:1.4;white-space:nowrap;">Dear Sir / Madam,</p><br>
+            <p style="margin:0 0 10px 0;font-size:${titleFont};line-height:1.4;white-space:nowrap;">Good day !</p><br>
+            <div style="font-size:${titleFont};font-weight:800;color:#1e3a8a;white-space:nowrap;">${modeLabel} QUOTATION / Quote: ${mcEsc(data.quoteNumber||'DRAFT')}</div><br>
+            ${tablesOnly}
+        </div>`;
+    }
+
+    const userName=getLoggedInUserName()||db.defaultUser||'N/A';
+    return `<div id="preview-content-container" style="width:${tableWidth};min-width:${tableWidth};max-width:${tableWidth};background:#fff;color:#1a1a1a;font-family:'Aptos','Segoe UI',Arial,sans-serif;margin:0 auto;padding:5px;box-sizing:border-box;overflow:hidden;">
+        <div style="border-bottom:2px solid #1e3a8a;padding-bottom:6px;margin-bottom:8px;">
+            <div style="font-size:0.9rem;font-weight:700;color:#1e3a8a;white-space:nowrap;">${mcEsc(db.companyName||'GATEWAY EXIM')}</div>
+            <div style="font-size:0.65rem;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:clip;">${mcEsc(db.companyAddress||'')}</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+            <div style="text-align:left;white-space:nowrap;"><div style="font-size:${titleFont};color:#1e3a8a;font-weight:800;letter-spacing:1px;white-space:nowrap;">${modeLabel} QUOTATION</div></div>
+            <div style="text-align:right;white-space:nowrap;"><div style="font-family:'Courier New',monospace;color:#d97706;font-weight:700;font-size:0.85rem;background:#fffbeb;padding:4px 10px;border-radius:4px;white-space:nowrap;">Quote No: ${mcEsc(data.quoteNumber||'DRAFT')}</div></div>
+        </div>
+        ${tablesOnly}
+        <div style="margin-top:8px;font-size:0.68rem;color:#64748b;text-align:center;border-top:1px solid #e2e8f0;padding-top:10px;white-space:nowrap;overflow:hidden;text-overflow:clip;">
+            <p style="margin:2px 0;white-space:nowrap;">This quotation is system-generated. Rates are subject to change based on validity date.</p>
+            <p style="margin:2px 0;white-space:nowrap;">Generated on ${new Date().toLocaleString('en-IN')}</p>
+            <div style="font-size:0.65rem;color:#64748b;margin-top:2px;white-space:nowrap;">Prepared By: ${mcEsc(userName)}</div>
+        </div>
+    </div>`;
+}
+
+function buildCompactEmailHTML(data, mode) {
+    // AIR/SEA/LCL all use the same canonical quotation renderer.
+    // AIR renderer follows the legacy AIR unit-rate + basis + final-INR logic.
+    const carrierCount = shahidCarrierList(data).length;
+    const html = buildPreviewHTML(data, mode, SHAHID_SIZE.quote, true);
+    const finalHtml = normalizeQuotationOutputHTML(html, mode);
+    return `<div class="quote-output" data-carrier-count="${carrierCount}" style="width:100%;max-width:${SHAHID_SIZE.quote};min-width:0;margin:0 auto;box-sizing:border-box;">${finalHtml}</div>`;
+}
+
+// Persist all selected carrier rate sets when a quote/draft is saved.
+function upsertCarrierCharges(mode,data){
+    if(!Array.isArray(data.carrierRates)) return;
+    const pol=data.pol||'', container=data.container||'', commodity=data.commodity||'';
+    data.carrierRates.forEach((cr,idx)=>{
+        if(!cr.carrier) return;
+        if(mode==='air'){
+            const arr=db.carrierChargesAir||[];
+            const i=arr.findIndex(c=>String(c.carrier||'').toUpperCase()===String(cr.carrier).toUpperCase()&&String(c.pol||'').toUpperCase()===String(pol).toUpperCase()&&String(c.commodity||'').toUpperCase()===String(commodity).toUpperCase());
+            const entry={carrier:cr.carrier,pol,commodity,charges:cr.charges||{},updated:new Date().toISOString()};
+            if(i>=0)arr[i]=entry;else arr.push(entry);
+        }else{
+            const arr=db.carrierChargesSeaLcl||[];
+            const i=arr.findIndex(c=>c.mode===mode&&String(c.carrier||'').toUpperCase()===String(cr.carrier).toUpperCase()&&String(c.pol||'').toUpperCase()===String(pol).toUpperCase()&&(c.container||'')===container&&String(c.commodity||'').toUpperCase()===String(commodity).toUpperCase());
+            const entry={mode,carrier:cr.carrier,pol,container,commodity,charges:cr.charges||{},updated:new Date().toISOString()};
+            if(i>=0)arr[i]=entry;else arr.push(entry);
+        }
+    });
+}
+window.upsertCarrierCharges=upsertCarrierCharges;
+
+
+/* ============================================================================
+   V6 CRITICAL FIXES 5, 6, 8, 9, 10
+   - Preserve all carrier values during add/reorder/remove.
+   - Keep one deterministic multi-carrier renderer.
+   - Persist each selected carrier independently.
+   ============================================================================ */
+(function(){
+  function mcCurrentOrder(mode){
+    return (typeof getCurrentChargesOrder==='function') ? getCurrentChargesOrder(mode) : (chargesOrder[mode] || {});
+  }
+  function mcSnapshot(mode){
+    return window.__multiCollectGridData ? window.__multiCollectGridData(mode) : {arrays:[{},{},{}]};
+  }
+  function mcRender(mode, arrays, order){
+    if(typeof window.buildChargesGrid==='function') window.buildChargesGrid(mode, arrays, order, {arrays:arrays});
+  }
+  window.moveChargeToCategory=function(mode, charge, fromCategory, toCategory){
+    const order=mcCurrentOrder(mode);
+    const snap=mcSnapshot(mode);
+    if(fromCategory && order[fromCategory]) order[fromCategory]=order[fromCategory].filter(c=>c!==charge);
+    if(!order[toCategory]) order[toCategory]=[];
+    if(!order[toCategory].includes(charge)) order[toCategory].push(charge);
+    chargesOrder[mode]=order;
+    mcRender(mode,snap.arrays,order);
+  };
+  window.moveChargeBefore=function(mode, charge, fromCategory, targetCharge, targetCategory){
+    const order=mcCurrentOrder(mode);
+    const snap=mcSnapshot(mode);
+    if(fromCategory && order[fromCategory]) order[fromCategory]=order[fromCategory].filter(c=>c!==charge);
+    if(!order[targetCategory]) order[targetCategory]=[];
+    const idx=order[targetCategory].indexOf(targetCharge);
+    if(idx>=0) order[targetCategory].splice(idx,0,charge);
+    else order[targetCategory].push(charge);
+    chargesOrder[mode]=order;
+    mcRender(mode,snap.arrays,order);
+  };
+  window.handleDropRow=function(e,mode,targetCharge){
+    e.preventDefault();
+    const row=e.target.closest('.charge-row');
+    if(row) row.classList.remove('drag-over-row');
+    const drag=window.dragData || dragData;
+    if(!drag?.charge || drag.mode!==mode || drag.charge===targetCharge) return;
+    const targetRow=document.querySelector(`#${mode}-charges-grid .charge-row[data-charge="${CSS.escape(targetCharge)}"]`);
+    const targetCategory=targetRow?.getAttribute('data-category') || '';
+    window.moveChargeBefore(mode,drag.charge,drag.sourceCategory,targetCharge,targetCategory);
+    window.dragData={mode:null,charge:null,sourceCategory:null};
+  };
+  window.removeChargeRow=function(mode,charge){
+    const snap=mcSnapshot(mode);
+    const order=mcCurrentOrder(mode);
+    Object.keys(order).forEach(cat=>{ order[cat]=(order[cat]||[]).filter(c=>c!==charge); });
+    chargesOrder[mode]=order;
+    snap.arrays.forEach(a=>{if(a) delete a[charge];});
+    mcRender(mode,snap.arrays,order);
+  };
+  // Replace the existing Add button listener so it cannot execute the legacy listener too.
+  const addBtn=document.getElementById('addChargeSaveBtn');
+  if(addBtn){
+    const fresh=addBtn.cloneNode(true); addBtn.parentNode.replaceChild(fresh,addBtn);
+    fresh.addEventListener('click',function(){
+      const mode=currentAddChargeMode;
+      const name=document.getElementById('new-charge-name')?.value.trim().toUpperCase();
+      if(!name) return alert('Enter charge name');
+      const grid=document.getElementById(`${mode}-charges-grid`);
+      if(grid?.querySelector(`.charge-row[data-charge="${CSS.escape(name)}"]`)) return alert('Charge exists!');
+      const snap=mcSnapshot(mode);
+      snap.arrays[0][name]={
+        amount:document.getElementById('new-charge-sell-amt')?.value||'',
+        currency:document.getElementById('new-charge-sell-cur')?.value||'INR',
+        buyAmount:document.getElementById('new-charge-buy-amt')?.value||'',
+        buyCurrency:document.getElementById('new-charge-buy-cur')?.value||'INR',
+        basis:'Normal'
+      };
+      const order=mcCurrentOrder(mode);
+      const target=Object.keys(order).pop() || 'Other Charges';
+      if(!order[target]) order[target]=[];
+      order[target].push(name);
+      chargesOrder[mode]=order;
+      if(!defaultCharges[mode].includes(name)) defaultCharges[mode].push(name);
+      mcRender(mode,snap.arrays,order);
+      closeModal('addChargeModal');
+    });
+  }
+  // Make save paths explicitly use the current multi-carrier implementations.
+  const multiUpdate=window.updateRateSheetFromQuote;
+  window.updateRateSheetFromQuote=function(data,mode){
+    if(!data || !Array.isArray(data.carrierRates) || !Array.isArray(db.rateSheet)) return;
+    const now=new Date().toISOString(), today=now.slice(0,10);
+    const isSeaContainerMode = mode==='sea' && data.comparisonMode==='container';
+    const selectedContainers = isSeaContainerMode && Array.isArray(data.comparisonContainers)
+      ? data.comparisonContainers.slice(0,3)
+      : [data.container||'', data.container||'', data.container||''];
+    const rows=[];
+
+    data.carrierRates.slice(0,3).forEach((cr,idx)=>{
+      if(!cr?.carrier) return;
+      const key=mode==='air'?'AIR FREIGHT':'FREIGHT';
+      const freight=cr.charges?.[key];
+      if(!freight) return;
+      const amount=Number(freight.buyAmount)||0;
+      if(amount<=0) return;
+      const currency=String(freight.buyCurrency||freight.currency||'INR').toUpperCase();
+      const container=String(selectedContainers[idx]||'').trim();
+      // In container-comparison mode, a blank C2/C3 must NEVER create or retain a rate-sheet row.
+      if(isSeaContainerMode && idx>0 && !container) return;
+      if(mode==='sea' && !container) return;
+
+      const carrier=String(cr.carrier).trim();
+      const freightType=mode.toUpperCase();
+      const pol=String(data.pol||'').trim();
+      const pod=String(data.pod||'').trim();
+      const commodity=String(data.commodity||'').trim();
+      const match= db.rateSheet.find(r =>
+        String(r.carrierName||'').trim().toUpperCase()===carrier.toUpperCase() &&
+        String(r.freightType||'').toUpperCase()===freightType &&
+        String(r.pol||'').trim().toUpperCase()===pol.toUpperCase() &&
+        String(r.pod||'').trim().toUpperCase()===pod.toUpperCase() &&
+        String(r.containerType||'').trim().toUpperCase()===container.toUpperCase() &&
+        String(r.currency||'').toUpperCase()===currency
+      );
+      const rec={
+        carrierName:carrier, freightType, pol, pod, containerType:container,
+        currency, freightAmount:amount,
+        transitTime:data.transit?`${data.transit} days`:'',
+        validFrom:data.validFrom||today,
+        validTo:data.validityDate||'',
+        commodity,
+        remarks:`Auto-saved from quote ${data.quoteNumber||'N/A'}`,
+        updatedAt:now, source:'quote', quoteNumber:data.quoteNumber
+      };
+      if(match){
+        Object.assign(match,rec);
+        rows.push('updated');
+      }else{
+        db.rateSheet.push({id:'RS-'+Date.now()+'-'+idx+'-'+Math.random().toString(36).slice(2,8),createdAt:now,...rec});
+        rows.push('added');
+      }
+    });
+    if(rows.length) saveDB();
+  };
+  window.upsertCarrierCharges=function(mode,data){
+    if(!data || !Array.isArray(data.carrierRates)) return;
+    const pol=data.pol||'', container=data.container||'', commodity=data.commodity||'', now=new Date().toISOString();
+    data.carrierRates.slice(0,3).forEach(cr=>{
+      if(!cr?.carrier) return;
+      const charges=cr.charges||{};
+      if(mode==='air'){
+        const arr=db.carrierChargesAir || (db.carrierChargesAir=[]);
+        const i=arr.findIndex(c=>String(c.carrier||'').toUpperCase()===String(cr.carrier).toUpperCase() && String(c.pol||'').toUpperCase()===String(pol).toUpperCase() && String(c.commodity||'').toUpperCase()===String(commodity).toUpperCase());
+        const entry={carrier:cr.carrier,pol,commodity,charges,updated:now};
+        if(i>=0) arr[i]=entry; else arr.push(entry);
+      }else{
+        const arr=db.carrierChargesSeaLcl || (db.carrierChargesSeaLcl=[]);
+        const i=arr.findIndex(c=>c.mode===mode && String(c.carrier||'').toUpperCase()===String(cr.carrier).toUpperCase() && String(c.pol||'').toUpperCase()===String(pol).toUpperCase() && String(c.container||'')===String(container) && String(c.commodity||'').toUpperCase()===String(commodity).toUpperCase());
+        const entry={mode,carrier:cr.carrier,pol,container,commodity,charges,updated:now};
+        if(i>=0) arr[i]=entry; else arr.push(entry);
+      }
+    });
+    saveDB();
+  };
+})();
+
+
+/* ============================================================================
+   V7 FIXES 11, 12, 14, 17
+   - Remove duplicate HTML IDs without breaking legacy/mobile copies.
+   - Guarantee a single Email modal.
+   - Preserve dynamically-added charges in output.
+   - Include multi-carrier quote data and carrier charge masters in SQLite.
+   ============================================================================ */
+(function(){
+  function syncDuplicateElement(first, dup){
+    if(!first || !dup) return;
+    const copy = () => {
+      if ('value' in first && 'value' in dup) dup.value = first.value;
+      if ('checked' in first && 'checked' in dup) dup.checked = first.checked;
+      if (first.tagName === 'SELECT' && dup.tagName === 'SELECT') dup.selectedIndex = first.selectedIndex;
+      if (!['INPUT','SELECT','TEXTAREA'].includes(first.tagName)) {
+        if (dup.innerHTML !== first.innerHTML) dup.innerHTML = first.innerHTML;
+        if (dup.textContent !== first.textContent && first.children.length===0) dup.textContent = first.textContent;
+      }
+    };
+    copy();
+    return copy;
+  }
+
+  function normalizeDuplicateIds(){
+    const byId = new Map();
+    document.querySelectorAll('[id]').forEach(el=>{
+      const id=el.id;
+      if(!id) return;
+      if(!byId.has(id)) { byId.set(id,[el]); return; }
+      byId.get(id).push(el);
+    });
+    const mappings=[];
+    byId.forEach((els,id)=>{
+      if(els.length<2) return;
+      const first=els[0];
+      els.slice(1).forEach((dup,idx)=>{
+        const newId=`${id}__dup${idx+2}`;
+        dup.setAttribute('data-original-id',id);
+        dup.id=newId;
+        mappings.push({id,first,dup});
+      });
+    });
+    if(!mappings.length) return;
+
+    // Keep duplicate/secondary responsive copies synchronized with the canonical
+    // first element. Capture phase runs before inline onchange/oninput handlers.
+    document.addEventListener('input',e=>{
+      const id=e.target?.getAttribute?.('data-original-id') || e.target?.id;
+      const map=mappings.find(m=>m.id===id && (m.first===e.target || m.dup===e.target));
+      if(!map) return;
+      const source=e.target;
+      const targets=mappings.filter(m=>m.id===id).map(m=>m.first===source?m.dup:m.first);
+      targets.forEach(t=>{ if('value' in source && 'value' in t) t.value=source.value; if('checked' in source && 'checked' in t) t.checked=source.checked; });
+    },true);
+    document.addEventListener('change',e=>{
+      const id=e.target?.getAttribute?.('data-original-id') || e.target?.id;
+      const map=mappings.find(m=>m.id===id && (m.first===e.target || m.dup===e.target));
+      if(!map) return;
+      const source=e.target;
+      mappings.filter(m=>m.id===id).forEach(m=>{
+        const t=m.first===source?m.dup:m.first;
+        if('value' in source && 'value' in t) t.value=source.value;
+        if('checked' in source && 'checked' in t) t.checked=source.checked;
+        if(source.tagName==='SELECT' && t.tagName==='SELECT') t.selectedIndex=source.selectedIndex;
+      });
+    },true);
+
+    // Mirror rendered output from canonical elements to their secondary copies.
+    mappings.forEach(m=>{
+      const sync=syncDuplicateElement(m.first,m.dup);
+      if(typeof MutationObserver!=='undefined'){
+        const obs=new MutationObserver(()=>sync&&sync());
+        obs.observe(m.first,{subtree:true,childList:true,characterData:true,attributes:true});
+      }
+    });
+    window.__duplicateIdMappings=mappings;
+  }
+
+  function ensureSingleEmailModal(){
+    const modals=[...document.querySelectorAll('#emailModal,[data-original-email-modal="emailModal"]')];
+    if(modals.length<=1) return;
+    modals.slice(1).forEach(m=>m.remove());
+  }
+
+  // DOM is already parsed because script.js is loaded at the end of body.
+  normalizeDuplicateIds();
+  ensureSingleEmailModal();
+})();
+
+
+/* ============================================================================
+   V7 FIXES — 18, 19, 20, 21
+   18: prevent duplicate carrier selection
+   19: never silently fall back to exchange rate 1 for unknown currencies
+   20: safe custom charge-name validation / DOM attribute protection
+   21: robust rich/plain clipboard handling
+   ============================================================================ */
+(function(){
+    const modes=['sea','air','lcl'];
+    const state=window.__validatedCarrierState=window.__validatedCarrierState||{};
+
+    function names(mode){
+        return [0,1,2].map(i=>{
+            const id=i===0?`${mode}-carrier`:`${mode}-carrier-${i+1}`;
+            return String(document.getElementById(id)?.value||'').trim().toUpperCase();
+        });
+    }
+    function restore(mode, vals){
+        [0,1,2].forEach(i=>{
+            const id=i===0?`${mode}-carrier`:`${mode}-carrier-${i+1}`;
+            const el=document.getElementById(id); if(el) el.value=vals[i]||'';
+        });
+        if(typeof updateCarrierHeaders==='function') updateCarrierHeaders(mode, vals);
+    }
+    function validate(mode, changedIndex){
+        const current=names(mode);
+        const previous=state[mode]?.names || ['','',''];
+        const value=current[changedIndex];
+        if(value && current.some((v,i)=>i!==changedIndex && v && v===value)){
+            restore(mode, previous);
+            alert(`Carrier already selected: ${value}. Please select a different carrier.`);
+            return false;
+        }
+        state[mode]={names:current};
+        return true;
+    }
+
+    modes.forEach(mode=>{ state[mode]={names:names(mode)}; });
+
+    // Wrap the existing inline-handler entry points rather than adding extra
+    // DOM listeners. This avoids double-rendering because the HTML already has
+    // onchange/oninput handlers for these fields.
+    const originalCarrierChange=window.onCarrierChange;
+    const originalMultiCarrierChange=window.onMultiCarrierChange;
+    window.onCarrierChange=function(mode){
+        if(!validate(mode,0)) return;
+        if(typeof originalCarrierChange==='function') return originalCarrierChange(mode);
+    };
+    window.onMultiCarrierChange=function(mode){
+        const current=names(mode);
+        const previous=state[mode]?.names || ['','',''];
+        const changedIndex=current.findIndex((v,i)=>v!==previous[i]);
+        const idx=changedIndex<0?1:changedIndex;
+        if(!validate(mode,idx)) return;
+        if(typeof originalMultiCarrierChange==='function') return originalMultiCarrierChange(mode);
+    };
+
+    // Safe HTML attribute helper available to future renderers.
+    window.mcAttr=function(v){
+        return String(v??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    };
+
+    window.__clipboardCapabilities={
+        rich: !!(navigator.clipboard?.write && window.ClipboardItem),
+        text: !!(navigator.clipboard?.writeText)
+    };
+})();
+
+/* ============================================================================
+   V8 FIXES — 22, 23, 24, 25
+   22: Local-file/runtime safety. Avoid file:// assumptions and surface the
+       supported HTTP/HTTPS runtime requirement without opening unsafe frames.
+   23: Single SQLite loader with an explicit locateFile() for sql-wasm.wasm.
+   24: Stronger client-side password storage (PBKDF2) with legacy SHA-256 read
+       compatibility; no plaintext password fallback for new/changed users.
+   25: One canonical ERP Quote Engine facade for quote state, rendering and
+       output. Existing public functions route through this facade.
+   ============================================================================ */
+(function ERP_V8_HARDENING(){
+    const MODES=['sea','air','lcl'];
+
+    // ---------- 22: runtime guard ----------
+    window.ERP_RUNTIME = Object.freeze({
+        protocol: location.protocol,
+        isLocalFile: location.protocol === 'file:',
+        isHttp: location.protocol === 'http:' || location.protocol === 'https:',
+        supportsClipboard: !!navigator.clipboard,
+        supportsWebCrypto: !!window.crypto?.subtle
+    });
+    function showLocalRuntimeNotice(){
+        if(!window.ERP_RUNTIME.isLocalFile || document.getElementById('erp-runtime-notice')) return;
+        const el=document.createElement('div');
+        el.id='erp-runtime-notice';
+        el.setAttribute('role','status');
+        el.style.cssText='position:fixed;left:50%;bottom:12px;transform:translateX(-50%);z-index:99999;background:#111827;color:#fff;border:1px solid #374151;border-radius:6px;padding:7px 12px;font:600 12px Arial,sans-serif;box-shadow:0 4px 18px rgba(0,0,0,.25);max-width:92vw;text-align:center;';
+        el.textContent='Local file mode: core ERP works, but browser security may restrict some backup/clipboard features. For full functionality run through HTTP/HTTPS.';
+        document.body.appendChild(el);
+        setTimeout(()=>el.remove(),10000);
+    }
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',showLocalRuntimeNotice,{once:true});
+    else showLocalRuntimeNotice();
+
+    // ---------- 23: guarantee one SQLite initialization path ----------
+    window.ERPQuoteEngine = window.ERPQuoteEngine || {};
+    window.ERPQuoteEngine.sqlite = {
+        init: () => initSQLite(),
+        ready: () => !!window.__ERP_SQLITE_READY,
+        export: () => exportToSQLite(),
+        import: input => importFromSQLite(input)
+    };
+
+    // ---------- 24: session hardening ----------
+    const originalCheckLogin = window.checkLogin;
+    window.checkLogin = function(){
+        const user = typeof originalCheckLogin==='function' ? originalCheckLogin() : null;
+        if(!user) return null;
+        try{
+            const raw=sessionStorage.getItem(AUTH_CONFIG.sessionKey);
+            if(!raw) return null;
+            const stored=JSON.parse(raw);
+            const dbUser=(db.users||[]).find(u=>String(u.id).toLowerCase()===String(stored.id).toLowerCase());
+            if(!dbUser){ performLogout(false); return null; }
+            // Session permissions are refreshed from the current DB user so a
+            // permission change takes effect without trusting stale session data.
+            const refreshed=normalizeUser(dbUser);
+            sessionStorage.setItem(AUTH_CONFIG.sessionKey,JSON.stringify(refreshed));
+            return refreshed;
+        }catch(e){ sessionStorage.removeItem(AUTH_CONFIG.sessionKey); return null; }
+    };
+
+    // ---------- 25: canonical quote engine facade ----------
+    const engine={
+        version:'8.0',
+        modes:MODES.slice(),
+        names(mode){
+            const ids=[`${mode}-carrier`,`${mode}-carrier-2`,`${mode}-carrier-3`];
+            return ids.map(id=>String(document.getElementById(id)?.value||'').trim()).filter(Boolean);
+        },
+        collect(mode){
+            const fn=window.__multiGetFormData || window.getFormData;
+            if(typeof fn!=='function') throw new Error('Quote data collector is unavailable.');
+            return fn(mode);
+        },
+        render(mode){
+            if(typeof window.buildChargesGrid!=='function') throw new Error('Quote grid renderer is unavailable.');
+            const data=window.__multiCollectGridData ? window.__multiCollectGridData(mode) : null;
+            const order=typeof getCurrentChargesOrder==='function' ? getCurrentChargesOrder(mode) : chargesOrder[mode];
+            return window.buildChargesGrid(mode,data?.arrays||[{},{},{}],order,{arrays:data?.arrays||[{},{},{}]});
+        },
+        preview(data,mode,compact=false){
+            const fn=window.buildPreviewHTML;
+            if(typeof fn!=='function') throw new Error('Quote output renderer is unavailable.');
+            return fn(data,mode,'100%',compact);
+        },
+        compact(data,mode){ return this.preview(data,mode,true); },
+        validate(data,mode){
+            if(!data) return {ok:false,reason:'No quote data.'};
+            if(!MODES.includes(String(mode).toLowerCase())) return {ok:false,reason:'Unsupported quote mode.'};
+            const carriers=Array.isArray(data.carrierRates)?data.carrierRates.filter(c=>c?.carrier):[];
+            if(carriers.length>3) return {ok:false,reason:'Maximum 3 carriers are supported.'};
+            const seen=new Set();
+            for(const c of carriers){ const key=String(c.carrier).trim().toUpperCase(); if(seen.has(key)) return {ok:false,reason:`Duplicate carrier: ${key}`}; seen.add(key); }
+            return {ok:true,carriers:carriers.length};
+        },
+        save(data,mode){
+            const v=this.validate(data,mode); if(!v.ok) throw new Error(v.reason);
+            if(typeof window.upsertCarrierCharges==='function') window.upsertCarrierCharges(mode,data);
+            if(typeof window.updateRateSheetFromQuote==='function') window.updateRateSheetFromQuote(data,mode);
+            return true;
+        }
+    };
+    window.ERPQuoteEngine=Object.assign(window.ERPQuoteEngine,engine);
+
+    // Public APIs now point to the same canonical functions. Capture the
+    // existing renderer BEFORE replacing the public reference to avoid recursion.
+    window.getQuoteEngine=()=>window.ERPQuoteEngine;
+    const canonicalPreview = window.__ERP_CANONICAL_PREVIEW || window.buildPreviewHTML;
+    window.__ERP_CANONICAL_PREVIEW = canonicalPreview;
+    window.getFormData=function(mode){ return window.ERPQuoteEngine.collect(mode); };
+    window.buildPreviewHTML=function(data,mode,maxWidth='100%',compact=false){
+        if(typeof canonicalPreview==='function') return canonicalPreview(data,mode,maxWidth,compact);
+        throw new Error('Quote preview renderer is unavailable.');
+    };
+
+    // A lightweight health check is available from the console and can be used
+    // before shipping a build. It does not modify application data.
+    window.ERP_HEALTH_CHECK=function(){
+        const result={
+            runtime:window.ERP_RUNTIME,
+            sqliteReady:!!window.__ERP_SQLITE_READY,
+            crypto:!!window.crypto?.subtle,
+            quoteEngine:!!window.ERPQuoteEngine,
+            grid:typeof window.buildChargesGrid==='function',
+            preview:typeof window.__ERP_CANONICAL_PREVIEW==='function',
+            modes:MODES.map(m=>({mode:m,carriers:window.ERPQuoteEngine.names(m)}))
+        };
+        console.table(result.modes||[]);
+        return result;
+    };
+})();
+
+// ==================== GLOBAL CLEAR -> REFRESH SYNC ====================
+// After any Clear/Reset action, refresh the affected UI so stale rows, totals,
+// badges and lists are not left visible. This intentionally does not alter
+// existing clear logic; it only refreshes after the existing handler finishes.
+(function installClearRefreshSync(){
+    if (window.__clearRefreshSyncInstalled) return;
+    window.__clearRefreshSyncInstalled = true;
+
+    function safe(fn){
+        try { if (typeof fn === 'function') fn(); } catch (e) { console.warn('Clear refresh skipped:', e); }
+    }
+
+    function refreshAfterClear(button){
+        const active = document.querySelector('.tab-panel.active');
+        const tabId = active ? active.id : '';
+
+        // Quote tabs: rebuild the current mode immediately so cleared values,
+        // carrier columns, totals and green SELL inputs are visually refreshed.
+        if (tabId === 'sea' || tabId === 'air' || tabId === 'lcl') {
+            safe(() => window.buildChargesGrid && window.buildChargesGrid(tabId));
+            safe(() => typeof setValidityDefault === 'function' && setValidityDefault(tabId));
+            safe(() => typeof updateQuoteActionButtons === 'function' && updateQuoteActionButtons(tabId));
+        }
+
+        // Refresh the current tab's data/list renderer where available.
+        safe(() => typeof refreshCurrentTab === 'function' && refreshCurrentTab());
+
+        // Refresh the newer reporting/exception/action modules without changing
+        // their state. These calls are defensive and only run when functions exist.
+        safe(() => typeof refreshAllV11 === 'function' && refreshAllV11());
+        safe(() => typeof renderActionCenter === 'function' && renderActionCenter());
+        safe(() => typeof renderAlertCenter === 'function' && renderAlertCenter());
+        safe(() => typeof renderDashboard === 'function' && tabId === 'dashboard' && renderDashboard());
+
+        // Update global navigation/badges if the current build provides them.
+        safe(() => typeof updateActionCenterBadge === 'function' && updateActionCenterBadge());
+        safe(() => typeof updateAlertBadge === 'function' && updateAlertBadge());
+    }
+
+    document.addEventListener('click', function(e){
+        const button = e.target && e.target.closest ? e.target.closest('button') : null;
+        if (!button) return;
+        if (!button.classList.contains('btn-clear') && !button.classList.contains('alert-clear-btn')) return;
+
+        // Existing inline/on-click clear handler runs first on the button.
+        // Queue refresh after it has completed so the UI reflects the cleared state.
+        setTimeout(() => refreshAfterClear(button), 0);
+    }, false);
+})();
+
+// Remove any legacy standalone "Dark" button while preserving the requested "Dark Mode" button.
+document.addEventListener('DOMContentLoaded', function(){
+    document.querySelectorAll('button').forEach(btn=>{
+        const t=(btn.textContent||'').trim();
+        if(t==='🌙 Dark' || t==='Dark') btn.remove();
+    });
+});
+
+document.addEventListener('change', function(e){
+    if(e.target?.id==='dsr-etd'){ applyDsrCutoffDefaults(true); }
+});
+
+
+window.DEBUG_QUOTE_CARRIERS = function(mode){
+    try{
+        const data = (window.__multiGetFormData || window.getFormData)(mode);
+        const carriers = Array.isArray(data?.carrierRates)
+            ? data.carrierRates.filter(x => x && x.carrier).map(x => x.carrier)
+            : [];
+        console.log(`[QUOTE ${String(mode).toUpperCase()}] Selected carriers:`, carriers);
+        return carriers;
+    }catch(e){
+        console.error('Carrier diagnostic failed:', e);
+        return [];
+    }
+};
+
+
+/* ============================================================
+   SHAHID ERP V12 — MASTER OUTPUT GEOMETRY
+   ============================================================ */
+function shahidQuoteTableStyle(extra='') {
+  return `width:100%;min-width:0;max-width:${SHAHID_SIZE.quote};table-layout:fixed;box-sizing:border-box;margin-left:auto;margin-right:auto;${extra}`;
+}
+function shahidRateRequestTableStyle(extra='') {
+  return `width:${SHAHID_SIZE.rateRequestTable};min-width:${SHAHID_SIZE.rateRequestTable};max-width:${SHAHID_SIZE.rateRequestTable};table-layout:fixed;box-sizing:border-box;margin-left:auto;margin-right:auto;${extra}`;
+}
+function shahidSectionGapHTML() {
+  return `<div aria-hidden="true" style="height:${SHAHID_SIZE.sectionGap};line-height:${SHAHID_SIZE.sectionGap};font-size:0;">&nbsp;</div>`;
+}
+function shahidCarrierList(data) {
+  const out = [];
+  const add = v => {
+    if (v === undefined || v === null) return;
+    const s = String(v).trim();
+    if (s && !out.includes(s)) out.push(s);
+  };
+  if (Array.isArray(data?.carrierRates)) data.carrierRates.forEach(x => add(x?.carrier || x?.name));
+  if (Array.isArray(data?.selectedCarriers)) data.selectedCarriers.forEach(add);
+  if (Array.isArray(data?.carriers)) data.carriers.forEach(x => add(typeof x === 'string' ? x : (x?.carrier || x?.name)));
+  if (Array.isArray(data?.carrierNames)) data.carrierNames.forEach(add);
+  add(data?.carrier);
+  add(data?.carrier2);
+  add(data?.carrier3);
+  return out.slice(0,3);
+}
+
+
+function normalizeQuotationOutputHTML(rawHtml, mode='sea') {
+  if (!rawHtml) return '';
+  let html = String(rawHtml);
+
+  // Normalize quotation outer geometry to 22cm.
+  html = html.replace(/max-width:\s*(?:19cm|22cm|100%|200mm)/gi, `max-width:${SHAHID_SIZE.quote}`);
+  html = html.replace(/min-width:\s*(?:19cm|100%|200mm)/gi, `min-width:${SHAHID_SIZE.quote}`);
+  html = html.replace(/width:\s*(?:19cm|22cm|100%|200mm)/gi, `width:${SHAHID_SIZE.quote}`);
+
+  // Prevent cell/header wrapping without changing content.
+  html = html.replace(/<th\b([^>]*)>/gi, '<th$1 style="white-space:nowrap;">');
+  html = html.replace(/<td\b([^>]*)>/gi, '<td$1 style="white-space:nowrap;">');
+
+  // Insert consistent section gaps where separate tables are concatenated.
+  html = html.replace(/<\/table>\s*(?=<table\b)/gi, `</table>${shahidSectionGapHTML()}`);
+  return html;
+}
+
+/* ============================================================
+   V14 — FINAL TABLE GEOMETRY / RESPONSIVE PREVIEW
+   Text may wrap; table width must never grow.
+   Financial values stay single-line.
+   ============================================================ */
+function shahidFinalCellStyle(type='text') {
+  if (type === 'money' || type === 'currency' || type === 'carrier') {
+    return 'white-space:nowrap;overflow:visible;text-overflow:clip;';
+  }
+  return 'white-space:normal;overflow-wrap:anywhere;word-break:break-word;';
+}
+
+function shahidPreviewShell(innerHtml, mode='quote') {
+  const width = mode === 'rate-request' ? SHAHID_SIZE.rateRequestOuter : SHAHID_SIZE.quote;
+  return `<div class="${mode === 'rate-request' ? 'rate-request-output' : 'quote-output'}"
+      style="width:100%;max-width:${width};margin:0 auto;box-sizing:border-box;padding:0;background:#fff;">
+      ${innerHtml}
+    </div>`;
+}
+/* ============================================================
+   SHARED CARRIER-SPECIFIC CHARGES — SEA / AIR / LCL
+   Rule: CARRIER + HAZ/NON HAZ only. POL is intentionally excluded.
+   One carrier = max two records: HAZ + NON HAZ.
+   Same master is auto-used by SEA, AIR and LCL quotes.
+   SEA THC remains in db.seaTHCRates and is NOT stored here.
+   ============================================================ */
+(function(){
+  const SHARED_KEY = 'carrierSpecificCharges';
+  const SEA_KEYS = ['SEAL','MUC','DOCS','SEAWAY BL','ETS','HAZ DOCS','AMS'];
+  const FALLBACK_AIR = ['CARTAGE','MCC','XRAY','GATE PASS','ASI GMAX','AMS','PALLETISATION','LOADING & UNLOADING','DG FEES','DG AGENT FEE','PLY','REPACKING','AWB FEES','TEDI','ADD.SURCHARGE','TRANSPORATION','CUSTOM CLEARANCE','TERMINAL TRANSFER'];
+  const FALLBACK_LCL = ['CFS','CLEARANCE','DOCS','SEAL','MUC','SEAWAY BL','AMS','VGM','TOLL','LOLO','LASHING & CHOKING','ON WHEEL','OTHER LOCALS'];
+
+  function norm(v){ return String(v ?? '').trim().replace(/\s+/g,' ').toUpperCase(); }
+  function esc(v){ return typeof mcEsc==='function' ? mcEsc(v) : String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+  function modeOf(type){ return type==='air'?'air':type==='lcl'?'lcl':'sea'; }
+  function modeColumns(mode){
+    if(mode==='sea') return SEA_KEYS.slice();
+    if(mode==='air') {
+      try { if(typeof getHorizontalChargeColumns==='function') return getHorizontalChargeColumns('air').filter(k=>!/^THC/i.test(k)); } catch(e){}
+      return FALLBACK_AIR.slice();
+    }
+    try { if(typeof getHorizontalChargeColumns==='function') return getHorizontalChargeColumns('lcl').filter(k=>!/^THC/i.test(k)); } catch(e){}
+    return FALLBACK_LCL.slice();
+  }
+  function allColumns(){ return [...new Set(['SEAL','MUC','DOCS','SEAWAY BL','ETS','HAZ DOCS','AMS',...FALLBACK_AIR,...FALLBACK_LCL])]; }
+
+  function ensure(){
+    if(!Array.isArray(db[SHARED_KEY])) db[SHARED_KEY]=[];
+    // One-time migration from legacy carrier charge masters. Keep legacy arrays intact.
+    if(!db.__sharedCarrierMigratedV1){
+      const grouped = new Map();
+      const add = (rec)=>{
+        if(!rec || !rec.carrier) return;
+        const carrier=norm(rec.carrier).replace(/\s+\(COPY\)$/,'');
+        const cargo=norm(rec.commodity)||'NON HAZ';
+        if(!carrier || !['HAZ','NON HAZ'].includes(cargo)) return;
+        const key=carrier+'|'+cargo;
+        if(!grouped.has(key)) grouped.set(key,{carrier:rec.carrier.replace(/\s+\(COPY\)$/,''),commodity:cargo,charges:{},validFrom:rec.validFrom||'',validTo:rec.validTo||'',updated:rec.updated||rec.updatedAt||''});
+        const out=grouped.get(key);
+        Object.entries(rec.charges||{}).forEach(([k,v])=>{
+          if(/^THC(?:_|$)/i.test(k)) return;
+          if(!v || (Number(v.amount)||0)<=0 && (Number(v.buyAmount)||0)<=0) return;
+          const stamp=new Date(rec.updated||rec.updatedAt||0).getTime()||0;
+          const oldStamp=new Date(out.__stamps?.[k]||0).getTime()||0;
+          if(!out.charges[k] || stamp>=oldStamp){
+            out.charges[k]={...v};
+            out.__stamps=out.__stamps||{}; out.__stamps[k]=rec.updated||rec.updatedAt||'';
+          }
+        });
+      };
+      (db.carrierChargesSeaLcl||[]).forEach(add);
+      (db.carrierChargesAir||[]).forEach(add);
+      grouped.forEach(r=>{ delete r.__stamps; const existing=db[SHARED_KEY].find(x=>norm(x.carrier)===norm(r.carrier)&&norm(x.commodity)===norm(r.commodity)); if(!existing) db[SHARED_KEY].push(r); });
+      db.__sharedCarrierMigratedV1=true;
+      try{ saveDB(); }catch(e){}
+    }
+    // Normalize and enforce HAZ/NON HAZ values.
+    db[SHARED_KEY]=db[SHARED_KEY].filter(r=>r&&r.carrier).map(r=>({...r,carrier:String(r.carrier).trim(),commodity:['HAZ','NON HAZ'].includes(norm(r.commodity))?norm(r.commodity):'NON HAZ',charges:r.charges||{}}));
+  }
+
+  function find(carrier,commodity){
+    ensure();
+    return db[SHARED_KEY].find(r=>norm(r.carrier)===norm(carrier)&&norm(r.commodity)===norm(commodity));
+  }
+  function carrierOptions(selected=''){ return `<option value="">Select Carrier</option>`+(db.carriers||[]).map(c=>`<option value="${esc(c)}" ${norm(c)===norm(selected)?'selected':''}>${esc(c)}</option>`).join(''); }
+  function cargoOptions(selected=''){ return `<option value="NON HAZ" ${norm(selected)==='NON HAZ'?'selected':''}>Non Haz</option><option value="HAZ" ${norm(selected)==='HAZ'?'selected':''}>Haz</option>`; }
+  function chargeRow(key,val){
+    const v=val||{};
+    return `<div class="shared-cc-row" data-charge-key="${esc(key)}" style="margin-bottom:8px;background:var(--bg);padding:8px;border-radius:5px;border:1px solid var(--border);">
+      <div style="font-weight:700;color:var(--primary);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;"><span>${esc(key)}</span><button type="button" class="btn btn-sm btn-clear" style="height:22px;padding:2px 6px;" onclick="this.closest('.shared-cc-row').remove()">×</button></div>
+      <div style="display:grid;grid-template-columns:1fr 100px 1fr 100px;gap:19px;align-items:end;">
+        <div class="form-group"><label>Sell Amount</label><input type="number" step="0.01" class="shared-cc-sell" value="${v.amount??''}"></div>
+        <div class="form-group"><label>Sell Currency</label><select class="shared-cc-sell-cur">${getCurrencyOptions(v.currency||'INR')}</select></div>
+        <div class="form-group"><label>Buy Amount</label><input type="number" step="0.01" class="shared-cc-buy" value="${v.buyAmount??''}"></div>
+        <div class="form-group"><label>Buy Currency</label><select class="shared-cc-buy-cur">${getCurrencyOptions(v.buyCurrency||v.currency||'INR')}</select></div>
+      </div>
+    </div>`;
+  }
+
+  window.renderCarrierChargesMaster=function(type){
+    ensure();
+    const search=norm(document.getElementById(`cc-${type}-search`)?.value||'');
+    const disp=document.getElementById(`cc-${type}-master-table`); if(!disp)return;
+    const rows=db[SHARED_KEY].map((rec,idx)=>({rec,idx})).filter(x=>!search || `${norm(x.rec.carrier)} ${norm(x.rec.commodity)}`.includes(search));
+    let html=`<table class="master-table"><thead><tr><th style="width:30px;"><input type="checkbox" class="select-all-cc" data-type="${type}"></th><th>Carrier</th><th>Cargo</th><th>Charges</th><th>Updated</th><th>Action</th></tr></thead><tbody>`;
+    if(!rows.length) html+=`<tr><td colspan="6" style="text-align:center;padding:16px;color:var(--text-light);">No shared carrier records.</td></tr>`;
+    rows.forEach(({rec,idx})=>{
+      const count=Object.keys(rec.charges||{}).filter(k=>!/^THC(?:_|$)/i.test(k)).length;
+      const upd=rec.updated?new Date(rec.updated).toLocaleDateString('en-IN'):'—';
+      html+=`<tr><td><input type="checkbox" class="cc-checkbox" data-type="${type}" data-idx="${idx}"></td><td><strong>${esc(rec.carrier)}</strong></td><td>${esc(rec.commodity)}</td><td style="text-align:center;"><strong>${count}</strong></td><td>${upd}</td><td>
+      <button class="btn btn-sm btn-preview" onclick="previewCarrierCharge('${type}',${idx})">👁</button>
+      <button class="btn btn-sm btn-preview" onclick="openEditCarrierChargeModal('${type}',${idx})">✏️</button>
+      <button class="btn btn-sm btn-duplicate" onclick="duplicateCarrierCharge('${type}',${idx})">📋</button>
+      <button class="btn btn-sm btn-clear" onclick="deleteCarrierChargeEntry('${type}',${idx})">×</button></td></tr>`;
+    });
+    html+='</tbody></table>'; disp.innerHTML=html;
+    document.querySelectorAll(`.select-all-cc[data-type="${type}"]`).forEach(cb=>cb.addEventListener('change',function(){document.querySelectorAll(`.cc-checkbox[data-type="${type}"]`).forEach(c=>c.checked=this.checked); if(typeof updateSelectedCount==='function')updateSelectedCount();}));
+    document.querySelectorAll(`.cc-checkbox[data-type="${type}"]`).forEach(cb=>cb.addEventListener('change',()=>typeof updateSelectedCount==='function'&&updateSelectedCount()));
+  };
+
+  function openShared(type,idx){
+    ensure(); const mode=modeOf(type); const rec=idx===null?null:db[SHARED_KEY][idx];
+    if(idx!==null&&!rec)return alert('Record not found.');
+    const existing=rec?.charges||{}; const keys=Object.keys(existing).length?Object.keys(existing):modeColumns(mode);
+    const allowed=new Set(modeColumns(mode));
+    const visibleKeys=keys.filter(k=>allowed.has(k)||mode==='sea'&&SEA_KEYS.includes(k));
+    let html=`<h3 style="color:var(--primary);margin-bottom:12px;">${idx===null?'Add':'Edit'} Carrier-Specific Charge</h3>
+      <div class="form-grid-2col" style="gap:19px;"><div class="form-group"><label>Carrier</label><select id="shared-cc-carrier">${carrierOptions(rec?.carrier||'')}</select></div><div class="form-group"><label>Cargo</label><select id="shared-cc-cargo">${cargoOptions(rec?.commodity||'NON HAZ')}</select></div></div>
+      <div style="margin:12px 0 8px;font-weight:700;color:var(--primary);">Other Charges <span style="font-weight:400;color:#64748b;">(same carrier rate applies across all POLs)</span></div>
+      <div id="shared-cc-charges-list">${visibleKeys.map(k=>chargeRow(k,existing[k])).join('')}</div>
+      <div style="margin-top:10px;display:flex;gap:19px;align-items:end;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px;">
+        <div class="form-group" style="flex:1;min-width:180px;"><label>Add Charge</label><select id="shared-cc-add-charge">${modeColumns(mode).map(k=>`<option value="${esc(k)}">${esc(k)}</option>`).join('')}</select></div>
+        <button type="button" class="btn btn-success" style="height:33px;" onclick="addSharedCarrierChargeToModal()">+</button>
+      </div>
+      <div style="margin-top:16px;text-align:right;display:flex;gap:19px;justify-content:flex-end;"><button class="btn btn-clear" onclick="closeModal('previewModal')">Cancel</button><button class="btn btn-quoted" onclick="saveSharedCarrierCharge('${type}',${idx===null?'null':idx})">💾 Save</button></div>`;
+    document.getElementById('modal-title').textContent=`${idx===null?'Add':'Edit'} Carrier-Specific Charge`;
+    document.getElementById('previewBody').innerHTML=html; openModal('previewModal');
+  }
+  window.openAddCarrierChargeModal=function(type){ openShared(type,null); };
+  window.openEditCarrierChargeModal=function(type,idx){ openShared(type,idx); };
+  window.addSharedCarrierChargeToModal=function(){
+    const key=document.getElementById('shared-cc-add-charge')?.value; const list=document.getElementById('shared-cc-charges-list'); if(!key||!list)return;
+    if(list.querySelector(`[data-charge-key="${CSS.escape(key)}"]`))return alert('Charge already added.');
+    list.insertAdjacentHTML('beforeend',chargeRow(key,null));
+  };
+  window.saveSharedCarrierCharge=function(type,idx){
+    ensure(); const carrier=norm(document.getElementById('shared-cc-carrier')?.value); const cargo=norm(document.getElementById('shared-cc-cargo')?.value);
+    if(!carrier)return alert('Carrier is required.'); if(!['HAZ','NON HAZ'].includes(cargo))return alert('Cargo must be HAZ or NON HAZ.');
+    const otherIdx=db[SHARED_KEY].findIndex((r,i)=>i!==idx&&norm(r.carrier)===carrier&&norm(r.commodity)===cargo);
+    if(otherIdx>=0)return alert(`Duplicate entry: ${carrier} / ${cargo}. One carrier can have only HAZ + NON HAZ records.`);
+    const charges={}; document.querySelectorAll('#shared-cc-charges-list .shared-cc-row').forEach(row=>{const k=row.getAttribute('data-charge-key');const s=parseFloat(row.querySelector('.shared-cc-sell')?.value)||0;const b=parseFloat(row.querySelector('.shared-cc-buy')?.value)||0;const sc=row.querySelector('.shared-cc-sell-cur')?.value||'INR';const bc=row.querySelector('.shared-cc-buy-cur')?.value||sc;if(s>0||b>0)charges[k]={amount:s,currency:sc,buyAmount:b,buyCurrency:bc};});
+    if(!Object.keys(charges).length)return alert('Please add at least one charge with a value.');
+    const now=new Date().toISOString(); const rec={carrier:document.getElementById('shared-cc-carrier').value.trim(),commodity:cargo,charges,updated:now,createdAt:idx===null?now:(db[SHARED_KEY][idx]?.createdAt||now)};
+    if(idx===null)db[SHARED_KEY].push(rec);else db[SHARED_KEY][idx]=rec;
+    saveDB(); closeModal('previewModal'); renderCarrierChargesMaster(type); autoBackup(); alert(idx===null?'✅ Carrier-specific charge added.':'✅ Carrier-specific charge updated.');
+  };
+  window.deleteCarrierChargeEntry=function(type,idx){ ensure(); const rec=db[SHARED_KEY][idx]; if(!rec)return alert('Record not found.'); if(!confirm(`Delete ${rec.carrier} / ${rec.commodity} carrier-specific charges?`))return; db[SHARED_KEY].splice(idx,1); saveDB(); renderCarrierChargesMaster(type); autoBackup(); };
+  window.duplicateCarrierCharge=function(type,idx){ ensure(); const rec=db[SHARED_KEY][idx]; if(!rec)return alert('Record not found.'); let carrier=rec.carrier+' (Copy)'; let n=1; while(db[SHARED_KEY].some(r=>norm(r.carrier)===norm(carrier)&&norm(r.commodity)===norm(rec.commodity))){carrier=rec.carrier+' (Copy '+(++n)+')';} db[SHARED_KEY].push({...JSON.parse(JSON.stringify(rec)),carrier,updated:new Date().toISOString(),createdAt:new Date().toISOString()}); saveDB(); renderCarrierChargesMaster(type); autoBackup(); };
+  window.previewCarrierCharge=function(type,idx){ ensure(); const r=db[SHARED_KEY][idx]; if(!r)return alert('Record not found.'); let rows='';Object.entries(r.charges||{}).forEach(([k,v])=>{if(/^THC(?:_|$)/i.test(k))return;rows+=`<tr><td>${esc(k)}</td><td>${v.amount??'—'}</td><td>${v.currency||'INR'}</td><td>${v.buyAmount??'—'}</td><td>${v.buyCurrency||v.currency||'INR'}</td></tr>`;});document.getElementById('modal-title').textContent='Preview Carrier-Specific Charge';document.getElementById('previewBody').innerHTML=`<div class="preview-card"><h3>Carrier-Specific Charges</h3><div class="preview-grid"><div class="item"><span class="label">Carrier</span><span class="value">${esc(r.carrier)}</span></div><div class="item"><span class="label">Cargo</span><span class="value">${esc(r.commodity)}</span></div><div class="item"><span class="label">Coverage</span><span class="value">All POL / Locations</span></div></div></div><div class="preview-card"><table class="preview-charges-table"><thead><tr><th>Charge</th><th>Sell</th><th>Currency</th><th>Buy</th><th>Currency</th></tr></thead><tbody>${rows||'<tr><td colspan="5">No charges</td></tr>'}</tbody></table></div>`;openModal('previewModal'); };
+
+  // Unified quote lookup. Default charges remain mode/POL/Haz-specific; carrier-specific charges are shared.
+  function getSharedCarrierCharges(carrier,commodity,mode){
+    const rec=find(carrier,commodity); if(!rec)return {};
+    const allowed=new Set(modeColumns(mode)); const out={};
+    Object.entries(rec.charges||{}).forEach(([k,v])=>{if(/^THC(?:_|$)/i.test(k))return;if(allowed.has(k))out[k]={...v};});
+    return out;
+  }
+
+  window.__getSharedCarrierCharges=getSharedCarrierCharges;
+  window.__ensureSharedCarrierCharges=ensure;
+
+  // Replace the carrier/pol/container change handler with shared carrier matching.
+  window.legacy_onCarrierPolChangeInternal=function(mode){
+    const carrier=document.getElementById(`${mode}-carrier`)?.value||'';
+    const pol=document.getElementById(`${mode}-pol`)?.value||'';
+    const container=document.getElementById(`${mode}-container`)?.value||'';
+    const commodity=document.getElementById(`${mode}-commodity`)?.value||'';
+    if(!carrier){ if(typeof buildChargesGrid==='function')buildChargesGrid(mode); return; }
+
+    const existingValues={};
+    document.querySelectorAll(`#${mode}-charges-grid .charge-row`).forEach(row=>{
+      const charge=row.getAttribute('data-charge'); const safe=charge.replace(/[^A-Z0-9]/gi,'_');
+      const sellEl=document.getElementById(`${mode}-amt-${safe}`),curEl=document.getElementById(`${mode}-cur-${safe}`),buyEl=document.getElementById(`${mode}-buyAmt-${safe}`),buyCurEl=document.getElementById(`${mode}-buyCur-${safe}`),basisEl=row.querySelector('.charge-basis');
+      if(sellEl && sellEl.value)existingValues[charge]={amount:parseFloat(sellEl.value)||0,currency:curEl?.value||'INR',buyAmount:buyEl?parseFloat(buyEl.value)||0:0,buyCurrency:buyCurEl?.value||'INR',basis:basisEl?.value||'Normal'};
+    });
+
+    let defaults={};
+    if(mode==='sea'){
+      const ownCfs=document.getElementById('sea-own-cfs')?.checked||false;
+      if(!ownCfs){const d=(db.defaultSeaCharges||[]).find(x=>norm(x.pol)===norm(pol)&&norm(x.commodity)===norm(commodity));if(d){defaults={...d.charges};delete defaults.THC;delete defaults.THC_20;delete defaults.THC_40;const suffix=container==='20 GP'?'_20':(container==='40 GP'||container==='40 HC'?'_40':'');if(suffix){Object.keys(defaults).forEach(k=>{if(k.endsWith(suffix))defaults[k.slice(0,-3)]=defaults[k];});Object.keys(defaults).forEach(k=>{if(k.endsWith('_20')||k.endsWith('_40'))delete defaults[k];});}}}
+    }else if(mode==='air'){
+      const d=(db.defaultAirCharges||[]).find(x=>norm(x.pol)===norm(pol)&&norm(x.commodity)===norm(commodity));if(d)defaults={...d.charges};
+    }else{
+      const d=(db.defaultLclCharges||[]).find(x=>norm(x.pol)===norm(pol)&&norm(x.commodity)===norm(commodity));if(d)defaults={...d.charges};
+    }
+
+    let carrierCharges=getSharedCarrierCharges(carrier,commodity,mode);
+    if(mode==='sea'){
+      const thc=(db.seaTHCRates||[]).filter(r=>norm(r.carrier)===norm(carrier)&&norm(r.pol)===norm(pol)&&norm(r.commodity)===norm(commodity));
+      const pref=existingValues.THC?.currency||'INR'; const tr=thc.find(r=>norm(r.currency)===norm(pref))||thc[0];
+      if(tr){const amount=container==='20 GP'?tr.thc20:(container==='40 GP'||container==='40 HC'?tr.thc40:null);if(Number(amount)>0)carrierCharges.THC={amount:Number(amount),currency:norm(tr.currency)||'INR',buyAmount:Number(amount),buyCurrency:norm(tr.currency)||'INR',basis:'Normal'};}
+    }
+
+    const merged={...defaults,...carrierCharges}; const final={}; Object.keys(merged).forEach(k=>{const e=existingValues[k];if(e&&e.amount>0)final[k]=e;else if(merged[k])final[k]={...merged[k],basis:merged[k].basis||'Normal'};});
+    Object.keys(existingValues).forEach(k=>{if(!final[k])final[k]=existingValues[k];});
+    let order=JSON.parse(JSON.stringify(chargeCategories[mode])); if(mode==='sea'&&document.getElementById('sea-own-cfs')?.checked)delete order['CFS / Transport Charges']; Object.keys(order).forEach(k=>{if(!order[k]?.length)delete order[k];});
+    buildChargesGrid(mode,final,order);
+    if(mode==='air'){setTimeout(()=>recalcCharge('air','PALLETISATION'),100);}
+    if(typeof markUnsaved==='function')markUnsaved(mode);
+  };
+
+  window.legacy_onCarrierChange=function(mode){markUnsaved(mode);window.legacy_onCarrierPolChangeInternal(mode);};
+  window.legacy_onPolChange=function(mode){markUnsaved(mode);window.legacy_onCarrierPolChangeInternal(mode);};
+  window.legacy_onContainerChange=function(mode){markUnsaved(mode);window.legacy_onCarrierPolChangeInternal(mode);};
+
+  // Save quote carrier charges into the shared master (POL is deliberately ignored).
+  const oldUpsert=window.upsertCarrierCharges;
+  window.upsertCarrierCharges=function(mode,data){
+    ensure(); if(!Array.isArray(data?.carrierRates))return;
+    data.carrierRates.slice(0,3).forEach(cr=>{if(!cr?.carrier)return;const carrier=String(cr.carrier).trim();const commodity=norm(data.commodity)||'NON HAZ';if(!['HAZ','NON HAZ'].includes(commodity))return;let rec=find(carrier,commodity);if(!rec){rec={carrier,commodity,charges:{},createdAt:new Date().toISOString(),updated:new Date().toISOString()};db[SHARED_KEY].push(rec);}Object.entries(cr.charges||{}).forEach(([k,v])=>{if(/^THC(?:_|$)/i.test(k))return;if(v && ((Number(v.amount)||0)>0||(Number(v.buyAmount)||0)>0))rec.charges[k]={...v};});rec.updated=new Date().toISOString();});
+    saveDB();
+  };
+
+  ensure();
+})();
+/* ============================================================
+   SHARED CARRIER MASTER — MULTI-CARRIER QUOTE HOOK
+   Ensures Carrier 2/3 in SEA, AIR and LCL also use the same
+   CARRIER + HAZ/NON HAZ master without POL.
+   ============================================================ */
+(function(){
+  const norm=v=>String(v??'').trim().replace(/\s+/g,' ').toUpperCase();
+  function modeCols(mode){
+    if(mode==='sea') return ['SEAL','MUC','DOCS','SEAWAY BL','ETS','HAZ DOCS','AMS'];
+    try { if(typeof getHorizontalChargeColumns==='function') return getHorizontalChargeColumns(mode).filter(k=>!/^THC/i.test(k)); } catch(e){}
+    return mode==='air'?['CARTAGE','MCC','XRAY','GATE PASS','ASI GMAX','AMS','PALLETISATION','LOADING & UNLOADING','DG FEES','DG AGENT FEE','PLY','REPACKING','AWB FEES','TEDI','ADD.SURCHARGE','TRANSPORATION','CUSTOM CLEARANCE','TERMINAL TRANSFER']:['CFS','CLEARANCE','DOCS','SEAL','MUC','SEAWAY BL','AMS','VGM','TOLL','LOLO','LASHING & CHOKING','ON WHEEL','OTHER LOCALS'];
+  }
+  function normalizeContainerKey(value){
+    let v=String(value||'').trim().toUpperCase().replace(/\s+/g,' ');
+    v=v.replace(/\b20\s*(?:GP|G P)\b/,'20 GP');
+    v=v.replace(/\b40\s*(?:GP|G P)\b/,'40 GP');
+    v=v.replace(/\b40\s*(?:HC|H C)\b/,'40 HC');
+    return v;
+  }
+  function defaultFor(mode,pol,commodity,container){
+    let list=mode==='sea'?(db.defaultSeaCharges||[]):mode==='air'?(db.defaultAirCharges||[]):(db.defaultLclCharges||[]);
+    const wantedPol=norm(pol), wantedCommodity=norm(commodity);
+    let rec=null;
+
+    if(mode==='sea'){
+      const wantedContainer=normalizeContainerKey(container);
+      // A blank container must never inherit another container's rates.
+      if(!wantedContainer) return {};
+      const matches=list.filter(r=>norm(r.pol)===wantedPol&&norm(r.commodity)===wantedCommodity);
+      rec=matches.find(r=>normalizeContainerKey(r.container)===wantedContainer);
+      // Legacy records without a container are safe only when there are no
+      // container-specific records for this POL + HAZ/NON HAZ key.
+      if(!rec&&matches.length&&matches.every(r=>!normalizeContainerKey(r.container))) rec=matches[0];
+      if(!rec) return {};
+    }else{
+      rec=list.find(r=>norm(r.pol)===wantedPol&&norm(r.commodity)===wantedCommodity)
+        || list.find(r=>norm(r.pol)===wantedPol&&!r.commodity);
+      if(!rec) return {};
+    }
+
+    let out={...(rec.charges||{})};
+    if(mode==='sea'){
+      const wantedContainer=normalizeContainerKey(container);
+      const suffix=wantedContainer==='20 GP'?'_20':(wantedContainer==='40 GP'||wantedContainer==='40 HC'?'_40':'');
+      if(suffix){
+        Object.keys(out).forEach(k=>{if(k.endsWith(suffix))out[k.slice(0,-3)]=out[k];});
+        Object.keys(out).forEach(k=>{if(k.endsWith('_20')||k.endsWith('_40'))delete out[k];});
+      }
+      delete out.THC;delete out.THC_20;delete out.THC_40;
+    }
+    return out;
+  }
+
+  function sharedFor(carrier,commodity,mode,pol){
+    const allowed=new Set(modeCols(mode));
+    const out={};
+    const normCarrier=norm(carrier), normCommodity=norm(commodity);
+
+    // Primary V2 shared carrier master.
+    const shared=(db.carrierSpecificCharges||[]).find(r=>
+      norm(r.carrier)===normCarrier && norm(r.commodity)===normCommodity
+    );
+    Object.entries(shared?.charges||{}).forEach(([k,v])=>{
+      if(!/^THC(?:_|$)/i.test(k)&&allowed.has(k)) out[k]={...v};
+    });
+
+    // Legacy carrier master fallback for AIR/LCL (and legacy records not yet
+    // migrated). This is especially important for Carrier 2/3 selections.
+    if(mode==='air' || mode==='lcl'){
+      const legacy=(mode==='air'?(db.carrierChargesAir||[]):(db.carrierChargesSeaLcl||[]))
+        .filter(r=>norm(r.carrier)===normCarrier && norm(r.commodity)===normCommodity);
+      const polNorm=norm(pol);
+      const exactPol=legacy.find(r=>norm(r.pol)===polNorm);
+      const source=exactPol || legacy[0];
+      Object.entries(source?.charges||{}).forEach(([k,v])=>{
+        if(!/^THC(?:_|$)/i.test(k)&&allowed.has(k)&&!(k in out)) out[k]={...v};
+      });
+    }
+    return out;
+  }
+  function thcFor(carrier,pol,commodity,container,existing){
+    const wantedContainer=normalizeContainerKey(container);
+    if(!wantedContainer || !carrier || !pol) return null;
+    const list=(db.seaTHCRates||[]).filter(r=>
+      norm(r.carrier)===norm(carrier) &&
+      norm(r.pol)===norm(pol) &&
+      norm(r.commodity)===norm(commodity)
+    );
+    if(!list.length) return null;
+
+    // THC is the ONLY carrier charge that depends on container size.
+    // Currency is selected from the dedicated THC record; no fallback to
+    // another container or another charge master is permitted.
+    const pref=existing?.THC?.currency ? norm(existing.THC.currency) : '';
+    const r=(pref && list.find(x=>norm(x.currency)===pref)) || list[0];
+    if(!r) return null;
+
+    let amount=null;
+    if(wantedContainer==='20 GP') amount=r.thc20;
+    else if(wantedContainer==='40 GP' || wantedContainer==='40 HC') amount=r.thc40;
+    else return null;
+
+    if(amount===null || amount===undefined || String(amount).trim()==='' || !(Number(amount)>0)) return null;
+    const cur=norm(r.currency)||'INR';
+    return {amount:Number(amount),currency:cur,buyAmount:Number(amount),buyCurrency:cur,basis:'Normal'};
+  }
+  function manualMulti(mode){
+    const out=[{},{},{}]; document.querySelectorAll(`#${mode}-charges-grid .charge-row`).forEach(row=>{const ch=row.getAttribute('data-charge'),safe=String(ch).replace(/[^A-Z0-9]/gi,'_');[0,1,2].forEach(i=>{const s=document.getElementById(`${mode}-c${i+1}-amt-${safe}`),b=document.getElementById(`${mode}-c${i+1}-buyAmt-${safe}`),sc=document.getElementById(`${mode}-c${i+1}-cur-${safe}`),bc=document.getElementById(`${mode}-c${i+1}-buyCur-${safe}`);if(!s&&!b)return;const sa=parseFloat(s?.value)||0,ba=parseFloat(b?.value)||0;if(sa>0||ba>0)out[i][ch]={amount:sa,currency:sc?.value||'INR',buyAmount:ba,buyCurrency:bc?.value||'INR',basis:row.querySelector('.charge-basis')?.value||'Normal'};});});return out;
+  }
+  function orderFor(mode){let o=JSON.parse(JSON.stringify(chargeCategories[mode]));if(mode==='sea'&&document.getElementById('sea-own-cfs')?.checked)delete o['CFS / Transport Charges'];Object.keys(o).forEach(k=>{if(!o[k]?.length)delete o[k];});return o;}
+  function pull(mode,previous,forceFresh=false){
+    const pol=(document.getElementById(`${mode}-pol`)?.value||'').trim();
+    const commodity=(document.getElementById(`${mode}-commodity`)?.value||'NON HAZ').trim().toUpperCase();
+    const baseContainer=normalizeContainerKey(document.getElementById(`${mode}-container`)?.value||'');
+    const names=[0,1,2].map(i=>(document.getElementById(i===0?`${mode}-carrier`:`${mode}-carrier-${i+1}`)?.value||'').trim().toUpperCase());
+    const containerMode=mode==='sea' && typeof getSeaComparisonMode==='function' && getSeaComparisonMode()==='container';
+    const containers=containerMode && typeof getSeaComparisonContainers==='function'
+      ? getSeaComparisonContainers().map(v=>normalizeContainerKey(v))
+      : [baseContainer,baseContainer,baseContainer];
+
+    /* FINAL SEA COMPARISON LOGIC
+       --------------------------------
+       Carrier Charges: CARRIER + HAZ/NON HAZ only.
+       Default Charges: POL + HAZ/NON HAZ + exact container (SEA).
+       THC: CARRIER + POL + HAZ/NON HAZ + exact container (SEA).
+       In Container mode C1/C2/C3 are display slots of the SAME Carrier 1.
+       Blank C2/C3 = completely blank column; never inherit C1.
+    */
+    const manual=(!forceFresh && !containerMode) ? (previous || manualMulti(mode)) : [{},{},{}];
+    const arrays=[{},{},{}];
+
+    names.forEach((selectedCarrier,i)=>{
+      const slotCarrier=containerMode ? (names[0]||'') : selectedCarrier;
+      const slotContainer=containers[i]||'';
+
+      // In Container mode a blank slot must remain completely blank.
+      if(containerMode && i>0 && !slotContainer){
+        arrays[i]={};
+        return;
+      }
+      if(!slotCarrier){
+        arrays[i]={};
+        return;
+      }
+
+      // For SEA, exact container-specific Default Charges are pulled.
+      // For AIR/LCL, existing mode-specific default lookup remains unchanged.
+      const defaults=defaultFor(mode,pol,commodity,slotContainer);
+
+      // Carrier-specific charges NEVER depend on container size or POL.
+      // Container comparison reuses Carrier 1's exact HAZ/NON HAZ master.
+      const carrierCharges=sharedFor(slotCarrier,commodity,mode,pol);
+      const merged={...defaults,...carrierCharges};
+
+      if(mode==='air'){
+        const pallets=parseFloat(document.getElementById('air-pallets')?.value)||0;
+        if(pallets>0){
+          merged.PALLETISATION={amount:pallets*1875,currency:'INR',buyAmount:merged.PALLETISATION?.buyAmount||0,buyCurrency:merged.PALLETISATION?.buyCurrency||'INR',basis:'Normal'};
+          merged.PLY={amount:pallets*1000,currency:'INR',buyAmount:merged.PLY?.buyAmount||0,buyCurrency:merged.PLY?.buyCurrency||'INR',basis:'Normal'};
+        }
+      }
+
+      if(mode==='sea'){
+        // THC must never come from Default Charges or Carrier Charges.
+        delete merged.THC;
+        delete merged.THC_20;
+        delete merged.THC_40;
+
+        // THC alone changes with selected container + carrier + POL.
+        const thc=thcFor(slotCarrier,pol,commodity,slotContainer,null);
+        if(thc) merged.THC=thc;
+      }
+
+      // Manual edits are retained only in normal carrier comparison mode.
+      // Container comparison is always a fresh master lookup.
+      if(!containerMode && !forceFresh){
+        Object.keys(manual[i]||{}).forEach(k=>{
+          const v=manual[i][k];
+          if(v && (Number(v.amount)>0 || Number(v.buyAmount)>0)) merged[k]=v;
+        });
+      }
+      arrays[i]=merged;
+    });
+
+    // One complete rebuild clears stale C2/C3 values and guarantees that
+    // changing POL/commodity/carrier/container cannot leave old rates behind.
+    window.buildChargesGrid(mode,arrays,orderFor(mode),{arrays});
+    setTimeout(()=>{
+      if(typeof recalcAllCarrierCharges==='function') recalcAllCarrierCharges(mode);
+    },0);
+    return arrays;
+  }
+
+  // Expose the single deterministic multi-carrier pull engine so later legacy
+  // wrappers cannot bypass AIR/LCL Carrier 2/3 refresh.
+  window.__finalMultiCarrierPull = pull;
+
+  window.onCarrierPolChangeInternal=function(mode,previous){markUnsaved(mode);pull(mode,previous||null,true);};
+  window.onCarrierChange=function(mode){markUnsaved(mode);pull(mode,null,true);};
+  window.onPolChange=function(mode){markUnsaved(mode);pull(mode,null,true);};
+  window.onContainerChange=function(mode){markUnsaved(mode);pull(mode,null,true);};
+  window.onMultiCarrierChange=function(mode){markUnsaved(mode);pull(mode,null,true);};
+  window.legacy_onCarrierPolChangeInternal=window.onCarrierPolChangeInternal;
+  window.legacy_onCarrierChange=window.onCarrierChange;
+  window.legacy_onPolChange=window.onPolChange;
+  window.legacy_onContainerChange=window.onContainerChange;
+})();
+/* ============================================================
+   STANDARDIZED CARRIER IMPORT / EXPORT
+   Carrier-specific sheets are location-independent:
+   CARRIER + HAZ/NON HAZ only.
+   SEA THC is the only carrier-local-charge table that retains POL.
+   ============================================================ */
+(function(){
+  const norm=v=>String(v??'').trim().replace(/\s+/g,' ').toUpperCase();
+  const chargeColsFor=mode=>{
+    if(mode==='sea') return ['SEAL','MUC','DOCS','SEAWAY BL','ETS','HAZ DOCS','AMS'];
+    try { return getHorizontalChargeColumns(mode).filter(k=>!/^THC(?:_|$)/i.test(k)); } catch(e) { return []; }
+  };
+  const fmt=v=>!v?'':(String(v.currency||'INR').toUpperCase()==='USD'?`$${v.amount}`:`${v.amount}`);
+  const parse=v=>{if(v===undefined||v===null||String(v).trim()==='')return null;const raw=String(v).trim();const currency=raw.includes('$')?'USD':'INR';const amount=parseFloat(raw.replace(/,/g,'').replace(/[^0-9.\-]/g,''));return Number.isFinite(amount)?{amount,currency,buyAmount:amount,buyCurrency:currency}:null;};
+  const validDate=(v)=>!v||!Number.isNaN(new Date(v).getTime());
+  const sheetRows=(mode)=>{
+    const cols=chargeColsFor(mode);
+    const records=(db.carrierSpecificCharges||[]).filter(r=>r&&r.carrier);
+    const rows=[];
+    records.forEach(r=>{
+      // Only export records that belong to the requested mode through available charge columns.
+      // A shared carrier record can serve all modes; therefore it is exported to every mode sheet.
+      const row={MODE:mode.toUpperCase(),CARRIER:r.carrier||'',CARGO:r.commodity||'NON HAZ','VALID FROM':r.validFrom||'','VALID TO':r.validTo||''};
+      cols.forEach(c=>row[c]=fmt(r.charges?.[c]));
+      rows.push(row);
+    });
+    return {rows,cols};
+  };
+
+  window.bulkExportCarrierCharges=function(){
+    if(typeof XLSX==='undefined')return alert('XLSX library not loaded. Please refresh and try again.');
+    if(!Array.isArray(db.carrierSpecificCharges))db.carrierSpecificCharges=[];
+    const wb=XLSX.utils.book_new();
+    ['sea','air','lcl'].forEach(mode=>{
+      const {rows,cols}=sheetRows(mode); const fallback={MODE:mode.toUpperCase(),CARRIER:'',CARGO:'NON HAZ','VALID FROM':'','VALID TO':''}; cols.forEach(c=>fallback[c]='');
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows.length?rows:[fallback]),`${mode.toUpperCase()} - LOCAL CHARGES`);
+    });
+    const thcRows=(db.seaTHCRates||[]).map(r=>({MODE:'SEA',CARRIER:r.carrier||'',POL:r.pol||'',CARGO:r.commodity||'',CURRENCY:r.currency||'INR','THC 20 GP':r.thc20??'','THC 40 HC':r.thc40??'','VALID FROM':r.validFrom||'','VALID TO':r.validTo||''}));
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(thcRows.length?thcRows:[{MODE:'SEA',CARRIER:'',POL:'',CARGO:'HAZ',CURRENCY:'INR','THC 20 GP':'','THC 40 HC':'','VALID FROM':'','VALID TO':''}]),'SEA - THC');
+    XLSX.writeFile(wb,`LOCAL_CHARGES_CARRIER_${new Date().toISOString().slice(0,10)}.xlsx`);
+    alert('✅ Export Carrier completed.\n\nSheets:\n• SEA - LOCAL CHARGES\n• SEA - THC\n• AIR - LOCAL CHARGES\n• LCL - LOCAL CHARGES\n\nThe same workbook is directly reusable with Import Carrier.');
+  };
+
+  window.bulkImportCarrierCharges=function(input){
+    if(!input.files?.[0])return alert('Please select an Excel file.');
+    const file=input.files[0],reader=new FileReader();
+    reader.onload=function(e){try{
+      if(typeof XLSX==='undefined')throw new Error('XLSX library not loaded.');
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      const errors=[],warnings=[],seen=new Set();let newCount=0,updated=0,dupes=0,values=0,sheets=0;
+      const modes={sea:'SEA - LOCAL CHARGES',air:'AIR - LOCAL CHARGES',lcl:'LCL - LOCAL CHARGES'};
+      if(!Array.isArray(db.carrierSpecificCharges))db.carrierSpecificCharges=[];
+      Object.entries(modes).forEach(([mode,sheetName])=>{
+        const sheet=wb.Sheets[sheetName];if(!sheet){warnings.push(`Missing sheet: ${sheetName}`);return;}sheets++;
+        const rows=XLSX.utils.sheet_to_json(sheet,{defval:''});if(!rows.length){warnings.push(`${sheetName}: no data rows.`);return;}
+        const headers=Object.keys(rows[0]);['MODE','CARRIER','CARGO'].forEach(h=>{if(!headers.includes(h))errors.push(`${sheetName}: missing column ${h}`);});
+        if(!headers.includes('CARRIER')||!headers.includes('CARGO'))return;
+        const cols=chargeColsFor(mode);
+        rows.forEach((row,i)=>{
+          const n=i+2,rm=norm(row.MODE).toLowerCase(),carrier=norm(row.CARRIER),cargo=norm(row.CARGO),from=String(row['VALID FROM']||'').trim(),to=String(row['VALID TO']||'').trim();
+          if(rm!==mode)errors.push(`${sheetName} Row ${n}: MODE must be ${mode.toUpperCase()}.`);
+          if(!carrier)errors.push(`${sheetName} Row ${n}: CARRIER is missing.`);
+          if(!['HAZ','NON HAZ'].includes(cargo))errors.push(`${sheetName} Row ${n}: CARGO must be HAZ or NON HAZ.`);
+          if(from&&!validDate(from))errors.push(`${sheetName} Row ${n}: invalid VALID FROM.`);if(to&&!validDate(to))errors.push(`${sheetName} Row ${n}: invalid VALID TO.`);if(from&&to&&new Date(from)>new Date(to))errors.push(`${sheetName} Row ${n}: VALID FROM is after VALID TO.`);
+          const key=carrier+'|'+cargo;if(seen.has(key))dupes++;seen.add(key);
+          let rec=db.carrierSpecificCharges.find(r=>norm(r.carrier)===carrier&&norm(r.commodity)===cargo);
+          if(rec){
+            // Existing carrier record is preserved exactly; imported duplicate is skipped.
+            updated++;
+            return;
+          }
+          rec={carrier,commodity:cargo,charges:{},createdAt:new Date().toISOString(),updated:new Date().toISOString()};
+          cols.forEach(c=>{const v=parse(row[c]);if(v){rec.charges[c]=v;values++;}});
+          if(from)rec.validFrom=from;if(to)rec.validTo=to;rec.updated=new Date().toISOString();
+          db.carrierSpecificCharges.push(rec);newCount++;
+        });
+      });
+      const thc=wb.Sheets['SEA - THC'];
+      if(thc){sheets++;const rows=XLSX.utils.sheet_to_json(thc,{defval:''});if(rows.length){const h=Object.keys(rows[0]);['MODE','CARRIER','POL','CARGO','CURRENCY','THC 20 GP','THC 40 HC'].forEach(x=>{if(!h.includes(x))errors.push(`SEA - THC: missing column ${x}`);});rows.forEach((r,i)=>{const n=i+2,mode=norm(r.MODE).toLowerCase(),carrier=norm(r.CARRIER),pol=norm(r.POL),cargo=norm(r.CARGO),currency=norm(r.CURRENCY),v20=parse(r['THC 20 GP']),v40=parse(r['THC 40 HC']);if(mode!=='sea')errors.push(`SEA - THC Row ${n}: MODE must be SEA.`);if(!carrier)errors.push(`SEA - THC Row ${n}: CARRIER is missing.`);if(!pol)errors.push(`SEA - THC Row ${n}: POL is missing.`);if(!['HAZ','NON HAZ'].includes(cargo))errors.push(`SEA - THC Row ${n}: CARGO must be HAZ or NON HAZ.`);if(!['INR','USD'].includes(currency))errors.push(`SEA - THC Row ${n}: CURRENCY must be INR or USD.`);if(v20&&v20.currency!==currency)errors.push(`SEA - THC Row ${n}: THC 20 GP currency mismatch.`);if(v40&&v40.currency!==currency)errors.push(`SEA - THC Row ${n}: THC 40 HC currency mismatch.`);const from=String(r['VALID FROM']||'').trim(),to=String(r['VALID TO']||'').trim();if(from&&!validDate(from))errors.push(`SEA - THC Row ${n}: invalid VALID FROM.`);if(to&&!validDate(to))errors.push(`SEA - THC Row ${n}: invalid VALID TO.`);if(from&&to&&new Date(from)>new Date(to))errors.push(`SEA - THC Row ${n}: VALID FROM is after VALID TO.`);const key=carrier+'|'+pol+'|'+cargo+'|'+currency;if(seen.has('THC|'+key))dupes++;seen.add('THC|'+key);let rec=(db.seaTHCRates||[]).find(x=>norm(x.carrier)===carrier&&norm(x.pol)===pol&&norm(x.commodity)===cargo&&norm(x.currency)===currency);if(rec){ updated++; return; }
+          rec={mode:'sea',carrier,pol,commodity:cargo,currency,thc20:v20?v20.amount:null,thc40:v40?v40.amount:null,validFrom:from,validTo:to,updated:new Date().toISOString()};
+          (db.seaTHCRates||(db.seaTHCRates=[])).push(rec);newCount++;});}else warnings.push('SEA - THC: no data rows.');}else warnings.push('Missing sheet: SEA - THC');
+      if(!sheets)throw new Error('No recognized Local Charges sheets found.');
+      if(errors.length){alert(`❌ Import Carrier validation failed.\n\n${errors.slice(0,30).join('\n')}${errors.length>30?'\n...more errors':''}`);return;}
+      saveDB();if(typeof renderSeaTHCMaster==='function')renderSeaTHCMaster();['sealcl','air','lcl'].forEach(t=>{if(typeof renderCarrierChargesMaster==='function')renderCarrierChargesMaster(t);});autoBackup();
+      alert(`✅ Import Carrier completed.\nSheets processed: ${sheets}/4\nNew records: ${newCount}\nUpdated/merged: ${updated}\nDuplicate rows: ${dupes}\nCharge values: ${values}\nWarnings: ${warnings.length}${warnings.length?'\n\n'+warnings.slice(0,10).join('\n'):''}`);
+    }catch(err){console.error(err);alert('❌ Import Carrier failed: '+err.message);}finally{input.value='';}};reader.readAsArrayBuffer(file);
+  };
+})();
+
+/* Enforce exactly two logical records per carrier: HAZ + NON HAZ. */
+(function(){
+  const norm=v=>String(v??'').trim().replace(/\s+/g,' ').toUpperCase();
+  if(!Array.isArray(db.carrierSpecificCharges)) db.carrierSpecificCharges=[];
+  const grouped=new Map();
+  db.carrierSpecificCharges.forEach(r=>{
+    if(!r?.carrier)return;
+    const carrier=String(r.carrier).trim(), cargo=['HAZ','NON HAZ'].includes(norm(r.commodity))?norm(r.commodity):'NON HAZ';
+    const key=norm(carrier)+'|'+cargo;
+    const old=grouped.get(key);
+    if(!old){grouped.set(key,{...r,carrier,commodity:cargo,charges:{...(r.charges||{})}});return;}
+    Object.entries(r.charges||{}).forEach(([k,v])=>{if(v && (!old.charges[k] || (Number(v.amount)||0)>0 || (Number(v.buyAmount)||0)>0))old.charges[k]={...v};});
+    old.updated = new Date(old.updated||0) >= new Date(r.updated||0) ? old.updated : r.updated;
+  });
+  const compact=[]; const carriers=[...new Set([...grouped.values()].map(r=>r.carrier))];
+  carriers.forEach(carrier=>{
+    ['HAZ','NON HAZ'].forEach(cargo=>{
+      const r=grouped.get(norm(carrier)+'|'+cargo);
+      if(r) compact.push(r);
+      else compact.push({carrier,commodity:cargo,charges:{},createdAt:new Date().toISOString(),updated:new Date().toISOString(),placeholder:true});
+    });
+  });
+  if(compact.length !== db.carrierSpecificCharges.length || JSON.stringify(compact)!==JSON.stringify(db.carrierSpecificCharges)){db.carrierSpecificCharges=compact;try{saveDB();}catch(e){}}
+})();
+/* ============================================================
+   FINAL SEA RATE ENGINE — CARRIER + POL + HAZ/NON HAZ + CONTAINER
+   Applies to: Carrier Charges + Default Charges + SEA THC
+   Container 2/3 are independent active slots. Blank = blank.
+   ============================================================ */
+(function(){
+  const originalRenderCarrierChargesMaster = window.renderCarrierChargesMaster;
+  const originalOpenAddCarrierChargeModal = window.openAddCarrierChargeModal;
+  const originalOpenEditCarrierChargeModal = window.openEditCarrierChargeModal;
+  const norm = v => String(v ?? '').trim().replace(/\s+/g,' ').toUpperCase();
+  const polKey = v => norm(v).replace(/[^A-Z0-9]/g,'');
+  const containerKey = v => {
+    let x = norm(v).replace(/\s+/g,' ');
+    x = x.replace(/\b20\s*(?:GP|G P)\b/,'20 GP');
+    x = x.replace(/\b40\s*(?:GP|G P)\b/,'40 GP');
+    x = x.replace(/\b40\s*(?:HC|H C)\b/,'40 HC');
+    return x;
+  };
+  const cargoKey = v => ['HAZ','NON HAZ'].includes(norm(v)) ? norm(v) : 'NON HAZ';
+  const positive = v => v && ((Number(v.amount)||0)>0 || (Number(v.buyAmount)||0)>0);
+
+  function seaContainers(){
+    return [
+      document.getElementById('sea-container')?.value || '',
+      document.getElementById('sea-container-2')?.value || '',
+      document.getElementById('sea-container-3')?.value || ''
+    ].map(containerKey);
+  }
+  function seaCarriers(){
+    return [
+      document.getElementById('sea-carrier')?.value || '',
+      document.getElementById('sea-carrier-2')?.value || '',
+      document.getElementById('sea-carrier-3')?.value || ''
+    ].map(norm);
+  }
+  function seaContext(){
+    return {
+      pol: document.getElementById('sea-pol')?.value || '',
+      commodity: cargoKey(document.getElementById('sea-commodity')?.value || 'NON HAZ'),
+      mode: 'sea'
+    };
+  }
+
+  // Exact SEA Carrier Charges lookup. No POL/container fallback.
+  function findSeaCarrierCharges(carrier, pol, commodity, container){
+    carrier = norm(carrier); pol = polKey(pol); commodity = cargoKey(commodity); container = containerKey(container);
+    if(!carrier || !pol || !container) return {};
+    const list = Array.isArray(db.carrierChargesSeaLcl) ? db.carrierChargesSeaLcl : [];
+    const rec = list.find(r =>
+      norm(r.carrier) === carrier &&
+      polKey(r.pol) === pol &&
+      cargoKey(r.commodity) === commodity &&
+      containerKey(r.container) === container
+    );
+    if(!rec) return {};
+    const out = {};
+    Object.entries(rec.charges || {}).forEach(([k,v]) => {
+      if(/^THC(?:_|$)/i.test(k)) return;
+      if(v && positive(v)) out[k] = {...v};
+    });
+    return out;
+  }
+
+  // Exact SEA Default Charges lookup.
+  function findSeaDefaultCharges(pol, commodity, container){
+    pol = polKey(pol); commodity = cargoKey(commodity); container = containerKey(container);
+    if(!pol || !container) return {};
+    const list = Array.isArray(db.defaultSeaCharges) ? db.defaultSeaCharges : [];
+    const rec = list.find(r =>
+      polKey(r.pol) === pol &&
+      cargoKey(r.commodity) === commodity &&
+      containerKey(r.container) === container
+    );
+    if(!rec) return {};
+    const out = {};
+    Object.entries(rec.charges || {}).forEach(([k,v]) => {
+      if(/^THC(?:_|$)/i.test(k)) return;
+      if(v && positive(v)) out[k] = {...v};
+    });
+    return out;
+  }
+
+  // Dedicated SEA THC lookup.
+  function findSeaTHC(carrier, pol, commodity, container, existing){
+    carrier = norm(carrier); pol = polKey(pol); commodity = cargoKey(commodity); container = containerKey(container);
+    if(!carrier || !pol || !container) return null;
+    const rows = (db.seaTHCRates || []).filter(r =>
+      norm(r.carrier) === carrier &&
+      polKey(r.pol) === pol &&
+      cargoKey(r.commodity) === commodity
+    );
+    if(!rows.length) return null;
+    const preferred = norm(existing?.currency || existing?.THC?.currency || '');
+    const rec = (preferred && rows.find(r => norm(r.currency) === preferred)) || rows[0];
+    if(!rec) return null;
+    let amount = null;
+    if(container === '20 GP') amount = rec.thc20;
+    else if(container === '40 GP' || container === '40 HC') amount = rec.thc40;
+    if(amount === null || amount === undefined || String(amount).trim()==='' || !(Number(amount)>0)) return null;
+    const cur = norm(rec.currency) || 'INR';
+    return {amount:Number(amount),currency:cur,buyAmount:Number(amount),buyCurrency:cur,basis:'Normal'};
+  }
+
+  function manualExisting(){
+    const out=[{},{},{}];
+    document.querySelectorAll('#sea-charges-grid .charge-row').forEach(row=>{
+      const charge=row.getAttribute('data-charge');
+      if(!charge) return;
+      const safe=typeof safeKey==='function' ? safeKey(charge) : String(charge).replace(/[^A-Z0-9]/gi,'_');
+      [0,1,2].forEach(i=>{
+        const s=document.getElementById(`sea-c${i+1}-amt-${safe}`);
+        const b=document.getElementById(`sea-c${i+1}-buyAmt-${safe}`);
+        const sc=document.getElementById(`sea-c${i+1}-cur-${safe}`);
+        const bc=document.getElementById(`sea-c${i+1}-buyCur-${safe}`);
+        if(!s && !b) return;
+        const sa=parseFloat(s?.value)||0, ba=parseFloat(b?.value)||0;
+        if(sa>0 || ba>0) out[i][charge]={amount:sa,currency:sc?.value||'INR',buyAmount:ba,buyCurrency:bc?.value||sc?.value||'INR',basis:row.querySelector('.charge-basis')?.value||'Normal'};
+      });
+    });
+    return out;
+  }
+
+  function seaOrder(){
+    let order=JSON.parse(JSON.stringify(chargeCategories.sea || {}));
+    if(document.getElementById('sea-own-cfs')?.checked) delete order['CFS / Transport Charges'];
+    Object.keys(order).forEach(k=>{if(!order[k]?.length)delete order[k];});
+    return order;
+  }
+
+  function finalSeaPull(reason='change'){
+    const ctx=seaContext();
+    const mode = typeof getSeaComparisonMode==='function' ? getSeaComparisonMode() : (document.getElementById('sea-comparison-mode')?.value || 'carrier');
+    const containerMode = mode === 'container';
+    const carriers=seaCarriers();
+    const containers=seaContainers();
+    const arrays=[{},{},{}];
+
+    for(let i=0;i<3;i++){
+      const carrier = containerMode ? carriers[0] : carriers[i];
+      // In carrier-comparison mode, if Container 2/3 is blank, use Container 1
+      // as the rate basis for that carrier. A filled Container 2/3 remains independent.
+      const container1 = containers[0] || containerKey(document.getElementById('sea-container')?.value || '');
+      const container = containers[i] || container1;
+
+      if(!carrier || !container){ arrays[i]={}; continue; }
+
+      // FINAL KEY FOR ALL THREE SEA RATE SOURCES:
+      // CARRIER + POL + HAZ/NON HAZ + EXACT CONTAINER
+      const defaults=findSeaDefaultCharges(ctx.pol,ctx.commodity,container);
+      const carrierCharges=findSeaCarrierCharges(carrier,ctx.pol,ctx.commodity,container);
+      const merged={...defaults,...carrierCharges};
+
+      // THC comes ONLY from the dedicated SEA THC master.
+      delete merged.THC; delete merged.THC_20; delete merged.THC_40;
+      const thc=findSeaTHC(carrier,ctx.pol,ctx.commodity,container);
+      if(thc) merged.THC=thc;
+
+      arrays[i]=merged;
+    }
+
+    if(typeof window.buildChargesGrid==='function'){
+      window.buildChargesGrid('sea',arrays,seaOrder(),{arrays});
+    }
+    if(typeof updateCarrierHeaders==='function') updateCarrierHeaders('sea',carriers);
+    setTimeout(()=>{
+      if(typeof recalcAllCarrierCharges==='function') recalcAllCarrierCharges('sea');
+      if(typeof updateCarrierHeaders==='function') updateCarrierHeaders('sea',carriers);
+    },0);
+    return arrays;
+  }
+
+  // Override every SEA rate-changing entry point.
+  window.__finalSeaPull = finalSeaPull;
+  window.onCarrierPolChangeInternal = function(mode){
+    if(mode==='sea') return finalSeaPull('carrier-pol');
+    if(typeof window.legacy_onCarrierPolChangeInternal==='function') return window.legacy_onCarrierPolChangeInternal(mode);
+  };
+  window.onCarrierChange = function(mode){
+    if(mode==='sea') return finalSeaPull('carrier');
+    if(typeof window.legacy_onCarrierChange==='function') return window.legacy_onCarrierChange(mode);
+  };
+  window.onPolChange = function(mode){
+    if(mode==='sea') return finalSeaPull('pol');
+    if(typeof window.legacy_onPolChange==='function') return window.legacy_onPolChange(mode);
+  };
+  window.onContainerChange = function(mode){
+    if(mode==='sea') return finalSeaPull('container-1');
+    if(typeof window.legacy_onContainerChange==='function') return window.legacy_onContainerChange(mode);
+  };
+  window.onMultiCarrierChange = function(mode){
+    if(mode==='sea') return finalSeaPull('carrier-2-3');
+    // Keep existing AIR/LCL behaviour.
+    if(typeof window.legacy_onMultiCarrierChange==='function') return window.legacy_onMultiCarrierChange(mode);
+  };
+  window.onSeaContainerComparisonChange = function(slot){
+    if(typeof markUnsaved==='function') markUnsaved('sea');
+    const idx = Math.max(0, Math.min(2, Number(slot || 1) - 1));
+    const carriers = typeof seaCarriers === 'function' ? seaCarriers() : [];
+    const containers = typeof seaContainers === 'function' ? seaContainers() : [];
+    const ctx = typeof seaContext === 'function' ? seaContext() : {pol:'', commodity:'NON HAZ'};
+    const carrier = carriers[idx] || '';
+    const container = containers[idx] || '';
+
+    // C2/C3 must use their own Carrier + Container combination.
+    if(!carrier || !container){
+        if(typeof window.buildChargesGrid === 'function'){
+            const current = typeof collectMultiCarrierGridData === 'function'
+                ? collectMultiCarrierGridData('sea').byCarrier
+                : [{},{},{}];
+            const arrays = Array.isArray(current) ? current : [{},{},{}];
+            arrays[idx] = {};
+            window.buildChargesGrid('sea', arrays, typeof seaOrder==='function' ? seaOrder() : [], {arrays});
+        }
+        return {};
+    }
+
+    const defaults = typeof findSeaDefaultCharges === 'function'
+        ? findSeaDefaultCharges(ctx.pol, ctx.commodity, container) : {};
+    const carrierCharges = typeof findSeaCarrierCharges === 'function'
+        ? findSeaCarrierCharges(carrier, ctx.pol, ctx.commodity, container) : {};
+    const merged = {...defaults, ...carrierCharges};
+
+    delete merged.THC;
+    delete merged.THC_20;
+    delete merged.THC_40;
+
+    const thc = typeof findSeaTHC === 'function'
+        ? findSeaTHC(carrier, ctx.pol, ctx.commodity, container) : null;
+    if(thc) merged.THC = thc;
+
+    const arrays = typeof collectMultiCarrierGridData === 'function'
+        ? (collectMultiCarrierGridData('sea').byCarrier || [{},{},{}])
+        : [{},{},{}];
+
+    arrays[idx] = merged;
+
+    if(typeof window.buildChargesGrid === 'function'){
+        window.buildChargesGrid('sea', arrays, typeof seaOrder==='function' ? seaOrder() : [], {arrays});
+    }
+
+    if(typeof recalcAllCarrierCharges === 'function'){
+        setTimeout(()=>recalcAllCarrierCharges('sea'), 0);
+    }
+    if(typeof updateCarrierHeaders === 'function'){
+        setTimeout(()=>updateCarrierHeaders('sea', carriers), 0);
+    }
+
+    return merged;
+};
+  window.onSeaComparisonChange = function(){
+    if(typeof updateSeaComparisonUI==='function') updateSeaComparisonUI();
+    if(typeof markUnsaved==='function') markUnsaved('sea');
+    return finalSeaPull('comparison-mode');
+  };
+
+  // Save quote carrier rates into the exact SEA master records.
+  const originalUpdateRateSheetFromQuote = window.updateRateSheetFromQuote;
+  window.upsertCarrierCharges = function(mode,data){
+    if(mode!=='sea') return;
+    if(!Array.isArray(data?.carrierRates)) return;
+    if(!Array.isArray(db.carrierChargesSeaLcl)) db.carrierChargesSeaLcl=[];
+    const now=new Date().toISOString();
+    const pol=data.pol||'';
+    const commodity=cargoKey(data.commodity||'NON HAZ');
+    const containerMode=data.comparisonMode==='container';
+    const containers=containerMode && Array.isArray(data.comparisonContainers) ? data.comparisonContainers : [data.container||'',data.container||'',data.container||''];
+    const baseCarrier=data.carrier||data.carrierRates?.[0]?.carrier||'';
+    data.carrierRates.slice(0,3).forEach((cr,i)=>{
+      const carrier=containerMode ? baseCarrier : (cr?.carrier||'');
+      const container=containerKey(containers[i]||data.container||'');
+      if(!carrier || !pol || !container) return;
+      let rec=db.carrierChargesSeaLcl.find(r=>
+        norm(r.carrier)===norm(carrier)&&polKey(r.pol)===polKey(pol)&&cargoKey(r.commodity)===commodity&&containerKey(r.container)===container
+      );
+      if(!rec){rec={mode:'sea',carrier:String(carrier).trim(),pol:String(pol).trim(),commodity,container,charges:{},createdAt:now};db.carrierChargesSeaLcl.push(rec);}
+      Object.entries(cr.charges||{}).forEach(([k,v])=>{
+        if(/^THC(?:_|$)/i.test(k)) return;
+        if(v && positive(v)) rec.charges[k]={...v};
+      });
+      rec.updated=now;
+    });
+    saveDB();
+    if(typeof renderCarrierChargesMaster==='function') renderCarrierChargesMaster('sealcl');
+  };
+
+  // Expose exact lookup for diagnostics/tests.
+  window.__findFinalSeaCarrierCharges=findSeaCarrierCharges;
+  window.__findFinalSeaDefaultCharges=findSeaDefaultCharges;
+  window.__findFinalSeaTHC=findSeaTHC;
+
+  /* ==========================================================
+     SEA CARRIER-SPECIFIC MASTER UI
+     Exact key: CARRIER + POL + HAZ/NON HAZ + CONTAINER
+     ========================================================== */
+  function seaChargeColumns(){
+    return ['SEAL','MUC','DOCS','SEAWAY BL','ETS','HAZ DOCS','AMS'];
+  }
+  function carrierOpts(selected){
+    return `<option value="">Select Carrier</option>`+(db.carriers||[]).map(c=>`<option value="${esc(c)}" ${norm(c)===norm(selected)?'selected':''}>${esc(c)}</option>`).join('');
+  }
+  function cargoOpts(selected){
+    return `<option value="NON HAZ" ${cargoKey(selected)==='NON HAZ'?'selected':''}>Non Haz</option><option value="HAZ" ${cargoKey(selected)==='HAZ'?'selected':''}>Haz</option>`;
+  }
+  function containerOpts(selected){
+    const vals=['20 GP','40 GP','40 HC'];
+    return `<option value="">Select Container</option>`+vals.map(v=>`<option value="${v}" ${containerKey(v)===containerKey(selected)?'selected':''}>${v}</option>`).join('');
+  }
+  function seaChargeRow(k,v){
+    v=v||{};
+    return `<div class="shared-cc-row" data-charge-key="${esc(k)}" style="margin-bottom:8px;background:var(--bg);padding:8px;border-radius:5px;border:1px solid var(--border);">
+      <div style="font-weight:700;color:var(--primary);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;"><span>${esc(k)}</span><button type="button" class="btn btn-sm btn-clear" style="height:22px;padding:2px 6px;" onclick="this.closest('.shared-cc-row').remove()">×</button></div>
+      <div style="display:grid;grid-template-columns:1fr 100px 1fr 100px;gap:19px;align-items:end;">
+        <div class="form-group"><label>Sell Amount</label><input type="number" step="0.01" class="shared-cc-sell" value="${v.amount??''}"></div>
+        <div class="form-group"><label>Sell Currency</label><select class="shared-cc-sell-cur">${getCurrencyOptions(v.currency||'INR')}</select></div>
+        <div class="form-group"><label>Buy Amount</label><input type="number" step="0.01" class="shared-cc-buy" value="${v.buyAmount??''}"></div>
+        <div class="form-group"><label>Buy Currency</label><select class="shared-cc-buy-cur">${getCurrencyOptions(v.buyCurrency||v.currency||'INR')}</select></div>
+      </div>
+    </div>`;
+  }
+
+  function renderSeaCarrierMaster(){
+    const disp=document.getElementById('cc-sealcl-master-table'); if(!disp)return;
+    const search=norm(document.getElementById('cc-sealcl-search')?.value||'');
+    const rows=(db.carrierChargesSeaLcl||[]).map((rec,idx)=>({rec,idx})).filter(x=>{
+      const r=x.rec; const text=[r.carrier,r.pol,r.commodity,r.container].map(norm).join(' '); return !search || text.includes(search);
+    });
+    let html=`<table class="master-table"><thead><tr><th style="width:30px;">#</th><th>Carrier</th><th>POL</th><th>HAZ / NON HAZ</th><th>Container</th><th>Charges</th><th>Updated</th><th>Action</th></tr></thead><tbody>`;
+    if(!rows.length) html+=`<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--text-light);">No SEA carrier-specific records.</td></tr>`;
+    rows.forEach(({rec,idx})=>{
+      const count=Object.keys(rec.charges||{}).filter(k=>!/^THC(?:_|$)/i.test(k)).length;
+      const upd=rec.updated?new Date(rec.updated).toLocaleDateString('en-IN'):'—';
+      html+=`<tr><td>${idx+1}</td><td><strong>${esc(rec.carrier||'')}</strong></td><td>${esc(rec.pol||'')}</td><td>${esc(cargoKey(rec.commodity))}</td><td>${esc(containerKey(rec.container))}</td><td style="text-align:center"><strong>${count}</strong></td><td>${upd}</td><td>
+        <button class="btn btn-sm btn-preview" onclick="previewSeaCarrierCharge(${idx})">👁</button>
+        <button class="btn btn-sm btn-preview" onclick="openEditSeaCarrierChargeModal(${idx})">✏️</button>
+        <button class="btn btn-sm btn-duplicate" onclick="duplicateSeaCarrierCharge(${idx})">📋</button>
+        <button class="btn btn-sm btn-clear" onclick="deleteSeaCarrierCharge(${idx})">×</button></td></tr>`;
+    });
+    html+='</tbody></table>'; disp.innerHTML=html;
+  }
+  window.renderCarrierChargesMaster=function(type){
+    if(type==='sealcl') return renderSeaCarrierMaster();
+    // Preserve the shared AIR/LCL master.
+    if(typeof originalRenderCarrierChargesMaster==='function') return originalRenderCarrierChargesMaster(type);
+    // Existing implementation remains authoritative for AIR/LCL.
+    const disp=document.getElementById(`cc-${type}-master-table`); if(!disp)return;
+    const search=norm(document.getElementById(`cc-${type}-search`)?.value||'');
+    const rows=(db.carrierSpecificCharges||[]).map((rec,idx)=>({rec,idx})).filter(x=>!search||`${norm(x.rec.carrier)} ${norm(x.rec.commodity)}`.includes(search));
+    let html=`<table class="master-table"><thead><tr><th>Carrier</th><th>Cargo</th><th>Charges</th><th>Updated</th><th>Action</th></tr></thead><tbody>`;
+    rows.forEach(({rec,idx})=>{const count=Object.keys(rec.charges||{}).length;html+=`<tr><td><strong>${esc(rec.carrier)}</strong></td><td>${esc(rec.commodity)}</td><td>${count}</td><td>${rec.updated?new Date(rec.updated).toLocaleDateString('en-IN'):'—'}</td><td><button class="btn btn-sm btn-preview" onclick="previewCarrierCharge('${type}',${idx})">👁</button><button class="btn btn-sm btn-preview" onclick="openEditCarrierChargeModal('${type}',${idx})">✏️</button><button class="btn btn-sm btn-clear" onclick="deleteCarrierChargeEntry('${type}',${idx})">×</button></td></tr>`;});
+    if(!rows.length)html+=`<tr><td colspan="5" style="text-align:center;padding:16px;">No records.</td></tr>`;
+    html+='</tbody></table>';disp.innerHTML=html;
+  };
+
+  function openSeaCarrier(idx){
+    const rec=idx===null?null:(db.carrierChargesSeaLcl||[])[idx];
+    if(idx!==null&&!rec)return alert('Record not found.');
+    const existing=rec?.charges||{};
+    const keys=Object.keys(existing).length?Object.keys(existing):seaChargeColumns();
+    let html=`<h3 style="color:var(--primary);margin-bottom:12px;">${idx===null?'Add':'Edit'} SEA Carrier-Specific Charge</h3>
+      <div class="form-grid-2col" style="gap:19px;">
+        <div class="form-group"><label>Carrier</label><select id="final-sea-cc-carrier">${carrierOpts(rec?.carrier)}</select></div>
+        <div class="form-group"><label>POL</label><select id="final-sea-cc-pol"><option value="">Select POL</option>${(db.pol||[]).map(p=>`<option value="${esc(p)}" ${polKey(p)===polKey(rec?.pol)?'selected':''}>${esc(p)}</option>`).join('')}</select></div>
+        <div class="form-group"><label>HAZ / NON HAZ</label><select id="final-sea-cc-cargo">${cargoOpts(rec?.commodity)}</select></div>
+        <div class="form-group"><label>Container</label><select id="final-sea-cc-container">${containerOpts(rec?.container)}</select></div>
+      </div>
+      <div style="margin:12px 0 8px;font-weight:700;color:var(--primary);">Carrier Charges <span style="font-weight:400;color:#64748b;">(THC managed in dedicated SEA THC table)</span></div>
+      <div id="final-sea-cc-charges">${keys.filter(k=>!/^THC(?:_|$)/i.test(k)).map(k=>seaChargeRow(k,existing[k])).join('')}</div>
+      <div style="margin-top:10px;display:flex;gap:19px;align-items:end;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px;">
+        <div class="form-group" style="flex:1;min-width:180px;"><label>Add Charge</label><select id="final-sea-cc-add">${seaChargeColumns().map(k=>`<option value="${esc(k)}">${esc(k)}</option>`).join('')}</select></div>
+        <button type="button" class="btn btn-success" onclick="addFinalSeaCarrierCharge()">+</button>
+      </div>
+      <div style="margin-top:16px;text-align:right;display:flex;gap:19px;justify-content:flex-end;"><button class="btn btn-clear" onclick="closeModal('previewModal')">Cancel</button><button class="btn btn-quoted" onclick="saveFinalSeaCarrierCharge(${idx===null?'null':idx})">💾 Save</button></div>`;
+    document.getElementById('modal-title').textContent=`${idx===null?'Add':'Edit'} SEA Carrier-Specific Charge`;
+    document.getElementById('previewBody').innerHTML=html; openModal('previewModal');
+  }
+  window.openAddCarrierChargeModal=function(type){ if(type==='sealcl')return openSeaCarrier(null); if(typeof originalOpenAddCarrierChargeModal==='function')return originalOpenAddCarrierChargeModal(type); };
+  window.openEditCarrierChargeModal=function(type,idx){ if(type==='sealcl')return openSeaCarrier(idx); if(typeof originalOpenEditCarrierChargeModal==='function')return originalOpenEditCarrierChargeModal(type,idx); };
+  window.addFinalSeaCarrierCharge=function(){
+    const k=document.getElementById('final-sea-cc-add')?.value, list=document.getElementById('final-sea-cc-charges');
+    if(!k||!list)return; if(list.querySelector(`[data-charge-key="${CSS.escape(k)}"]`))return alert('Charge already added.'); list.insertAdjacentHTML('beforeend',seaChargeRow(k,null));
+  };
+  window.saveFinalSeaCarrierCharge=function(idx){
+    const carrier=norm(document.getElementById('final-sea-cc-carrier')?.value),pol=document.getElementById('final-sea-cc-pol')?.value||'',commodity=cargoKey(document.getElementById('final-sea-cc-cargo')?.value),container=containerKey(document.getElementById('final-sea-cc-container')?.value);
+    if(!carrier||!pol||!container)return alert('Carrier, POL and Container are required.');
+    const duplicate=(db.carrierChargesSeaLcl||[]).findIndex((r,i)=>i!==idx&&norm(r.carrier)===carrier&&polKey(r.pol)===polKey(pol)&&cargoKey(r.commodity)===commodity&&containerKey(r.container)===container);
+    if(duplicate>=0)return alert('Duplicate SEA carrier charge for the same Carrier + POL + HAZ/NON HAZ + Container.');
+    const charges={}; document.querySelectorAll('#final-sea-cc-charges .shared-cc-row').forEach(row=>{const k=row.getAttribute('data-charge-key');const s=parseFloat(row.querySelector('.shared-cc-sell')?.value)||0;const b=parseFloat(row.querySelector('.shared-cc-buy')?.value)||0;const sc=row.querySelector('.shared-cc-sell-cur')?.value||'INR';const bc=row.querySelector('.shared-cc-buy-cur')?.value||sc;if(s>0||b>0)charges[k]={amount:s,currency:sc,buyAmount:b,buyCurrency:bc};});
+    if(!Object.keys(charges).length)return alert('Please enter at least one charge.');
+    const now=new Date().toISOString(); const rec={mode:'sea',carrier:carrier,pol:String(pol).trim(),commodity,container,charges,createdAt:idx===null?now:((db.carrierChargesSeaLcl[idx]||{}).createdAt||now),updated:now};
+    if(!Array.isArray(db.carrierChargesSeaLcl))db.carrierChargesSeaLcl=[];
+    if(idx===null)db.carrierChargesSeaLcl.push(rec);else db.carrierChargesSeaLcl[idx]=rec;
+    saveDB();closeModal('previewModal');renderSeaCarrierMaster();autoBackup();finalSeaPull('master-save');alert(idx===null?'✅ SEA carrier charge added.':'✅ SEA carrier charge updated.');
+  };
+  window.deleteSeaCarrierCharge=function(idx){const r=db.carrierChargesSeaLcl?.[idx];if(!r)return alert('Record not found.');if(!confirm(`Delete ${r.carrier} / ${r.pol} / ${r.commodity} / ${r.container}?`))return;db.carrierChargesSeaLcl.splice(idx,1);saveDB();renderSeaCarrierMaster();autoBackup();};
+  window.duplicateSeaCarrierCharge=function(idx){const r=db.carrierChargesSeaLcl?.[idx];if(!r)return alert('Record not found.');let copy=JSON.parse(JSON.stringify(r));copy.createdAt=copy.updated=new Date().toISOString();db.carrierChargesSeaLcl.push(copy);saveDB();renderSeaCarrierMaster();autoBackup();};
+  window.previewSeaCarrierCharge=function(idx){const r=db.carrierChargesSeaLcl?.[idx];if(!r)return alert('Record not found.');let rows=Object.entries(r.charges||{}).filter(([k])=>!/^THC/i.test(k)).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v.amount??'—'}</td><td>${v.currency||'INR'}</td><td>${v.buyAmount??'—'}</td><td>${v.buyCurrency||v.currency||'INR'}</td></tr>`).join('');document.getElementById('modal-title').textContent='SEA Carrier Charge Preview';document.getElementById('previewBody').innerHTML=`<div class="preview-card"><h3>SEA Carrier-Specific Charges</h3><div class="preview-grid"><div class="item"><span class="label">Carrier</span><span class="value">${esc(r.carrier)}</span></div><div class="item"><span class="label">POL</span><span class="value">${esc(r.pol)}</span></div><div class="item"><span class="label">Cargo</span><span class="value">${esc(r.commodity)}</span></div><div class="item"><span class="label">Container</span><span class="value">${esc(r.container)}</span></div></div></div><div class="preview-card"><table class="preview-charges-table"><thead><tr><th>Charge</th><th>Sell</th><th>Currency</th><th>Buy</th><th>Currency</th></tr></thead><tbody>${rows||'<tr><td colspan="5">No charges</td></tr>'}</tbody></table></div>`;openModal('previewModal');};
+
+  // Preserve the original shared AIR/LCL handlers for later use.
+  // If the shared implementation is already available, capture it once.
+  if(!window.__openSharedCarrierCharge && typeof window.openEditCarrierChargeModal==='function'){
+    // no-op: AIR/LCL remain served by their existing functions if available.
+  }
+
+  // Rebind initial render for SEA.
+  setTimeout(()=>{try{renderSeaCarrierMaster();}catch(e){console.warn('SEA carrier master render:',e);}},0);
+})();
+
+/* ============================================================
+   FINAL SEA CARRIER IMPORT / EXPORT OVERRIDE
+   SEA LOCAL CHARGES uses the exact key:
+   CARRIER + POL + HAZ/NON HAZ + CONTAINER
+   AIR/LCL remain on the existing shared carrier master format.
+   ============================================================ */
+(function(){
+  const originalBulkImportCarrierCharges = window.bulkImportCarrierCharges;
+  const norm=v=>String(v??'').trim().replace(/\s+/g,' ').toUpperCase();
+  const polKey=v=>norm(v).replace(/[^A-Z0-9]/g,'');
+  const cargo=v=>['HAZ','NON HAZ'].includes(norm(v))?norm(v):'NON HAZ';
+  const cont=v=>{let x=norm(v).replace(/\s+/g,' ');x=x.replace(/\b20\s*(?:GP|G P)\b/,'20 GP');x=x.replace(/\b40\s*(?:GP|G P)\b/,'40 GP');x=x.replace(/\b40\s*(?:HC|H C)\b/,'40 HC');return x;};
+  const cols=['SEAL','MUC','DOCS','SEAWAY BL','ETS','HAZ DOCS','AMS'];
+  const parse=v=>{if(v===undefined||v===null||String(v).trim()==='')return null;const raw=String(v).trim();const currency=raw.includes('$')?'USD':'INR';const amount=parseFloat(raw.replace(/,/g,'').replace(/[^0-9.\-]/g,''));return Number.isFinite(amount)?{amount,currency,buyAmount:amount,buyCurrency:currency}:null;};
+  const fmt=v=>{if(!v||v.amount===undefined||v.amount===null||v.amount==='')return '';return String(v.currency||'INR').toUpperCase()==='USD'?`$${v.amount}`:`${v.amount}`;};
+
+  window.bulkExportCarrierCharges=function(){
+    if(typeof XLSX==='undefined')return alert('XLSX library not loaded. Please refresh and try again.');
+    if(!Array.isArray(db.carrierChargesSeaLcl))db.carrierChargesSeaLcl=[];
+    const wb=XLSX.utils.book_new();
+    const seaRows=db.carrierChargesSeaLcl.map(r=>{const row={MODE:'SEA',CARRIER:r.carrier||'',POL:r.pol||'',CARGO:cargo(r.commodity),CONTAINER:cont(r.container),'VALID FROM':r.validFrom||'','VALID TO':r.validTo||''};cols.forEach(c=>row[c]=fmt(r.charges?.[c]));return row;});
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(seaRows.length?seaRows:[{MODE:'SEA',CARRIER:'',POL:'',CARGO:'NON HAZ',CONTAINER:'20 GP','VALID FROM':'','VALID TO':'',...Object.fromEntries(cols.map(c=>[c,'']))}]),'SEA - LOCAL CHARGES');
+    const thcRows=(db.seaTHCRates||[]).map(r=>({MODE:'SEA',CARRIER:r.carrier||'',POL:r.pol||'',CARGO:cargo(r.commodity),CURRENCY:r.currency||'INR','THC 20 GP':r.thc20??'','THC 40 HC':r.thc40??'','VALID FROM':r.validFrom||'','VALID TO':r.validTo||''}));
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(thcRows.length?thcRows:[{MODE:'SEA',CARRIER:'',POL:'',CARGO:'NON HAZ',CURRENCY:'INR','THC 20 GP':'','THC 40 HC':'','VALID FROM':'','VALID TO':''}]),'SEA - THC');
+    // Preserve existing AIR/LCL shared export format through their current records.
+    ['air','lcl'].forEach(mode=>{
+      const records=Array.isArray(db.carrierSpecificCharges)?db.carrierSpecificCharges:[];
+      const rowCols=(()=>{try{return getHorizontalChargeColumns(mode).filter(k=>!/^THC(?:_|$)/i.test(k));}catch(e){return [];}})();
+      const rows=records.map(r=>{const row={MODE:mode.toUpperCase(),CARRIER:r.carrier||'',CARGO:cargo(r.commodity),'VALID FROM':r.validFrom||'','VALID TO':r.validTo||''};rowCols.forEach(c=>row[c]=fmt(r.charges?.[c]));return row;});
+      const fallback={MODE:mode.toUpperCase(),CARRIER:'',CARGO:'NON HAZ','VALID FROM':'','VALID TO':''};rowCols.forEach(c=>fallback[c]='');
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows.length?rows:[fallback]),`${mode.toUpperCase()} - LOCAL CHARGES`);
+    });
+    XLSX.writeFile(wb,`LOCAL_CHARGES_CARRIER_FINAL_${new Date().toISOString().slice(0,10)}.xlsx`);
+  };
+
+  window.bulkImportCarrierCharges=function(input){
+    if(!input.files?.[0])return alert('Please select an Excel file.');
+    const file=input.files[0],reader=new FileReader();
+    reader.onload=function(e){
+      try{
+        if(typeof XLSX==='undefined')throw new Error('XLSX library not loaded.');
+        const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+        if(!Array.isArray(db.carrierChargesSeaLcl))db.carrierChargesSeaLcl=[];
+        let added=0,merged=0,skipped=0,errors=[];
+        const sheet=wb.Sheets['SEA - LOCAL CHARGES'];
+        if(sheet){
+          const rows=XLSX.utils.sheet_to_json(sheet,{defval:''});
+          rows.forEach((r,i)=>{
+            const n=i+2,carrier=norm(r.CARRIER),pol=String(r.POL||'').trim(),ck=cargo(r.CARGO),container=cont(r.CONTAINER);
+            if(!carrier||!pol||!container){errors.push(`SEA - LOCAL CHARGES Row ${n}: Carrier, POL and Container are required.`);return;}
+            if(!['HAZ','NON HAZ'].includes(ck)){errors.push(`SEA - LOCAL CHARGES Row ${n}: CARGO must be HAZ or NON HAZ.`);return;}
+            const mode=norm(r.MODE).toLowerCase();if(mode!=='sea'){errors.push(`SEA - LOCAL CHARGES Row ${n}: MODE must be SEA.`);return;}
+            const key=x=>norm(x.carrier)===carrier&&polKey(x.pol)===polKey(pol)&&cargo(x.commodity)===ck&&cont(x.container)===container;
+            let rec=db.carrierChargesSeaLcl.find(key);
+            if(!rec){rec={mode:'sea',carrier,pol,commodity:ck,container,charges:{},createdAt:new Date().toISOString(),updated:new Date().toISOString()};db.carrierChargesSeaLcl.push(rec);added++;}
+            else merged++;
+            cols.forEach(c=>{const v=parse(r[c]);if(v){if(!rec.charges[c])rec.charges[c]=v;else if(rec.charges[c].amount===0)rec.charges[c]=v;else skipped++;}});
+            if(r['VALID FROM'])rec.validFrom=String(r['VALID FROM']).trim();if(r['VALID TO'])rec.validTo=String(r['VALID TO']).trim();rec.updated=new Date().toISOString();
+          });
+        } else errors.push('Missing sheet: SEA - LOCAL CHARGES');
+        // SEA THC import remains non-destructive and uses the dedicated table.
+        const thc=wb.Sheets['SEA - THC'];
+        if(thc){
+          const rows=XLSX.utils.sheet_to_json(thc,{defval:''});
+          rows.forEach((r,i)=>{
+            const n=i+2,carrier=norm(r.CARRIER),pol=String(r.POL||'').trim(),ck=cargo(r.CARGO),currency=norm(r.CURRENCY),v20=parse(r['THC 20 GP']),v40=parse(r['THC 40 HC']);
+            if(!carrier||!pol||!['HAZ','NON HAZ'].includes(ck)||!['INR','USD'].includes(currency)){errors.push(`SEA - THC Row ${n}: invalid Carrier/POL/CARGO/CURRENCY.`);return;}
+            if(v20&&v20.currency!==currency)errors.push(`SEA - THC Row ${n}: THC 20 GP currency mismatch.`);if(v40&&v40.currency!==currency)errors.push(`SEA - THC Row ${n}: THC 40 HC currency mismatch.`);
+            if(!Array.isArray(db.seaTHCRates))db.seaTHCRates=[];
+            let rec=db.seaTHCRates.find(x=>norm(x.carrier)===carrier&&polKey(x.pol)===polKey(pol)&&cargo(x.commodity)===ck&&norm(x.currency)===currency);
+            if(!rec){rec={carrier,pol,commodity:ck,currency,thc20:'',thc40:'',createdAt:new Date().toISOString(),updated:new Date().toISOString()};db.seaTHCRates.push(rec);added++;}
+            else merged++;
+            if(rec.thc20===''||rec.thc20===null||rec.thc20===undefined)rec.thc20=v20?v20.amount:'';
+            if(rec.thc40===''||rec.thc40===null||rec.thc40===undefined)rec.thc40=v40?v40.amount:'';
+            if(r['VALID FROM'])rec.validFrom=String(r['VALID FROM']).trim();if(r['VALID TO'])rec.validTo=String(r['VALID TO']).trim();rec.updated=new Date().toISOString();
+          });
+        }
+        // AIR/LCL shared carrier master import. Exact existing record is preserved;
+        // only missing charge cells are merged. No deletion/replacement.
+        ['air','lcl'].forEach(mode=>{
+          const sheetName=`${mode.toUpperCase()} - LOCAL CHARGES`;
+          const sh=wb.Sheets[sheetName];
+          if(!sh) return;
+          const rows=XLSX.utils.sheet_to_json(sh,{defval:''});
+          let cols=[];
+          try{ cols=getHorizontalChargeColumns(mode).filter(k=>!/^THC(?:_|$)/i.test(k)); }catch(e){ cols=[]; }
+          rows.forEach((r,i)=>{
+            const n=i+2,carrier=norm(r.CARRIER),ck=cargo(r.CARGO);
+            if(!carrier||!['HAZ','NON HAZ'].includes(ck)){errors.push(`${sheetName} Row ${n}: CARRIER and CARGO are required.`);return;}
+            if(norm(r.MODE).toLowerCase()!==mode){errors.push(`${sheetName} Row ${n}: MODE must be ${mode.toUpperCase()}.`);return;}
+            if(!Array.isArray(db.carrierSpecificCharges))db.carrierSpecificCharges=[];
+            let rec=db.carrierSpecificCharges.find(x=>norm(x.carrier)===carrier&&cargo(x.commodity)===ck);
+            if(!rec){rec={carrier,commodity:ck,charges:{},createdAt:new Date().toISOString(),updated:new Date().toISOString()};db.carrierSpecificCharges.push(rec);added++;}
+            else merged++;
+            cols.forEach(c=>{const v=parse(r[c]);if(v){if(!rec.charges[c])rec.charges[c]=v;else skipped++;}});
+            if(r['VALID FROM'])rec.validFrom=String(r['VALID FROM']).trim();if(r['VALID TO'])rec.validTo=String(r['VALID TO']).trim();rec.updated=new Date().toISOString();
+          });
+        });
+        saveDB();
+        renderSeaCarrierMaster();if(typeof renderSeaTHCMaster==='function')renderSeaTHCMaster();
+        autoBackup();
+        alert(`✅ Import Carrier completed.\n\nSEA Local/THC records added: ${added}\nMerged existing records: ${merged}\nSkipped existing charge cells: ${skipped}\nErrors: ${errors.length}${errors.length?'\n\n'+errors.slice(0,12).join('\n'):''}`);
+      }catch(err){console.error(err);alert('❌ Import Carrier failed: '+err.message);}finally{input.value='';}
+    };
+    reader.readAsArrayBuffer(file);
+  };
+})();
+/* ============================================================
+   SEA LOCAL CHARGES — SAME RATE FOR 20 GP / 40 HC
+   Final rule:
+   Carrier-Specific Local Charges key = CARRIER + POL + HAZ/NON HAZ
+   Container size is NOT part of this local-charge lookup.
+   The same SEAL/MUC/DOCS/SEAWAY BL/ETS/HAZ DOCS/AMS values
+   apply to both 20 GP and 40 HC.
+   SEA THC remains separate and container-specific.
+   ============================================================ */
+(function(){
+  const norm2=v=>String(v??'').trim().replace(/\s+/g,' ').toUpperCase();
+  const pol2=v=>norm2(v).replace(/[^A-Z0-9]/g,'');
+  const cargo2=v=>norm2(v)==='HAZ'?'HAZ':'NON HAZ';
+  const cols2=['SEAL','MUC','DOCS','SEAWAY BL','ETS','HAZ DOCS','AMS'];
+  const positive2=v=>v && ((Number(v.amount)||0)>0 || (Number(v.buyAmount)||0)>0);
+  const parse2=v=>{
+    if(v===undefined||v===null||String(v).trim()==='') return null;
+    const raw=String(v).trim();
+    const currency=raw.includes('$')?'USD':'INR';
+    const amount=parseFloat(raw.replace(/,/g,'').replace(/[^0-9.\-]/g,''));
+    return Number.isFinite(amount)?{amount,currency,buyAmount:amount,buyCurrency:currency}:null;
+  };
+  const fmt2=v=>{
+    if(!v||v.amount===undefined||v.amount===null||v.amount==='') return '';
+    return norm2(v.currency)==='USD' ? `$${v.amount}` : `${v.amount}`;
+  };
+
+  function ensureSeaLocal2(){
+    if(!Array.isArray(db.carrierChargesSeaLcl)) db.carrierChargesSeaLcl=[];
+    const grouped=new Map();
+    db.carrierChargesSeaLcl.forEach(r=>{
+      if(!r || !r.carrier || !r.pol) return;
+      const carrier=String(r.carrier).trim();
+      const pol=String(r.pol).trim();
+      const commodity=cargo2(r.commodity);
+      const key=`${norm2(carrier)}|${pol2(pol)}|${commodity}`;
+      let g=grouped.get(key);
+      if(!g){
+        g={mode:'sea',carrier,pol,commodity,charges:{},validFrom:r.validFrom||'',validTo:r.validTo||'',createdAt:r.createdAt||new Date().toISOString(),updated:r.updated||r.updatedAt||new Date().toISOString()};
+        grouped.set(key,g);
+      }
+      Object.entries(r.charges||{}).forEach(([k,v])=>{
+        if(/^THC(?:_|$)/i.test(k)) return;
+        if(v && (g.charges[k]==null || !positive2(g.charges[k]))) g.charges[k]={...v};
+      });
+      if(r.validFrom && !g.validFrom) g.validFrom=r.validFrom;
+      if(r.validTo && !g.validTo) g.validTo=r.validTo;
+      if(r.updated && String(r.updated)>String(g.updated)) g.updated=r.updated;
+    });
+    db.carrierChargesSeaLcl=Array.from(grouped.values());
+  }
+
+  function lookupSeaLocal2(carrier,pol,commodity){
+    ensureSeaLocal2();
+    const rec=db.carrierChargesSeaLcl.find(r=>norm2(r.carrier)===norm2(carrier)&&pol2(r.pol)===pol2(pol)&&cargo2(r.commodity)===cargo2(commodity));
+    if(!rec) return {};
+    const out={};
+    Object.entries(rec.charges||{}).forEach(([k,v])=>{
+      if(!/^THC(?:_|$)/i.test(k) && positive2(v)) out[k]={...v};
+    });
+    return out;
+  }
+
+  // Keep the public diagnostic lookup aligned with the new rule.
+  window.__findFinalSeaCarrierCharges=function(carrier,pol,commodity){ return lookupSeaLocal2(carrier,pol,commodity); };
+
+  // Replace the SEA comparison pull: Default + Carrier Local + THC.
+  // Carrier Local is identical for 20 GP and 40 HC; only Default and THC use container.
+  window.__finalSeaPull=function(reason='change'){
+    const ctx={
+      pol:document.getElementById('sea-pol')?.value||'',
+      commodity:cargo2(document.getElementById('sea-commodity')?.value||'NON HAZ')
+    };
+    const mode=typeof getSeaComparisonMode==='function'?getSeaComparisonMode():(document.getElementById('sea-comparison-mode')?.value||'carrier');
+    const containerMode=mode==='container';
+    const carriers=typeof seaCarriers==='function'?seaCarriers():[
+      document.getElementById('sea-carrier')?.value||'',
+      document.getElementById('sea-carrier-2')?.value||'',
+      document.getElementById('sea-carrier-3')?.value||''
+    ];
+    const containers=typeof seaContainers==='function'?seaContainers():[
+      document.getElementById('sea-container')?.value||'',
+      document.getElementById('sea-container-2')?.value||'',
+      document.getElementById('sea-container-3')?.value||''
+    ];
+    const arrays=[{},{},{}];
+    for(let i=0;i<3;i++){
+      const carrier=containerMode?carriers[0]:carriers[i];
+      const container=containers[i];
+      if(!carrier || !container){ arrays[i]={}; continue; }
+
+      let merged={};
+      // Default Charges remain container-specific.
+      if(typeof window.__findFinalSeaDefaultCharges==='function') merged={...window.__findFinalSeaDefaultCharges(ctx.pol,ctx.commodity,container)};
+      // Carrier-Specific Local Charges are the SAME for 20 GP and 40 HC.
+      const local=lookupSeaLocal2(carrier,ctx.pol,ctx.commodity);
+      merged={...merged,...local};
+      // THC is ALWAYS from dedicated THC table and remains container-specific.
+      delete merged.THC; delete merged.THC_20; delete merged.THC_40;
+      if(typeof window.__findFinalSeaTHC==='function'){
+        const thc=window.__findFinalSeaTHC(carrier,ctx.pol,ctx.commodity,container);
+        if(thc) merged.THC=thc;
+      }
+      arrays[i]=merged;
+    }
+    if(typeof window.buildChargesGrid==='function'){
+      let order=typeof seaOrder==='function'?seaOrder():JSON.parse(JSON.stringify(chargeCategories.sea||{}));
+      if(document.getElementById('sea-own-cfs')?.checked) delete order['CFS / Transport Charges'];
+      window.buildChargesGrid('sea',arrays,order,{arrays});
+    }
+    if(typeof updateCarrierHeaders==='function') updateCarrierHeaders('sea',carriers);
+    setTimeout(()=>{
+      if(typeof recalcAllCarrierCharges==='function') recalcAllCarrierCharges('sea');
+      if(typeof updateCarrierHeaders==='function') updateCarrierHeaders('sea',carriers);
+    },0);
+    return arrays;
+  };
+
+  window.onCarrierPolChangeInternal=function(mode){ if(mode==='sea') return window.__finalSeaPull('carrier-pol'); };
+  window.onCarrierChange=function(mode){ if(mode==='sea') return window.__finalSeaPull('carrier'); if(typeof window.legacy_onCarrierChange==='function') return window.legacy_onCarrierChange(mode); };
+  window.onPolChange=function(mode){ if(mode==='sea') return window.__finalSeaPull('pol'); if(typeof window.legacy_onPolChange==='function') return window.legacy_onPolChange(mode); };
+  window.onContainerChange=function(mode){ if(mode==='sea') return window.__finalSeaPull('container-1'); if(typeof window.legacy_onContainerChange==='function') return window.legacy_onContainerChange(mode); };
+  window.onMultiCarrierChange=function(mode){
+    if(mode==='sea') return window.__finalSeaPull('carrier-2-3');
+    if((mode==='air'||mode==='lcl') && typeof window.__finalMultiCarrierPull==='function') return window.__finalMultiCarrierPull(mode,null,true);
+    if(typeof window.legacy_onMultiCarrierChange==='function') return window.legacy_onMultiCarrierChange(mode);
+  };
+  window.onSeaContainerComparisonChange=function(slot){ if(typeof markUnsaved==='function') markUnsaved('sea'); if(typeof getSeaComparisonMode==='function'&&getSeaComparisonMode()!=='container') return; return window.__finalSeaPull(`container-${slot}`); };
+  window.onSeaComparisonChange=function(){ if(typeof updateSeaComparisonUI==='function') updateSeaComparisonUI(); if(typeof markUnsaved==='function') markUnsaved('sea'); return window.__finalSeaPull('comparison-mode'); };
+
+  // Save SEA carrier-specific local charges as one record per Carrier + POL + HAZ/NON HAZ.
+  window.upsertCarrierCharges=function(mode,data){
+    if(mode!=='sea'||!Array.isArray(data?.carrierRates)) return;
+    ensureSeaLocal2();
+    const now=new Date().toISOString();
+    const pol=String(data.pol||'').trim();
+    const commodity=cargo2(data.commodity);
+    if(!pol) return;
+    data.carrierRates.slice(0,3).forEach(cr=>{
+      const carrier=String(cr?.carrier||'').trim(); if(!carrier) return;
+      let rec=db.carrierChargesSeaLcl.find(r=>norm2(r.carrier)===norm2(carrier)&&pol2(r.pol)===pol2(pol)&&cargo2(r.commodity)===commodity);
+      if(!rec){rec={mode:'sea',carrier,pol,commodity,charges:{},createdAt:now,updated:now};db.carrierChargesSeaLcl.push(rec);}
+      Object.entries(cr.charges||{}).forEach(([k,v])=>{
+        if(/^THC(?:_|$)/i.test(k)) return;
+        if(v&&positive2(v)) rec.charges[k]={...v};
+      });
+      rec.updated=now;
+    });
+    saveDB(); ensureSeaLocal2();
+    if(typeof renderSeaCarrierMaster==='function') renderSeaCarrierMaster();
+  };
+
+  // SEA Carrier-Specific master UI: no container field because rates are common to 20 GP/40 HC.
+  function renderSeaMaster2(){
+    ensureSeaLocal2();
+    const disp=document.getElementById('cc-sealcl-master-table'); if(!disp)return;
+    const search=norm2(document.getElementById('cc-sealcl-search')?.value||'');
+    const rows=db.carrierChargesSeaLcl.map((rec,idx)=>({rec,idx})).filter(({rec})=>{
+      const text=[rec.carrier,rec.pol,rec.commodity].map(norm2).join(' ');
+      return !search||text.includes(search);
+    });
+    let html=`<table class="master-table"><thead><tr><th>#</th><th>Carrier</th><th>POL</th><th>HAZ / NON HAZ</th><th>20 GP / 40 HC</th><th>Charges</th><th>Updated</th><th>Action</th></tr></thead><tbody>`;
+    if(!rows.length) html+=`<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--text-light);">No SEA carrier-specific records.</td></tr>`;
+    rows.forEach(({rec,idx})=>{
+      const count=Object.keys(rec.charges||{}).filter(k=>!/^THC(?:_|$)/i.test(k)).length;
+      const upd=rec.updated?new Date(rec.updated).toLocaleDateString('en-IN'):'—';
+      html+=`<tr><td>${idx+1}</td><td><strong>${esc(rec.carrier||'')}</strong></td><td>${esc(rec.pol||'')}</td><td>${esc(cargo2(rec.commodity))}</td><td>SAME RATE</td><td>${count}</td><td>${upd}</td><td><button class="btn btn-sm btn-preview" onclick="previewSeaCarrierCharge(${idx})">👁</button><button class="btn btn-sm btn-preview" onclick="openEditSeaCarrierChargeModal(${idx})">✏️</button><button class="btn btn-sm btn-duplicate" onclick="duplicateSeaCarrierCharge(${idx})">📋</button><button class="btn btn-sm btn-clear" onclick="deleteSeaCarrierCharge(${idx})">×</button></td></tr>`;
+    });
+    html+='</tbody></table>'; disp.innerHTML=html;
+  }
+  window.renderCarrierChargesMaster=function(type){
+    if(type==='sealcl') return renderSeaMaster2();
+  };
+  window.renderSeaCarrierMaster=renderSeaMaster2;
+
+  function seaRow2(k,v){
+    v=v||{};
+    return `<div class="shared-cc-row" data-charge-key="${esc(k)}" style="margin-bottom:8px;background:var(--bg);padding:8px;border-radius:5px;border:1px solid var(--border);"><div style="font-weight:700;color:var(--primary);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;"><span>${esc(k)}</span><button type="button" class="btn btn-sm btn-clear" style="height:22px;padding:2px 6px;" onclick="this.closest('.shared-cc-row').remove()">×</button></div><div style="display:grid;grid-template-columns:1fr 100px 1fr 100px;gap:19px;align-items:end;"><div class="form-group"><label>Sell Amount</label><input type="number" step="0.01" class="shared-cc-sell" value="${v.amount??''}"></div><div class="form-group"><label>Sell Currency</label><select class="shared-cc-sell-cur">${getCurrencyOptions(v.currency||'INR')}</select></div><div class="form-group"><label>Buy Amount</label><input type="number" step="0.01" class="shared-cc-buy" value="${v.buyAmount??''}"></div><div class="form-group"><label>Buy Currency</label><select class="shared-cc-buy-cur">${getCurrencyOptions(v.buyCurrency||v.currency||'INR')}</select></div></div></div>`;
+  }
+  function openSea2(idx){
+    ensureSeaLocal2();
+    const rec=idx===null?null:db.carrierChargesSeaLcl[idx];
+    if(idx!==null&&!rec)return alert('Record not found.');
+    const existing=rec?.charges||{}; const keys=Object.keys(existing).length?Object.keys(existing):cols2;
+    const polOpts=`<option value="">Select POL</option>`+(db.pol||[]).map(p=>`<option value="${esc(p)}" ${pol2(p)===pol2(rec?.pol)?'selected':''}>${esc(p)}</option>`).join('');
+    const html=`<h3 style="color:var(--primary);margin-bottom:12px;">${idx===null?'Add':'Edit'} SEA Carrier-Specific Charge</h3><div class="form-grid-2col" style="gap:19px;"><div class="form-group"><label>Carrier</label><select id="final-sea-cc-carrier"><option value="">Select Carrier</option>${(db.carriers||[]).map(c=>`<option value="${esc(c)}" ${norm2(c)===norm2(rec?.carrier)?'selected':''}>${esc(c)}</option>`).join('')}</select></div><div class="form-group"><label>POL</label><select id="final-sea-cc-pol">${polOpts}</select></div><div class="form-group"><label>HAZ / NON HAZ</label><select id="final-sea-cc-cargo"><option value="NON HAZ" ${cargo2(rec?.commodity)==='NON HAZ'?'selected':''}>Non Haz</option><option value="HAZ" ${cargo2(rec?.commodity)==='HAZ'?'selected':''}>Haz</option></select></div></div><div style="margin:12px 0 8px;font-weight:700;color:var(--primary);">Carrier Charges <span style="font-weight:400;color:#64748b;">(Same rates for 20 GP & 40 HC • THC managed separately)</span></div><div id="final-sea-cc-charges">${keys.filter(k=>!/^THC(?:_|$)/i.test(k)).map(k=>seaRow2(k,existing[k])).join('')}</div><div style="margin-top:10px;display:flex;gap:19px;align-items:end;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px;"><div class="form-group" style="flex:1;min-width:180px;"><label>Add Charge</label><select id="final-sea-cc-add">${cols2.map(k=>`<option value="${esc(k)}">${esc(k)}</option>`).join('')}</select></div><button type="button" class="btn btn-success" onclick="addFinalSeaCarrierCharge()">+</button></div><div style="margin-top:16px;text-align:right;display:flex;gap:19px;justify-content:flex-end;"><button class="btn btn-clear" onclick="closeModal('previewModal')">Cancel</button><button class="btn btn-quoted" onclick="saveFinalSeaCarrierCharge(${idx===null?'null':idx})">💾 Save</button></div>`;
+    document.getElementById('modal-title').textContent=`${idx===null?'Add':'Edit'} SEA Carrier-Specific Charge`; document.getElementById('previewBody').innerHTML=html; openModal('previewModal');
+  }
+  window.openAddCarrierChargeModal=function(type){if(type==='sealcl')return openSea2(null);};
+  window.openEditCarrierChargeModal=function(type,idx){if(type==='sealcl')return openSea2(idx);};
+  window.saveFinalSeaCarrierCharge=function(idx){
+    ensureSeaLocal2();
+    const carrier=norm2(document.getElementById('final-sea-cc-carrier')?.value),pol=String(document.getElementById('final-sea-cc-pol')?.value||'').trim(),commodity=cargo2(document.getElementById('final-sea-cc-cargo')?.value);
+    if(!carrier||!pol)return alert('Carrier and POL are required.');
+    const dup=db.carrierChargesSeaLcl.findIndex((r,i)=>i!==idx&&norm2(r.carrier)===carrier&&pol2(r.pol)===pol2(pol)&&cargo2(r.commodity)===commodity);
+    if(dup>=0)return alert('Duplicate SEA carrier charge for the same Carrier + POL + HAZ/NON HAZ.');
+    const charges={}; document.querySelectorAll('#final-sea-cc-charges .shared-cc-row').forEach(row=>{const k=row.getAttribute('data-charge-key');const s=parseFloat(row.querySelector('.shared-cc-sell')?.value)||0;const b=parseFloat(row.querySelector('.shared-cc-buy')?.value)||0;const sc=row.querySelector('.shared-cc-sell-cur')?.value||'INR';const bc=row.querySelector('.shared-cc-buy-cur')?.value||sc;if(s>0||b>0)charges[k]={amount:s,currency:sc,buyAmount:b,buyCurrency:bc};});
+    if(!Object.keys(charges).length)return alert('Please enter at least one charge.');
+    const now=new Date().toISOString(); const old=idx===null?null:db.carrierChargesSeaLcl[idx]; const rec={mode:'sea',carrier:String(carrier).trim(),pol,commodity,charges,validFrom:old?.validFrom||'',validTo:old?.validTo||'',createdAt:old?.createdAt||now,updated:now};
+    if(idx===null)db.carrierChargesSeaLcl.push(rec);else db.carrierChargesSeaLcl[idx]=rec;
+    saveDB();ensureSeaLocal2();closeModal('previewModal');renderSeaMaster2();autoBackup();window.__finalSeaPull('master-save');alert(idx===null?'✅ SEA carrier charge added.':'✅ SEA carrier charge updated.');
+  };
+  window.deleteSeaCarrierCharge=function(idx){ensureSeaLocal2();const r=db.carrierChargesSeaLcl[idx];if(!r)return alert('Record not found.');if(!confirm(`Delete ${r.carrier} / ${r.pol} / ${r.commodity}?`))return;db.carrierChargesSeaLcl.splice(idx,1);saveDB();renderSeaMaster2();autoBackup();};
+  window.duplicateSeaCarrierCharge=function(idx){ensureSeaLocal2();const r=db.carrierChargesSeaLcl[idx];if(!r)return alert('Record not found.');const copy=JSON.parse(JSON.stringify(r));copy.createdAt=copy.updated=new Date().toISOString();db.carrierChargesSeaLcl.push(copy);saveDB();renderSeaMaster2();autoBackup();};
+  window.previewSeaCarrierCharge=function(idx){ensureSeaLocal2();const r=db.carrierChargesSeaLcl[idx];if(!r)return alert('Record not found.');let rows=Object.entries(r.charges||{}).filter(([k])=>!/^THC/i.test(k)).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v.amount??'—'}</td><td>${v.currency||'INR'}</td><td>${v.buyAmount??'—'}</td><td>${v.buyCurrency||v.currency||'INR'}</td></tr>`).join('');document.getElementById('modal-title').textContent='SEA Carrier Charge Preview';document.getElementById('previewBody').innerHTML=`<div class="preview-card"><h3>SEA Carrier-Specific Charges</h3><div class="preview-grid"><div class="item"><span class="label">Carrier</span><span class="value">${esc(r.carrier)}</span></div><div class="item"><span class="label">POL</span><span class="value">${esc(r.pol)}</span></div><div class="item"><span class="label">Cargo</span><span class="value">${esc(r.commodity)}</span></div><div class="item"><span class="label">Coverage</span><span class="value">Same for 20 GP & 40 HC</span></div></div></div><div class="preview-card"><table class="preview-charges-table"><thead><tr><th>Charge</th><th>Sell</th><th>Currency</th><th>Buy</th><th>Currency</th></tr></thead><tbody>${rows||'<tr><td colspan="5">No charges</td></tr>'}</tbody></table></div>`;openModal('previewModal');};
+
+  // Export/Import: no CONTAINER column for SEA Local Charges. Same exported row serves both 20 GP and 40 HC.
+  const oldBulkExport=window.bulkExportCarrierCharges;
+  window.bulkExportCarrierCharges=function(){
+    ensureSeaLocal2();
+    if(typeof XLSX==='undefined')return alert('XLSX library not loaded. Please refresh and try again.');
+    const wb=XLSX.utils.book_new();
+    const seaRows=db.carrierChargesSeaLcl.map(r=>{const row={MODE:'SEA',CARRIER:r.carrier||'',POL:r.pol||'',CARGO:cargo2(r.commodity),'VALID FROM':r.validFrom||'','VALID TO':r.validTo||''};cols2.forEach(c=>row[c]=fmt2(r.charges?.[c]));return row;});
+    const fallback={MODE:'SEA',CARRIER:'',POL:'',CARGO:'NON HAZ','VALID FROM':'','VALID TO':''};cols2.forEach(c=>fallback[c]='');
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(seaRows.length?seaRows:[fallback]),'SEA - LOCAL CHARGES');
+    const thcRows=(db.seaTHCRates||[]).map(r=>({MODE:'SEA',CARRIER:r.carrier||'',POL:r.pol||'',CARGO:cargo2(r.commodity),CURRENCY:r.currency||'INR','THC 20 GP':r.thc20??'','THC 40 HC':r.thc40??'','VALID FROM':r.validFrom||'','VALID TO':r.validTo||''}));
+    const thcFallback={MODE:'SEA',CARRIER:'',POL:'',CARGO:'NON HAZ',CURRENCY:'INR','THC 20 GP':'','THC 40 HC':'','VALID FROM':'','VALID TO':''};
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(thcRows.length?thcRows:[thcFallback]),'SEA - THC');
+    // Preserve AIR/LCL existing export.
+    ['air','lcl'].forEach(mode=>{const records=Array.isArray(db.carrierSpecificCharges)?db.carrierSpecificCharges:[];let rowCols=[];try{rowCols=getHorizontalChargeColumns(mode).filter(k=>!/^THC(?:_|$)/i.test(k));}catch(e){}const rows=records.map(r=>{const row={MODE:mode.toUpperCase(),CARRIER:r.carrier||'',CARGO:cargo2(r.commodity),'VALID FROM':r.validFrom||'','VALID TO':r.validTo||''};rowCols.forEach(c=>row[c]=fmt2(r.charges?.[c]));return row;});const fb={MODE:mode.toUpperCase(),CARRIER:'',CARGO:'NON HAZ','VALID FROM':'','VALID TO':''};rowCols.forEach(c=>fb[c]='');XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows.length?rows:[fb]),`${mode.toUpperCase()} - LOCAL CHARGES`);});
+    XLSX.writeFile(wb,`LOCAL_CHARGES_CARRIER_SAME_CONTAINER_${new Date().toISOString().slice(0,10)}.xlsx`);
+  };
+
+  const oldBulkImport=window.bulkImportCarrierCharges;
+  window.bulkImportCarrierCharges=function(input){
+    if(!input.files?.[0])return alert('Please select an Excel file.');
+    const file=input.files[0],reader=new FileReader();
+    reader.onload=function(e){
+      try{
+        if(typeof XLSX==='undefined')throw new Error('XLSX library not loaded.');
+        const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'}); ensureSeaLocal2();
+        let added=0,merged=0,skipped=0,errors=[];
+        const sh=wb.Sheets['SEA - LOCAL CHARGES'];
+        if(sh){
+          XLSX.utils.sheet_to_json(sh,{defval:''}).forEach((r,i)=>{
+            const n=i+2,carrier=norm2(r.CARRIER),pol=String(r.POL||'').trim(),ck=cargo2(r.CARGO);
+            if(!carrier||!pol||!['HAZ','NON HAZ'].includes(ck)){errors.push(`SEA - LOCAL CHARGES Row ${n}: Carrier, POL and CARGO are required/invalid.`);return;}
+            if(norm2(r.MODE).toLowerCase()!=='SEA'.toLowerCase()){errors.push(`SEA - LOCAL CHARGES Row ${n}: MODE must be SEA.`);return;}
+            let rec=db.carrierChargesSeaLcl.find(x=>norm2(x.carrier)===carrier&&pol2(x.pol)===pol2(pol)&&cargo2(x.commodity)===ck);
+            if(!rec){rec={mode:'sea',carrier,pol,commodity:ck,charges:{},createdAt:new Date().toISOString(),updated:new Date().toISOString()};db.carrierChargesSeaLcl.push(rec);added++;}else merged++;
+            cols2.forEach(c=>{const v=parse2(r[c]);if(!v)return;if(!rec.charges[c])rec.charges[c]=v;else skipped++;});
+            if(r['VALID FROM'])rec.validFrom=String(r['VALID FROM']).trim();if(r['VALID TO'])rec.validTo=String(r['VALID TO']).trim();rec.updated=new Date().toISOString();
+          });
+        } else errors.push('Missing sheet: SEA - LOCAL CHARGES');
+        // Import dedicated THC through the existing non-destructive path, but never alter local charges.
+        const thc=wb.Sheets['SEA - THC'];
+        if(thc){
+          XLSX.utils.sheet_to_json(thc,{defval:''}).forEach((r,i)=>{
+            const n=i+2,carrier=norm2(r.CARRIER),pol=String(r.POL||'').trim(),ck=cargo2(r.CARGO),currency=norm2(r.CURRENCY),v20=parse2(r['THC 20 GP']),v40=parse2(r['THC 40 HC']);
+            if(!carrier||!pol||!['HAZ','NON HAZ'].includes(ck)||!['INR','USD'].includes(currency)){errors.push(`SEA - THC Row ${n}: invalid Carrier/POL/CARGO/CURRENCY.`);return;}
+            if(v20&&v20.currency!==currency)errors.push(`SEA - THC Row ${n}: THC 20 GP currency mismatch.`);if(v40&&v40.currency!==currency)errors.push(`SEA - THC Row ${n}: THC 40 HC currency mismatch.`);
+            if(!Array.isArray(db.seaTHCRates))db.seaTHCRates=[];let rec=db.seaTHCRates.find(x=>norm2(x.carrier)===carrier&&pol2(x.pol)===pol2(pol)&&cargo2(x.commodity)===ck&&norm2(x.currency)===currency);
+            if(!rec){rec={carrier,pol,commodity:ck,currency,thc20:'',thc40:'',createdAt:new Date().toISOString(),updated:new Date().toISOString()};db.seaTHCRates.push(rec);added++;}else merged++;
+            if((rec.thc20===''||rec.thc20===null||rec.thc20===undefined)&&v20)rec.thc20=v20.amount;
+            if((rec.thc40===''||rec.thc40===null||rec.thc40===undefined)&&v40)rec.thc40=v40.amount;
+            if(r['VALID FROM'])rec.validFrom=String(r['VALID FROM']).trim();if(r['VALID TO'])rec.validTo=String(r['VALID TO']).trim();rec.updated=new Date().toISOString();
+          });
+        }
+        saveDB();ensureSeaLocal2();renderSeaMaster2();if(typeof renderSeaTHCMaster==='function')renderSeaTHCMaster();autoBackup();
+        alert(`✅ Import Carrier completed.\n\nSEA Local/THC added: ${added}\nMerged existing: ${merged}\nSkipped existing charge cells: ${skipped}\nErrors: ${errors.length}${errors.length?'\n\n'+errors.slice(0,12).join('\n'):''}`);
+      }catch(err){console.error(err);alert('❌ Import Carrier failed: '+err.message);}finally{input.value='';}
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  // Normalize existing data once on load, then render the corrected master.
+  try{ensureSeaLocal2();saveDB();}catch(e){console.warn('SEA same-container normalization:',e);}
+  setTimeout(()=>{try{renderSeaMaster2();}catch(e){console.warn('SEA local master render:',e);}},0);
+})();
+
+
+/* ============================================================================
+   FINAL RATE SHEET FIX — MULTI CARRIER + MULTI CONTAINER
+   - Upsert instead of amount-sensitive duplicate check
+   - SEA container comparison: Carrier[i] + Container[i]
+   - Blank C2/C3 never creates a row
+   - Freight Purchase/Sell default currency = USD
+   - Existing matching rate is UPDATED, not skipped
+   - Existing unrelated records are preserved
+   ============================================================================ */
+(function(){
+  function rsNorm(v){ return String(v ?? '').trim().toUpperCase(); }
+  function rsContainer(v){
+    const s=rsNorm(v).replace(/[-_]/g,' ').replace(/\s+/g,' ');
+    if(s==='20GP'||s==='20 GP'||s.includes('20 GP')) return '20 GP';
+    if(s==='40GP'||s==='40 GP'||s.includes('40 GP')) return '40 GP';
+    if(s==='40HC'||s==='40 HC'||s.includes('40 HC')) return '40 HC';
+    return String(v ?? '').trim();
+  }
+  function rsToday(){ return new Date().toISOString().slice(0,10); }
+
+  function upsertRateRow(rate){
+    if(!Array.isArray(db.rateSheet)) db.rateSheet=[];
+    const key=(r)=>
+      rsNorm(r.carrierName)===rsNorm(rate.carrierName) &&
+      rsNorm(r.freightType)===rsNorm(rate.freightType) &&
+      rsNorm(r.pol)===rsNorm(rate.pol) &&
+      rsNorm(r.pod)===rsNorm(rate.pod) &&
+      rsContainer(r.containerType)===rsContainer(rate.containerType);
+    const idx=db.rateSheet.findIndex(key);
+    const now=new Date().toISOString();
+    if(idx>=0){
+      const old=db.rateSheet[idx];
+      db.rateSheet[idx]={...old,...rate, id:old.id||rate.id, createdAt:old.createdAt||rate.createdAt||now, updatedAt:now};
+      return 'updated';
+    }
+    db.rateSheet.push({...rate,id:rate.id||('RS-'+Date.now()+'-'+Math.random().toString(36).slice(2,8)),createdAt:rate.createdAt||now,updatedAt:now});
+    return 'added';
+  }
+
+  function buildRowsFromQuote(data,mode){
+    const out=[];
+    if(!data || !Array.isArray(data.carrierRates)) return out;
+    const isSea=mode==='sea';
+    const containerMode=isSea && rsNorm(data.comparisonMode)==='CONTAINER';
+    const containers=containerMode && Array.isArray(data.comparisonContainers)
+      ? data.comparisonContainers.slice(0,3)
+      : [data.container||'',data.container||'',data.container||''];
+    const carrierList=data.carrierRates.slice(0,3);
+    carrierList.forEach((cr,i)=>{
+      const carrier=String(cr?.carrier||'').trim();
+      if(!carrier) return;
+      const container=rsContainer(containers[i]||'');
+      if(isSea && !container) return;
+      const key=mode==='air'?'AIR FREIGHT':'FREIGHT';
+      const freight=cr?.charges?.[key] || cr?.charges?.FREIGHT || cr?.charges?.['AIR FREIGHT'];
+      if(!freight) return;
+      const buy=Number(freight.buyAmount||0);
+      const sell=Number(freight.amount||0);
+      if(buy<=0 && sell<=0) return;
+      out.push({
+        carrierName:carrier,
+        freightType:mode.toUpperCase(),
+        pol:String(data.pol||'').trim(),
+        pod:String(data.pod||'').trim(),
+        containerType:container,
+        // Freight default currency is USD. Preserve an explicit saved currency if present.
+        currency:String(freight.buyCurrency||freight.currency||'USD').trim().toUpperCase() || 'USD',
+        freightAmount:buy>0?buy:sell,
+        buyAmount:buy,
+        buyCurrency:String(freight.buyCurrency||'USD').trim().toUpperCase() || 'USD',
+        sellAmount:sell,
+        sellCurrency:String(freight.currency||'USD').trim().toUpperCase() || 'USD',
+        transitTime:data.transit?`${data.transit} days`:'',
+        validFrom:data.validFrom||rsToday(),
+        validTo:data.validityDate||data.validTo||'',
+        commodity:String(data.commodity||'').trim(),
+        remarks:`Auto-saved from quote ${data.quoteNumber||'N/A'}`,
+        source:'quote',
+        quoteNumber:data.quoteNumber||''
+      });
+    });
+    return out;
+  }
+
+  window.updateRateSheetFromQuote=function(data,mode){
+    const rows=buildRowsFromQuote(data,mode);
+    if(!rows.length) return {added:0,updated:0,skipped:0};
+    let added=0,updated=0;
+    rows.forEach(r=>{ const result=upsertRateRow(r); if(result==='added')added++; else updated++; });
+    saveDB();
+    if(typeof renderRateSheet==='function' && document.getElementById('ratesheet')?.classList.contains('active')) renderRateSheet();
+    if(typeof updateExpiryDashboard==='function') updateExpiryDashboard();
+    return {added,updated,skipped:0};
+  };
+
+  // Manual Rate Sheet Save uses the same key-based upsert logic.
+  window.saveRateSheet=function(editIdx){
+    const rateData={
+      carrierName:String(document.getElementById('rs-carrier')?.value||'').trim(),
+      freightType:String(document.getElementById('rs-freightType')?.value||'SEA').trim().toUpperCase(),
+      pol:String(document.getElementById('rs-pol')?.value||'').trim(),
+      pod:String(document.getElementById('rs-pod')?.value||'').trim(),
+      containerType:rsContainer(document.getElementById('rs-container')?.value||''),
+      currency:String(document.getElementById('rs-currency')?.value||'USD').trim().toUpperCase()||'USD',
+      freightAmount:Number(document.getElementById('rs-amount')?.value||0),
+      buyAmount:Number(document.getElementById('rs-amount')?.value||0),
+      buyCurrency:String(document.getElementById('rs-currency')?.value||'USD').trim().toUpperCase()||'USD',
+      transitTime:String(document.getElementById('rs-transit')?.value||'').trim(),
+      commodity:String(document.getElementById('rs-commodity')?.value||'').trim(),
+      validFrom:String(document.getElementById('rs-validFrom')?.value||rsToday()).trim(),
+      validTo:String(document.getElementById('rs-validTo')?.value||'').trim(),
+      remarks:String(document.getElementById('rs-remarks')?.value||'').trim(),
+      source:'manual'
+    };
+    if(!rateData.carrierName || !rateData.pol || !rateData.pod || !rateData.validTo) return alert('Please fill Carrier, POL, POD, and Valid To fields.');
+    if(editIdx!==null && editIdx!==undefined){
+      if(!db.rateSheet?.[editIdx]) return alert('Rate record not found.');
+      const old=db.rateSheet[editIdx];
+      db.rateSheet[editIdx]={...old,...rateData, id:old.id||('RS-'+Date.now()),createdAt:old.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};
+      saveDB(); closeModal('rateSheetModal'); if(typeof renderRateSheet==='function')renderRateSheet(); if(typeof updateExpiryDashboard==='function')updateExpiryDashboard(); autoBackup(); return alert('Rate updated successfully!');
+    }
+    const result=upsertRateRow(rateData);
+    saveDB(); closeModal('rateSheetModal'); if(typeof renderRateSheet==='function')renderRateSheet(); if(typeof updateExpiryDashboard==='function')updateExpiryDashboard(); autoBackup();
+    alert(result==='updated'?'Existing rate updated successfully!':'Rate saved successfully!');
+  };
+
+  // Force new freight defaults in the Rate Sheet modal when creating a record.
+  const originalOpenRateSheetModal=window.openRateSheetModal;
+  window.openRateSheetModal=function(idx=null){
+    if(typeof originalOpenRateSheetModal==='function') originalOpenRateSheetModal(idx);
+    const isNew=idx===null || idx===undefined;
+    if(isNew){
+      const cur=document.getElementById('rs-currency');
+      if(cur) cur.value='USD';
+    }
+  };
+})();
+
+/* ============================================================================
+   FINAL STABILITY PATCH — SEA + RATE SHEET + BUTTON SAFETY
+   ---------------------------------------------------------------------------
+   SEA:
+     - Default Charges  : POL + HAZ/NON HAZ + EXACT CONTAINER
+     - Carrier Local    : CARRIER + POL + HAZ/NON HAZ (same for 20GP/40HC)
+     - SEA THC          : CARRIER + POL + HAZ/NON HAZ + EXACT CONTAINER
+     - Blank C2/C3      : complete slot stays blank
+
+   RATE SHEET:
+     - One independent record per active Carrier + Container combination
+     - Key: MODE + CARRIER + POL + POD + HAZ/NON HAZ + EXACT CONTAINER
+     - Rate amount changes UPDATE the matching record
+     - Blank C2/C3 never creates a record
+     - Freight Purchase/Sell default currency = USD
+     - Existing unrelated data is preserved
+============================================================================ */
+(function(){
+  const U = v => String(v ?? '').trim().toUpperCase();
+  const C = v => {
+    const s=U(v).replace(/[-_]/g,' ').replace(/\s+/g,' ');
+    if(s==='20GP'||s==='20 GP'||s.includes('20 GP')) return '20 GP';
+    if(s==='40GP'||s==='40 GP'||s.includes('40 GP')) return '40 GP';
+    if(s==='40HC'||s==='40 HC'||s.includes('40 HC')) return '40 HC';
+    return String(v ?? '').trim();
+  };
+  const cargo = v => ['HAZ','NON HAZ'].includes(U(v)) ? U(v) : 'NON HAZ';
+  const keyEq = (a,b) => U(a)===U(b);
+  const pos = v => !!v && ((Number(v.amount)||0)>0 || (Number(v.buyAmount)||0)>0);
+
+  function activeSeaContainers(data){
+    const cm = U(data?.comparisonMode)==='CONTAINER';
+    if(cm && Array.isArray(data.comparisonContainers)) return data.comparisonContainers.slice(0,3).map(C);
+    return [C(data?.container||''), C(data?.container||''), C(data?.container||'')];
+  }
+
+  // --- SEA Carrier Local Charges: one common record, same for 20GP/40HC.
+  window.upsertCarrierCharges = function(mode,data){
+    if(mode!=='sea' || !data || !Array.isArray(data.carrierRates)) return;
+    if(!Array.isArray(db.carrierChargesSeaLcl)) db.carrierChargesSeaLcl=[];
+    const now=new Date().toISOString();
+    const pol=String(data.pol||'').trim();
+    const haz=cargo(data.commodity);
+    data.carrierRates.slice(0,3).forEach(cr=>{
+      const carrier=String(cr?.carrier||'').trim();
+      if(!carrier || !pol) return;
+      let rec=db.carrierChargesSeaLcl.find(r => keyEq(r.carrier,carrier) && keyEq(r.pol,pol) && cargo(r.commodity)===haz);
+      if(!rec){
+        rec={mode:'sea',carrier,pol,commodity:haz,charges:{},createdAt:now,updatedAt:now};
+        db.carrierChargesSeaLcl.push(rec);
+      }
+      Object.entries(cr.charges||{}).forEach(([k,v])=>{
+        if(/^THC(?:_|$)/i.test(k)) return;
+        if(pos(v)) rec.charges[k]={...v};
+      });
+      delete rec.container; // enforce common 20GP/40HC record
+      rec.updatedAt=now; rec.updated=now;
+    });
+    saveDB();
+    if(typeof renderSeaCarrierMaster==='function') renderSeaCarrierMaster();
+  };
+
+  // --- Final SEA local lookup: exact-container record is accepted for legacy
+  // data, otherwise the common Carrier+POL+HAZ/NON HAZ record is used.
+  window.__finalFindSeaCarrierCharges=function(carrier,pol,commodity,container){
+    const list=Array.isArray(db.carrierChargesSeaLcl)?db.carrierChargesSeaLcl:[];
+    const exact=list.find(r=>keyEq(r.carrier,carrier)&&keyEq(r.pol,pol)&&cargo(r.commodity)===cargo(commodity)&&C(r.container)===C(container));
+    const common=list.find(r=>keyEq(r.carrier,carrier)&&keyEq(r.pol,pol)&&cargo(r.commodity)===cargo(commodity)&&!r.container);
+    const rec=exact||common;
+    if(!rec) return {};
+    const out={};
+    Object.entries(rec.charges||{}).forEach(([k,v])=>{
+      if(/^THC(?:_|$)/i.test(k)) return;
+      if(pos(v)) out[k]={...v};
+    });
+    return out;
+  };
+
+  // --- Final Rate Sheet upsert key.
+  function rateKey(r){
+    return [U(r.freightType),U(r.carrierName),U(r.pol),U(r.pod),cargo(r.commodity),C(r.containerType)].join('¦');
+  }
+  function upsertFinalRate(r){
+    if(!Array.isArray(db.rateSheet)) db.rateSheet=[];
+    const now=new Date().toISOString();
+    const incoming={...r,
+      freightType:U(r.freightType),
+      carrierName:String(r.carrierName||'').trim(),
+      pol:String(r.pol||'').trim(),
+      pod:String(r.pod||'').trim(),
+      commodity:cargo(r.commodity),
+      containerType:C(r.containerType),
+      buyCurrency:U(r.buyCurrency||'USD')||'USD',
+      sellCurrency:U(r.sellCurrency||r.currency||'USD')||'USD',
+      currency:U(r.currency||r.buyCurrency||'USD')||'USD',
+      updatedAt:now
+    };
+    const idx=db.rateSheet.findIndex(x=>rateKey(x)===rateKey(incoming));
+    if(idx>=0){
+      const old=db.rateSheet[idx];
+      db.rateSheet[idx]={...old,...incoming,id:old.id||incoming.id||('RS-'+Date.now()),createdAt:old.createdAt||incoming.createdAt||now,updatedAt:now};
+      return 'updated';
+    }
+    db.rateSheet.push({...incoming,id:incoming.id||('RS-'+Date.now()+'-'+Math.random().toString(36).slice(2,8)),createdAt:incoming.createdAt||now});
+    return 'added';
+  }
+
+  window.updateRateSheetFromQuote=function(data,mode){
+    if(!data || !Array.isArray(data.carrierRates) || !Array.isArray(db.rateSheet)) return {added:0,updated:0};
+    const containers=activeSeaContainers(data);
+    const isSea=mode==='sea';
+    const rows=[];
+    data.carrierRates.slice(0,3).forEach((cr,i)=>{
+      const carrier=String(cr?.carrier||'').trim();
+      if(!carrier) return;
+      const container=C(isSea ? containers[i] : (data.container||''));
+      if(isSea && !container) return; // blank C2/C3 = no record
+      if(!isSea && !String(data.container||'').trim()) return;
+      const key=mode==='air'?'AIR FREIGHT':'FREIGHT';
+      const f=cr.charges?.[key] || cr.charges?.FREIGHT || cr.charges?.['AIR FREIGHT'];
+      if(!f) return;
+      const buy=Number(f.buyAmount)||0, sell=Number(f.amount)||0;
+      if(buy<=0 && sell<=0) return;
+      const buyCur=U(f.buyCurrency||'USD')||'USD';
+      const sellCur=U(f.currency||'USD')||'USD';
+      const amount=buy>0?buy:sell;
+      rows.push({
+        carrierName:carrier,
+        freightType:U(mode),
+        pol:String(data.pol||'').trim(),
+        pod:String(data.pod||'').trim(),
+        containerType:container,
+        commodity:cargo(data.commodity),
+        currency:buyCur,
+        buyAmount:buy,
+        buyCurrency:buyCur,
+        sellAmount:sell,
+        sellCurrency:sellCur,
+        freightAmount:amount,
+        transitTime:data.transit?`${data.transit} days`:'',
+        validFrom:data.validFrom||new Date().toISOString().slice(0,10),
+        validTo:data.validityDate||data.validTo||'',
+        remarks:`Auto-saved from quote ${data.quoteNumber||'N/A'}`,
+        source:'quote',quoteNumber:data.quoteNumber||''
+      });
+    });
+    let added=0,updated=0;
+    rows.forEach(r=>{const x=upsertFinalRate(r);x==='added'?added++:updated++;});
+    if(rows.length) saveDB();
+    if(typeof renderRateSheet==='function' && document.getElementById('ratesheet')?.classList.contains('active')) renderRateSheet();
+    if(typeof updateExpiryDashboard==='function') updateExpiryDashboard();
+    return {added,updated};
+  };
+
+  // --- Manual Rate Sheet save: same exact key, USD freight default.
+  window.saveRateSheet=function(editIdx){
+    const get=id=>document.getElementById(id);
+    const r={
+      carrierName:String(get('rs-carrier')?.value||'').trim(),
+      freightType:U(get('rs-freightType')?.value||'SEA'),
+      pol:String(get('rs-pol')?.value||'').trim(),
+      pod:String(get('rs-pod')?.value||'').trim(),
+      containerType:C(get('rs-container')?.value||''),
+      commodity:cargo(get('rs-commodity')?.value||'NON HAZ'),
+      currency:U(get('rs-currency')?.value||'USD')||'USD',
+      buyCurrency:U(get('rs-currency')?.value||'USD')||'USD',
+      sellCurrency:U(get('rs-currency')?.value||'USD')||'USD',
+      freightAmount:Number(get('rs-amount')?.value||0),
+      buyAmount:Number(get('rs-amount')?.value||0),
+      sellAmount:Number(get('rs-amount')?.value||0),
+      transitTime:String(get('rs-transit')?.value||'').trim(),
+      validFrom:String(get('rs-validFrom')?.value||new Date().toISOString().slice(0,10)).trim(),
+      validTo:String(get('rs-validTo')?.value||'').trim(),
+      remarks:String(get('rs-remarks')?.value||'').trim(),
+      source:'manual'
+    };
+    if(!r.carrierName||!r.pol||!r.pod||!r.containerType||!r.validTo) return alert('Please fill Carrier, POL, POD, Container and Valid To.');
+    if(editIdx!==null && editIdx!==undefined){
+      const old=db.rateSheet?.[editIdx];
+      if(!old) return alert('Rate record not found.');
+      const oldKey=rateKey(old), newKey=rateKey(r);
+      const conflict=db.rateSheet.findIndex((x,i)=>i!==editIdx&&rateKey(x)===newKey);
+      if(conflict>=0) return alert('Another Rate Sheet record already exists for this Carrier + POL + POD + HAZ/NON HAZ + Container.');
+      db.rateSheet[editIdx]={...old,...r,id:old.id,createdAt:old.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString()};
+      saveDB(); closeModal('rateSheetModal'); renderRateSheet(); updateExpiryDashboard(); autoBackup(); return alert('Rate updated successfully!');
+    }
+    const result=upsertFinalRate(r);
+    saveDB(); closeModal('rateSheetModal'); renderRateSheet(); updateExpiryDashboard(); autoBackup();
+    alert(result==='updated'?'Existing rate updated successfully!':'Rate saved successfully!');
+  };
+
+  // --- Fix bulk Renew: never opens multiple renewal modals.
+  window.ratesheetBulkAction=function(action){
+    const indices=typeof getSelectedRateSheetIndices==='function'?getSelectedRateSheetIndices():[];
+    if(!indices.length) return alert('Please select at least one rate.');
+    if(action==='preview') return previewRateSheet(indices[0]);
+    if(action==='edit'){
+      if(indices.length>1 && !confirm(`You selected ${indices.length} rates. Only the first one will be edited. Continue?`)) return;
+      return editRateSheet(indices[0]);
+    }
+    if(action==='duplicate'){
+      if(!confirm(`Duplicate ${indices.length} selected rate(s)?`)) return;
+      indices.slice().sort((a,b)=>b-a).forEach(i=>duplicateRateSheet(i));
+      renderRateSheet(); return;
+    }
+    if(action==='delete'){
+      if(!confirm(`Delete ${indices.length} selected rate(s)? This cannot be undone.`)) return;
+      indices.slice().sort((a,b)=>b-a).forEach(i=>{if(i>=0&&i<db.rateSheet.length)db.rateSheet.splice(i,1);});
+      saveDB(); renderRateSheet(); updateExpiryDashboard(); autoBackup(); return;
+    }
+    if(action==='renew'){
+      if(indices.length>1 && !confirm(`Renew the first selected rate now? Other selected rates will remain unchanged.`)) return;
+      return renewRateSheet(indices[0]);
+    }
+  };
+
+  // Rebind SEA lookups to the final local/default/THC rules.
+  window.__finalSeaCarrierChargesLookup=window.__finalFindSeaCarrierCharges;
+
+  // If a legacy exact-container Carrier Local record exists, prefer it; otherwise common record.
+  const finalPull = window.__finalSeaPull;
+  if(typeof finalPull==='function'){
+    // Keep the existing renderer/event chain; lookup helpers above are available to final pull.
+  }
+
+  // Expose diagnostics for testing.
+  window.__SHAHID_FINAL_RULES={
+    seaRateKey:'CARRIER + POL + HAZ/NON HAZ + EXACT CONTAINER',
+    seaDefaultKey:'POL + HAZ/NON HAZ + EXACT CONTAINER',
+    seaLocalKey:'CARRIER + POL + HAZ/NON HAZ (same 20GP/40HC)',
+    seaTHCKey:'CARRIER + POL + HAZ/NON HAZ + EXACT CONTAINER',
+    rateSheetKey:'MODE + CARRIER + POL + POD + HAZ/NON HAZ + EXACT CONTAINER'
+  };
+})();
+
+
+/* FINAL RATE SHEET <-> QUOTE + AIR FREIGHT INR PATCH */
+(function(){
+  const U = v => String(v ?? '').trim().toUpperCase();
+  const C = v => {
+    const s=U(v).replace(/[-_]/g,' ').replace(/\s+/g,' ');
+    if(s==='20GP'||s.includes('20 GP')) return '20 GP';
+    if(s==='40GP'||s.includes('40 GP')) return '40 GP';
+    if(s==='40HC'||s.includes('40 HC')) return '40 HC';
+    return String(v ?? '').trim();
+  };
+  const cargo = v => U(v)==='HAZ' ? 'HAZ' : 'NON HAZ';
+  const today = () => new Date().toISOString().slice(0,10);
+
+  // Rate Sheet freight currency rule: AIR = INR; SEA/LCL = USD.
+  window.__SHAHID_FREIGHT_DEFAULT_CURRENCY = 'USD';
+  window.__SHAHID_AIR_FREIGHT_CURRENCY = 'INR';
+
+  function rsCurrencyForMode(mode, fallback='USD'){
+    return U(mode)==='AIR' ? 'INR' : (U(fallback)||'USD');
+  }
+
+  function normalizeAirRateSheetCurrencies(){
+    if(!Array.isArray(db.rateSheet)) return false;
+    let changed=false;
+    db.rateSheet.forEach(r=>{
+      if(U(r.freightType)==='AIR'){
+        if(U(r.currency)!=='INR'){ r.currency='INR'; changed=true; }
+        if(U(r.buyCurrency)!=='INR'){ r.buyCurrency='INR'; changed=true; }
+        if(U(r.sellCurrency)!=='INR'){ r.sellCurrency='INR'; changed=true; }
+      }
+    });
+    return changed;
+  }
+
+  function rsKey(r){
+    return [U(r.freightType),U(r.carrierName),U(r.pol),U(r.pod),cargo(r.commodity),C(r.containerType)].join('¦');
+  }
+  function upsert(r){
+    if(!Array.isArray(db.rateSheet)) db.rateSheet=[];
+    const now=new Date().toISOString();
+    const incoming={...r,
+      freightType:U(r.freightType),
+      carrierName:String(r.carrierName||'').trim(),
+      pol:String(r.pol||'').trim(),
+      pod:String(r.pod||'').trim(),
+      commodity:cargo(r.commodity),
+      containerType:C(r.containerType),
+      currency:rsCurrencyForMode(r.freightType,r.currency||'USD'),
+      buyCurrency:rsCurrencyForMode(r.freightType,r.buyCurrency||r.currency||'USD'),
+      sellCurrency:rsCurrencyForMode(r.freightType,r.sellCurrency||r.currency||'USD'),
+      updatedAt:now
+    };
+    const idx=db.rateSheet.findIndex(x=>rsKey(x)===rsKey(incoming));
+    if(idx>=0){
+      const old=db.rateSheet[idx];
+      db.rateSheet[idx]={...old,...incoming,id:old.id||incoming.id||('RS-'+Date.now()),createdAt:old.createdAt||incoming.createdAt||now,updatedAt:now};
+      return 'updated';
+    }
+    db.rateSheet.push({...incoming,id:incoming.id||('RS-'+Date.now()+'-'+Math.random().toString(36).slice(2,8)),createdAt:incoming.createdAt||now});
+    return 'added';
+  }
+
+  // Save every active carrier/container pair from the quote.
+  window.updateRateSheetFromQuote=function(data,mode){
+    if(!data || !Array.isArray(data.carrierRates)) return {added:0,updated:0};
+    const isSea=mode==='sea';
+    const cm=isSea && U(data.comparisonMode)==='CONTAINER';
+    const containers=cm && Array.isArray(data.comparisonContainers)
+      ? data.comparisonContainers.slice(0,3).map(C)
+      : [C(data.container||''),C(data.container||''),C(data.container||'')];
+    let added=0,updated=0;
+    data.carrierRates.slice(0,3).forEach((cr,i)=>{
+      const carrier=String(cr?.carrier||'').trim();
+      if(!carrier) return;
+      const container=containers[i]||'';
+      if(isSea && !container) return;
+      if(!isSea && mode==='lcl' && !container) { /* LCL may legitimately have no container */ }
+      const key=mode==='air'?'AIR FREIGHT':'FREIGHT';
+      const f=cr?.charges?.[key] || cr?.charges?.FREIGHT || cr?.charges?.['AIR FREIGHT'];
+      if(!f) return;
+      const buy=Number(f.buyAmount)||0, sell=Number(f.amount)||0;
+      if(buy<=0 && sell<=0) return;
+      const result=upsert({
+        carrierName:carrier, freightType:mode.toUpperCase(), pol:data.pol||'', pod:data.pod||'',
+        containerType:container, commodity:data.commodity||'NON HAZ',
+        freightAmount:buy>0?buy:sell, buyAmount:buy, sellAmount:sell,
+        currency:mode==='air'?'INR':'USD', buyCurrency:mode==='air'?'INR':'USD', sellCurrency:mode==='air'?'INR':'USD',
+        transitTime:data.transit ? String(data.transit) : '',
+        validFrom:data.validFrom||today(), validTo:data.validityDate||data.validTo||'',
+        remarks:`Auto-saved from quote ${data.quoteNumber||'N/A'}`,
+        source:'quote', quoteNumber:data.quoteNumber||''
+      });
+      if(result==='added') added++; else updated++;
+    });
+    if(added||updated){ saveDB(); if(typeof updateExpiryDashboard==='function') updateExpiryDashboard(); if(typeof renderRateSheet==='function' && document.getElementById('ratesheet')?.classList.contains('active')) renderRateSheet(); }
+    return {added,updated};
+  };
+
+  // Manual Save Freight Rate: update exact key, never compare amount/currency.
+  window.saveFreightRate=function(mode){
+    const get=id=>document.getElementById(id);
+    const pol=get(`${mode}-pol`)?.value||'', pod=get(`${mode}-pod`)?.value||'';
+    const container=get(`${mode}-container`)?.value||'';
+    const transit=get(`${mode}-transit`)?.value||'';
+    const validTo=get(`${mode}-validityDate`)?.value||'';
+    const commodity=get(`${mode}-commodity`)?.value||'NON HAZ';
+    const names=[0,1,2].map(i=>get(i===0?`${mode}-carrier`:`${mode}-carrier-${i+1}`)?.value||'');
+    if(!pol||!pod||!names[0]) return alert('Please select Carrier 1, POL and POD first.');
+    let saved=0;
+    names.forEach((carrier,i)=>{
+      if(!carrier) return;
+      const safe='FREIGHT';
+      const safeAir='AIR_FREIGHT';
+      const key=mode==='air'?'AIR FREIGHT':'FREIGHT';
+      const sell=get(`${mode}-c${i+1}-amt-${mode==='air'?safeAir:safe}`)?.value||'';
+      const buy=get(`${mode}-c${i+1}-buyAmt-${mode==='air'?safeAir:safe}`)?.value||'';
+      const amount=parseFloat(String(buy||sell).replace(/[$,]/g,''))||0;
+      if(amount<=0) return;
+      const r={carrierName:carrier,freightType:mode.toUpperCase(),pol,pod,containerType:mode==='sea'?C(container):container,commodity,freightAmount:amount,buyAmount:parseFloat(String(buy||amount).replace(/[$,]/g,''))||amount,sellAmount:parseFloat(String(sell||amount).replace(/[$,]/g,''))||amount,currency:mode==='air'?'INR':'USD',buyCurrency:mode==='air'?'INR':'USD',sellCurrency:mode==='air'?'INR':'USD',transitTime:transit,validFrom:today(),validTo,source:'manual'};
+      upsert(r); saved++;
+    });
+    saveDB(); if(typeof renderRateSheet==='function') renderRateSheet(); if(typeof updateExpiryDashboard==='function') updateExpiryDashboard();
+    alert(`Freight Rate Sheet updated for ${saved} carrier(s). Currency: ${mode==='air'?'INR':'USD'}.`);
+  };
+
+  function activateMode(mode){
+    document.querySelectorAll('.tab-btn-vertical').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    document.querySelector(`.tab-btn-vertical[data-tab="${mode}"]`)?.classList.add('active');
+    document.getElementById(mode)?.classList.add('active');
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+  function setVal(id,val){ const e=document.getElementById(id); if(e && val!==undefined && val!==null) e.value=val; }
+  function setCarrier(mode,slot,val){ setVal(slot===1?`${mode}-carrier`:`${mode}-carrier-${slot}`,val||''); }
+
+  // Apply one or multiple Rate Sheet records back into the quotation.
+  window.applyRateSheetToQuote=function(indices){
+    const idxs=(Array.isArray(indices)?indices:[indices]).map(Number).filter(Number.isFinite);
+    const rows=idxs.map(i=>db.rateSheet?.[i]).filter(Boolean);
+    if(!rows.length) return alert('Please select at least one Rate Sheet record.');
+    const mode=U(rows[0].freightType).toLowerCase();
+    if(!['sea','air','lcl'].includes(mode)) return alert('Unsupported quotation mode.');
+    if(rows.some(r=>U(r.freightType)!==U(rows[0].freightType))) return alert('Please select rates from the same mode only.');
+    if(rows.length>3) return alert('Maximum 3 carrier/container rates can be applied at once.');
+
+    activateMode(mode);
+    const first=rows[0];
+    setVal(`${mode}-pol`,first.pol||'');
+    setVal(`${mode}-pod`,first.pod||'');
+    setVal(`${mode}-commodity`,cargo(first.commodity));
+    setVal(`${mode}-transit`,first.transitTime||'');
+    setVal(`${mode}-validityDate`,first.validTo||'');
+
+    if(mode==='sea'){
+      const sameCarrier=rows.every(r=>U(r.carrierName)===U(first.carrierName));
+      const distinctContainers=new Set(rows.map(r=>C(r.containerType)).filter(Boolean)).size>1;
+      const containerMode=sameCarrier && distinctContainers;
+      setVal('sea-comparison-mode',containerMode?'container':'carrier');
+      if(containerMode){
+        setCarrier('sea',1,first.carrierName);
+        [1,2,3].forEach(slot=>setVal(`sea-container${slot===1?'':`-${slot}`}`,rows[slot-1]?.containerType||''));
+        setVal('sea-container',C(first.containerType));
+        setVal('sea-container-2',C(rows[1]?.containerType||''));
+        setVal('sea-container-3',C(rows[2]?.containerType||''));
+        setVal('sea-carrier-2',''); setVal('sea-carrier-3','');
+      }else{
+        rows.forEach((r,i)=>setCarrier('sea',i+1,r.carrierName));
+        setVal('sea-container',C(first.containerType));
+        setVal('sea-container-2',''); setVal('sea-container-3','');
+      }
+      if(typeof updateSeaComparisonUI==='function') updateSeaComparisonUI();
+      if(typeof window.__finalSeaPull==='function') window.__finalSeaPull('rate-sheet-apply');
+    }else{
+      rows.forEach((r,i)=>setCarrier(mode,i+1,r.carrierName));
+      if(typeof window.onCarrierPolChangeInternal==='function') window.onCarrierPolChangeInternal(mode);
+    }
+
+    // Apply the exact freight rate from each selected Rate Sheet record after the master pull.
+    setTimeout(()=>{
+      rows.forEach((r,i)=>{
+        const key=mode==='air'?'AIR FREIGHT':'FREIGHT';
+        const safe=key.replace(/[^A-Z0-9]/gi,'_');
+        const sell=document.getElementById(`${mode}-c${i+1}-amt-${safe}`);
+        const buy=document.getElementById(`${mode}-c${i+1}-buyAmt-${safe}`);
+        if(sell){sell.value=String(Number(r.sellAmount ?? r.freightAmount ?? 0) || '');}
+        if(buy){buy.value=String(Number(r.buyAmount ?? r.freightAmount ?? 0) || '');}
+        if(mode==='air'){
+          const cur=document.getElementById(`${mode}-c${i+1}-cur-${safe}`);
+          const buyCur=document.getElementById(`${mode}-c${i+1}-buyCur-${safe}`);
+          if(cur) cur.value='INR';
+          if(buyCur) buyCur.value='INR';
+        }
+        if(typeof recalcCharge==='function') recalcCharge(mode,key,i);
+      });
+      if(typeof markUnsaved==='function') markUnsaved(mode);
+      alert(`✅ ${rows.length} Rate Sheet record(s) applied to ${mode.toUpperCase()} Quote.\nFreight currency: ${mode==='air'?'INR':'USD'}.`);
+    },120);
+  };
+  window.useSelectedRateSheet=()=>window.applyRateSheetToQuote(typeof getSelectedRateSheetIndices==='function'?getSelectedRateSheetIndices():[]);
+
+  // Make Rate Sheet table show USD correctly; Use in Quote remains a bulk action.
+  const oldRender=window.renderRateSheet;
+  if(typeof oldRender==='function'){
+    window.renderRateSheet=function(){
+      const changed=normalizeAirRateSheetCurrencies();
+      if(changed) saveDB();
+      oldRender();
+      const table=document.getElementById('ratesheet-table');
+      if(!table) return;
+      Array.from(table.tBodies[0]?.rows||[]).forEach(tr=>{
+        const idx=Number(tr.getAttribute('data-idx'));
+        if(!Number.isInteger(idx)) return;
+        const r=db.rateSheet?.[idx]; if(!r) return;
+        // Rate Sheet currency rule: ALL AIR freight rates are INR; SEA/LCL remain unchanged.
+        const amountCell=tr.cells[6], currencyCell=tr.cells[7];
+        const isAir=U(r.freightType)==='AIR';
+        const cur=isAir?'INR':(U(r.currency)||'USD');
+        const amount=Number(r.freightAmount ?? r.sellAmount ?? r.buyAmount ?? 0);
+        if(amountCell) amountCell.textContent=amount ? `${isAir?'₹':'$'}${amount.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '—';
+        if(currencyCell) currencyCell.textContent=cur;
+
+      });
+      const bar=document.querySelector('.ratesheet-action-bar');
+      if(bar && !bar.querySelector('[data-action="use-quote"]')){
+        const b=document.createElement('button'); b.type='button'; b.className='btn btn-sm btn-success'; b.dataset.action='use-quote'; b.textContent='↗ Use in Quote'; b.onclick=window.useSelectedRateSheet; bar.insertBefore(b,bar.querySelector('#ratesheet-selected-count')||null);
+      }
+    };
+  }
+
+  // Keep Rate Sheet modal currency locked by freight type: AIR = INR, SEA/LCL = USD.
+  const oldOpenRateSheetModal=window.openRateSheetModal;
+  if(typeof oldOpenRateSheetModal==='function'){
+    window.openRateSheetModal=function(idx=null){
+      oldOpenRateSheetModal(idx);
+      const type=document.getElementById('rs-freightType');
+      const cur=document.getElementById('rs-currency');
+      if(type&&cur) cur.value=U(type.value)==='AIR'?'INR':'USD';
+    };
+  }
+  const rsTypeEl=document.getElementById('rs-freightType');
+  if(rsTypeEl && !rsTypeEl.dataset.airCurrencyBound){
+    rsTypeEl.dataset.airCurrencyBound='1';
+    rsTypeEl.addEventListener('change',()=>{
+      const cur=document.getElementById('rs-currency');
+      if(cur) cur.value=U(rsTypeEl.value)==='AIR'?'INR':'USD';
+    });
+  }
+
+  // Normalize any existing AIR Rate Sheet records to INR (amounts are preserved).
+  if(normalizeAirRateSheetCurrencies()) saveDB();
+})();
+
+
+
+/* ============================================================
+   SHAHID V2.0 — CANONICAL MULTI-CARRIER DISPATCHER
+   One runtime entry point for SEA / AIR / LCL Carrier 1-3 changes.
+   Existing legacy handlers/data remain intact for compatibility.
+   ============================================================ */
+(function(){
+  let lastValues = {sea:['','',''], air:['','',''], lcl:['','','']};
+  let scheduled = {sea:null, air:null, lcl:null};
+
+  function norm(v){
+    return String(v ?? '').trim().replace(/\s+/g,' ').toUpperCase();
+  }
+  function read(mode){
+    return [0,1,2].map(i => norm(document.getElementById(i===0?`${mode}-carrier`:`${mode}-carrier-${i+1}`)?.value));
+  }
+  function duplicate(mode, vals){
+    const seen = new Set();
+    for(const v of vals){
+      if(!v) continue;
+      if(seen.has(v)) return v;
+      seen.add(v);
+    }
+    return '';
+  }
+  function run(mode){
+    const vals=read(mode);
+    const dup=duplicate(mode,vals);
+    if(dup){
+      // Restore the previous valid selection instead of allowing duplicate
+      // carrier columns to overwrite one another.
+      const prev=lastValues[mode]||['','',''];
+      vals.forEach((v,i)=>{
+        if(v===dup){
+          const el=document.getElementById(i===0?`${mode}-carrier`:`${mode}-carrier-${i+1}`);
+          if(el) el.value=prev[i]||'';
+        }
+      });
+      alert(`Carrier already selected: ${dup}. Please select a different carrier.`);
+      return;
+    }
+    lastValues[mode]=read(mode);
+
+    if(typeof markUnsaved==='function') markUnsaved(mode);
+
+    if(mode==='sea' && typeof window.__finalSeaPull==='function'){
+      // Carrier 2/3 selection means carrier comparison mode.
+      // Container 2/3 may remain blank; finalSeaPull will use Container 1
+      // as the fallback rate basis for those carrier slots.
+      const seaMode = document.getElementById('sea-comparison-mode');
+      if(seaMode) seaMode.value = 'carrier';
+      if(typeof window.updateSeaComparisonUI==='function') window.updateSeaComparisonUI();
+      window.__finalSeaPull('carrier-2-3');
+      return;
+    }
+    if((mode==='air'||mode==='lcl') && typeof window.__finalMultiCarrierPull==='function'){
+      window.__finalMultiCarrierPull(mode,null,true);
+      return;
+    }
+
+    // Compatibility fallback only if a canonical engine is unavailable.
+    const legacy = window.__legacyMultiCarrierChangeFallback;
+    if(typeof legacy==='function') legacy(mode);
+  }
+
+  window.__canonicalMultiCarrierChange=function(mode){
+    if(!['sea','air','lcl'].includes(mode)) return;
+    clearTimeout(scheduled[mode]);
+    scheduled[mode]=setTimeout(()=>run(mode),0);
+  };
+
+  // Preserve the last legacy handler only as a fallback; normal execution
+  // always uses the canonical engine above.
+  if(typeof window.onMultiCarrierChange==='function'){
+    window.__legacyMultiCarrierChangeFallback=window.onMultiCarrierChange;
+  }
+
+  window.onMultiCarrierChange=window.__canonicalMultiCarrierChange;
+})();
+
+
+/* SHAHID ERP: conditional +2cm width for 3-carrier / 3-container output */
+(function(){
+  function shahidApplyThreeColumnWidth(){
+    const roots = document.querySelectorAll('.quote-preview, .air-quote-preview, .lcl-quote-preview');
+    roots.forEach(root => {
+      const text = (root.innerText || '').toUpperCase();
+      const heads = root.querySelectorAll('th, .carrier-rate-selector, .multi-carrier-header');
+      let count = 0;
+      heads.forEach(el => {
+        const t = (el.innerText || '').toUpperCase();
+        if (/CARRIER\s*3|CONTAINER\s*3/.test(t)) count++;
+      });
+      const three = count > 0 || /CARRIER\s*3|CONTAINER\s*3/.test(text);
+      root.classList.toggle('erp-three-column-wide', three);
+    });
+  }
+  window.shahidApplyThreeColumnWidth = shahidApplyThreeColumnWidth;
+  document.addEventListener('DOMContentLoaded', shahidApplyThreeColumnWidth);
+})();
+
+
+/* SHAHID ERP FINAL SLOT REFRESH */
+(function(){
+  function refreshSeaRateSlot(slot){
+    const i = Math.max(0, Math.min(2, Number(slot || 1) - 1));
+    if (typeof markUnsaved === 'function') markUnsaved('sea');
+    if (typeof finalSeaPull === 'function') {
+      const result = finalSeaPull(`slot-${i+1}`);
+      return result;
+    }
+    if (typeof window.__finalSeaPull === 'function') {
+      return window.__finalSeaPull(`slot-${i+1}`);
+    }
+  }
+  window.refreshSeaRateSlot = refreshSeaRateSlot;
+})();
+
+
+// FINAL RUNTIME RE-ASSERTION: exact SEA quote engine from supplied JS only.
+/* ============================================================
+   FINAL SEA RATE ENGINE — CARRIER + POL + HAZ/NON HAZ + CONTAINER
+   Applies to: Carrier Charges + Default Charges + SEA THC
+   Container 2/3 are independent active slots. Blank = blank.
+   ============================================================ */
+(function(){
+  const originalRenderCarrierChargesMaster = window.renderCarrierChargesMaster;
+  const originalOpenAddCarrierChargeModal = window.openAddCarrierChargeModal;
+  const originalOpenEditCarrierChargeModal = window.openEditCarrierChargeModal;
+  const norm = v => String(v ?? '').trim().replace(/\s+/g,' ').toUpperCase();
+  const polKey = v => norm(v).replace(/[^A-Z0-9]/g,'');
+  const containerKey = v => {
+    let x = norm(v).replace(/\s+/g,' ');
+    x = x.replace(/\b20\s*(?:GP|G P)\b/,'20 GP');
+    x = x.replace(/\b40\s*(?:GP|G P)\b/,'40 GP');
+    x = x.replace(/\b40\s*(?:HC|H C)\b/,'40 HC');
+    return x;
+  };
+  const cargoKey = v => ['HAZ','NON HAZ'].includes(norm(v)) ? norm(v) : 'NON HAZ';
+  const positive = v => v && ((Number(v.amount)||0)>0 || (Number(v.buyAmount)||0)>0);
+
+  function seaContainers(){
+    return [
+      document.getElementById('sea-container')?.value || '',
+      document.getElementById('sea-container-2')?.value || '',
+      document.getElementById('sea-container-3')?.value || ''
+    ].map(containerKey);
+  }
+  function seaCarriers(){
+    return [
+      document.getElementById('sea-carrier')?.value || '',
+      document.getElementById('sea-carrier-2')?.value || '',
+      document.getElementById('sea-carrier-3')?.value || ''
+    ].map(norm);
+  }
+  function seaContext(){
+    return {
+      pol: document.getElementById('sea-pol')?.value || '',
+      commodity: cargoKey(document.getElementById('sea-commodity')?.value || 'NON HAZ'),
+      mode: 'sea'
+    };
+  }
+
+  // Exact SEA Carrier Charges lookup. No POL/container fallback.
+  function findSeaCarrierCharges(carrier, pol, commodity, container){
+    carrier = norm(carrier); pol = polKey(pol); commodity = cargoKey(commodity); container = containerKey(container);
+    if(!carrier || !pol || !container) return {};
+    const list = Array.isArray(db.carrierChargesSeaLcl) ? db.carrierChargesSeaLcl : [];
+    const rec = list.find(r =>
+      norm(r.carrier) === carrier &&
+      polKey(r.pol) === pol &&
+      cargoKey(r.commodity) === commodity &&
+      containerKey(r.container) === container
+    );
+    if(!rec) return {};
+    const out = {};
+    Object.entries(rec.charges || {}).forEach(([k,v]) => {
+      if(/^THC(?:_|$)/i.test(k)) return;
+      if(v && positive(v)) out[k] = {...v};
+    });
+    return out;
+  }
+
+  // Exact SEA Default Charges lookup.
+  function findSeaDefaultCharges(pol, commodity, container){
+    pol = polKey(pol); commodity = cargoKey(commodity); container = containerKey(container);
+    if(!pol || !container) return {};
+    const list = Array.isArray(db.defaultSeaCharges) ? db.defaultSeaCharges : [];
+    const rec = list.find(r =>
+      polKey(r.pol) === pol &&
+      cargoKey(r.commodity) === commodity &&
+      containerKey(r.container) === container
+    );
+    if(!rec) return {};
+    const out = {};
+    Object.entries(rec.charges || {}).forEach(([k,v]) => {
+      if(/^THC(?:_|$)/i.test(k)) return;
+      if(v && positive(v)) out[k] = {...v};
+    });
+    return out;
+  }
+
+  // Dedicated SEA THC lookup.
+  function findSeaTHC(carrier, pol, commodity, container, existing){
+    carrier = norm(carrier); pol = polKey(pol); commodity = cargoKey(commodity); container = containerKey(container);
+    if(!carrier || !pol || !container) return null;
+    const rows = (db.seaTHCRates || []).filter(r =>
+      norm(r.carrier) === carrier &&
+      polKey(r.pol) === pol &&
+      cargoKey(r.commodity) === commodity
+    );
+    if(!rows.length) return null;
+    const preferred = norm(existing?.currency || existing?.THC?.currency || '');
+    const rec = (preferred && rows.find(r => norm(r.currency) === preferred)) || rows[0];
+    if(!rec) return null;
+    let amount = null;
+    if(container === '20 GP') amount = rec.thc20;
+    else if(container === '40 GP' || container === '40 HC') amount = rec.thc40;
+    if(amount === null || amount === undefined || String(amount).trim()==='' || !(Number(amount)>0)) return null;
+    const cur = norm(rec.currency) || 'INR';
+    return {amount:Number(amount),currency:cur,buyAmount:Number(amount),buyCurrency:cur,basis:'Normal'};
+  }
+
+  function manualExisting(){
+    const out=[{},{},{}];
+    document.querySelectorAll('#sea-charges-grid .charge-row').forEach(row=>{
+      const charge=row.getAttribute('data-charge');
+      if(!charge) return;
+      const safe=typeof safeKey==='function' ? safeKey(charge) : String(charge).replace(/[^A-Z0-9]/gi,'_');
+      [0,1,2].forEach(i=>{
+        const s=document.getElementById(`sea-c${i+1}-amt-${safe}`);
+        const b=document.getElementById(`sea-c${i+1}-buyAmt-${safe}`);
+        const sc=document.getElementById(`sea-c${i+1}-cur-${safe}`);
+        const bc=document.getElementById(`sea-c${i+1}-buyCur-${safe}`);
+        if(!s && !b) return;
+        const sa=parseFloat(s?.value)||0, ba=parseFloat(b?.value)||0;
+        if(sa>0 || ba>0) out[i][charge]={amount:sa,currency:sc?.value||'INR',buyAmount:ba,buyCurrency:bc?.value||sc?.value||'INR',basis:row.querySelector('.charge-basis')?.value||'Normal'};
+      });
+    });
+    return out;
+  }
+
+  function seaOrder(){
+    let order=JSON.parse(JSON.stringify(chargeCategories.sea || {}));
+    if(document.getElementById('sea-own-cfs')?.checked) delete order['CFS / Transport Charges'];
+    Object.keys(order).forEach(k=>{if(!order[k]?.length)delete order[k];});
+    return order;
+  }
+
+  function finalSeaPull(reason='change'){
+    const ctx=seaContext();
+    const mode = typeof getSeaComparisonMode==='function' ? getSeaComparisonMode() : (document.getElementById('sea-comparison-mode')?.value || 'carrier');
+    const containerMode = mode === 'container';
+    const carriers=seaCarriers();
+    const containers=seaContainers();
+    const arrays=[{},{},{}];
+
+    for(let i=0;i<3;i++){
+      const carrier = containerMode ? carriers[0] : carriers[i];
+      // In carrier-comparison mode, if Container 2/3 is blank, use Container 1
+      // as the rate basis for that carrier. A filled Container 2/3 remains independent.
+      const container1 = containers[0] || containerKey(document.getElementById('sea-container')?.value || '');
+      const container = containers[i] || container1;
+
+      if(!carrier || !container){ arrays[i]={}; continue; }
+
+      // FINAL KEY FOR ALL THREE SEA RATE SOURCES:
+      // CARRIER + POL + HAZ/NON HAZ + EXACT CONTAINER
+      const defaults=findSeaDefaultCharges(ctx.pol,ctx.commodity,container);
+      const carrierCharges=findSeaCarrierCharges(carrier,ctx.pol,ctx.commodity,container);
+      const merged={...defaults,...carrierCharges};
+
+      // THC comes ONLY from the dedicated SEA THC master.
+      delete merged.THC; delete merged.THC_20; delete merged.THC_40;
+      const thc=findSeaTHC(carrier,ctx.pol,ctx.commodity,container);
+      if(thc) merged.THC=thc;
+
+      arrays[i]=merged;
+    }
+
+    if(typeof window.buildChargesGrid==='function'){
+      window.buildChargesGrid('sea',arrays,seaOrder(),{arrays});
+    }
+    if(typeof updateCarrierHeaders==='function') updateCarrierHeaders('sea',carriers);
+    setTimeout(()=>{
+      if(typeof recalcAllCarrierCharges==='function') recalcAllCarrierCharges('sea');
+      if(typeof updateCarrierHeaders==='function') updateCarrierHeaders('sea',carriers);
+    },0);
+    return arrays;
+  }
+
+  // Override every SEA rate-changing entry point.
+  window.__finalSeaPull = finalSeaPull;
+  window.onCarrierPolChangeInternal = function(mode){
+    if(mode==='sea') return finalSeaPull('carrier-pol');
+    if(typeof window.legacy_onCarrierPolChangeInternal==='function') return window.legacy_onCarrierPolChangeInternal(mode);
+  };
+  window.onCarrierChange = function(mode){
+    if(mode==='sea') return finalSeaPull('carrier');
+    if(typeof window.legacy_onCarrierChange==='function') return window.legacy_onCarrierChange(mode);
+  };
+  window.onPolChange = function(mode){
+    if(mode==='sea') return finalSeaPull('pol');
+    if(typeof window.legacy_onPolChange==='function') return window.legacy_onPolChange(mode);
+  };
+  window.onContainerChange = function(mode){
+    if(mode==='sea') return finalSeaPull('container-1');
+    if(typeof window.legacy_onContainerChange==='function') return window.legacy_onContainerChange(mode);
+  };
+  window.onMultiCarrierChange = function(mode){
+    if(mode==='sea') return finalSeaPull('carrier-2-3');
+    // Keep existing AIR/LCL behaviour.
+    if(typeof window.legacy_onMultiCarrierChange==='function') return window.legacy_onMultiCarrierChange(mode);
+  };
+  window.onSeaContainerComparisonChange = function(slot){
+    if(typeof markUnsaved==='function') markUnsaved('sea');
+    const idx = Math.max(0, Math.min(2, Number(slot || 1) - 1));
+    const carriers = typeof seaCarriers === 'function' ? seaCarriers() : [];
+    const containers = typeof seaContainers === 'function' ? seaContainers() : [];
+    const ctx = typeof seaContext === 'function' ? seaContext() : {pol:'', commodity:'NON HAZ'};
+    const carrier = carriers[idx] || '';
+    const container = containers[idx] || '';
+
+    // C2/C3 must use their own Carrier + Container combination.
+    if(!carrier || !container){
+        if(typeof window.buildChargesGrid === 'function'){
+            const current = typeof collectMultiCarrierGridData === 'function'
+                ? collectMultiCarrierGridData('sea').byCarrier
+                : [{},{},{}];
+            const arrays = Array.isArray(current) ? current : [{},{},{}];
+            arrays[idx] = {};
+            window.buildChargesGrid('sea', arrays, typeof seaOrder==='function' ? seaOrder() : [], {arrays});
+        }
+        return {};
+    }
+
+    const defaults = typeof findSeaDefaultCharges === 'function'
+        ? findSeaDefaultCharges(ctx.pol, ctx.commodity, container) : {};
+    const carrierCharges = typeof findSeaCarrierCharges === 'function'
+        ? findSeaCarrierCharges(carrier, ctx.pol, ctx.commodity, container) : {};
+    const merged = {...defaults, ...carrierCharges};
+
+    delete merged.THC;
+    delete merged.THC_20;
+    delete merged.THC_40;
+
+    const thc = typeof findSeaTHC === 'function'
+        ? findSeaTHC(carrier, ctx.pol, ctx.commodity, container) : null;
+    if(thc) merged.THC = thc;
+
+    const arrays = typeof collectMultiCarrierGridData === 'function'
+        ? (collectMultiCarrierGridData('sea').byCarrier || [{},{},{}])
+        : [{},{},{}];
+
+    arrays[idx] = merged;
+
+    if(typeof window.buildChargesGrid === 'function'){
+        window.buildChargesGrid('sea', arrays, typeof seaOrder==='function' ? seaOrder() : [], {arrays});
+    }
+
+    if(typeof recalcAllCarrierCharges === 'function'){
+        setTimeout(()=>recalcAllCarrierCharges('sea'), 0);
+    }
+    if(typeof updateCarrierHeaders === 'function'){
+        setTimeout(()=>updateCarrierHeaders('sea', carriers), 0);
+    }
+
+    return merged;
+};
+  window.onSeaComparisonChange = function(){
+    if(typeof updateSeaComparisonUI==='function') updateSeaComparisonUI();
+    if(typeof markUnsaved==='function') markUnsaved('sea');
+    return finalSeaPull('comparison-mode');
+  };
+
+  // Save quote carrier rates into the exact SEA master records.
+  const originalUpdateRateSheetFromQuote = window.updateRateSheetFromQuote;
+  window.upsertCarrierCharges = function(mode,data){
+    if(mode!=='sea') return;
+    if(!Array.isArray(data?.carrierRates)) return;
+    if(!Array.isArray(db.carrierChargesSeaLcl)) db.carrierChargesSeaLcl=[];
+    const now=new Date().toISOString();
+    const pol=data.pol||'';
+    const commodity=cargoKey(data.commodity||'NON HAZ');
+    const containerMode=data.comparisonMode==='container';
+    const containers=containerMode && Array.isArray(data.comparisonContainers) ? data.comparisonContainers : [data.container||'',data.container||'',data.container||''];
+    const baseCarrier=data.carrier||data.carrierRates?.[0]?.carrier||'';
+    data.carrierRates.slice(0,3).forEach((cr,i)=>{
+      const carrier=containerMode ? baseCarrier : (cr?.carrier||'');
+      const container=containerKey(containers[i]||data.container||'');
+      if(!carrier || !pol || !container) return;
+      let rec=db.carrierChargesSeaLcl.find(r=>
+        norm(r.carrier)===norm(carrier)&&polKey(r.pol)===polKey(pol)&&cargoKey(r.commodity)===commodity&&containerKey(r.container)===container
+      );
+      if(!rec){rec={mode:'sea',carrier:String(carrier).trim(),pol:String(pol).trim(),commodity,container,charges:{},createdAt:now};db.carrierChargesSeaLcl.push(rec);}
+      Object.entries(cr.charges||{}).forEach(([k,v])=>{
+        if(/^THC(?:_|$)/i.test(k)) return;
+        if(v && positive(v)) rec.charges[k]={...v};
+      });
+      rec.updated=now;
+    });
+    saveDB();
+    if(typeof renderCarrierChargesMaster==='function') renderCarrierChargesMaster('sealcl');
+  };
+
+  // Expose exact lookup for diagnostics/tests.
+  window.__findFinalSeaCarrierCharges=findSeaCarrierCharges;
+  window.__findFinalSeaDefaultCharges=findSeaDefaultCharges;
+  window.__findFinalSeaTHC=findSeaTHC;
+
+  /* ==========================================================
+     SEA CARRIER-SPECIFIC MASTER UI
+     Exact key: CARRIER + POL + HAZ/NON HAZ + CONTAINER
+     ========================================================== */
+  function seaChargeColumns(){
+    return ['SEAL','MUC','DOCS','SEAWAY BL','ETS','HAZ DOCS','AMS'];
+  }
+  function carrierOpts(selected){
+    return `<option value="">Select Carrier</option>`+(db.carriers||[]).map(c=>`<option value="${esc(c)}" ${norm(c)===norm(selected)?'selected':''}>${esc(c)}</option>`).join('');
+  }
+  function cargoOpts(selected){
+    return `<option value="NON HAZ" ${cargoKey(selected)==='NON HAZ'?'selected':''}>Non Haz</option><option value="HAZ" ${cargoKey(selected)==='HAZ'?'selected':''}>Haz</option>`;
+  }
+  function containerOpts(selected){
+    const vals=['20 GP','40 GP','40 HC'];
+    return `<option value="">Select Container</option>`+vals.map(v=>`<option value="${v}" ${containerKey(v)===containerKey(selected)?'selected':''}>${v}</option>`).join('');
+  }
+  function seaChargeRow(k,v){
+    v=v||{};
+    return `<div class="shared-cc-row" data-charge-key="${esc(k)}" style="margin-bottom:8px;background:var(--bg);padding:8px;border-radius:5px;border:1px solid var(--border);">
+      <div style="font-weight:700;color:var(--primary);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;"><span>${esc(k)}</span><button type="button" class="btn btn-sm btn-clear" style="height:22px;padding:2px 6px;" onclick="this.closest('.shared-cc-row').remove()">×</button></div>
+      <div style="display:grid;grid-template-columns:1fr 100px 1fr 100px;gap:19px;align-items:end;">
+        <div class="form-group"><label>Sell Amount</label><input type="number" step="0.01" class="shared-cc-sell" value="${v.amount??''}"></div>
+        <div class="form-group"><label>Sell Currency</label><select class="shared-cc-sell-cur">${getCurrencyOptions(v.currency||'INR')}</select></div>
+        <div class="form-group"><label>Buy Amount</label><input type="number" step="0.01" class="shared-cc-buy" value="${v.buyAmount??''}"></div>
+        <div class="form-group"><label>Buy Currency</label><select class="shared-cc-buy-cur">${getCurrencyOptions(v.buyCurrency||v.currency||'INR')}</select></div>
+      </div>
+    </div>`;
+  }
+
+  function renderSeaCarrierMaster(){
+    const disp=document.getElementById('cc-sealcl-master-table'); if(!disp)return;
+    const search=norm(document.getElementById('cc-sealcl-search')?.value||'');
+    const rows=(db.carrierChargesSeaLcl||[]).map((rec,idx)=>({rec,idx})).filter(x=>{
+      const r=x.rec; const text=[r.carrier,r.pol,r.commodity,r.container].map(norm).join(' '); return !search || text.includes(search);
+    });
+    let html=`<table class="master-table"><thead><tr><th style="width:30px;">#</th><th>Carrier</th><th>POL</th><th>HAZ / NON HAZ</th><th>Container</th><th>Charges</th><th>Updated</th><th>Action</th></tr></thead><tbody>`;
+    if(!rows.length) html+=`<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--text-light);">No SEA carrier-specific records.</td></tr>`;
+    rows.forEach(({rec,idx})=>{
+      const count=Object.keys(rec.charges||{}).filter(k=>!/^THC(?:_|$)/i.test(k)).length;
+      const upd=rec.updated?new Date(rec.updated).toLocaleDateString('en-IN'):'—';
+      html+=`<tr><td>${idx+1}</td><td><strong>${esc(rec.carrier||'')}</strong></td><td>${esc(rec.pol||'')}</td><td>${esc(cargoKey(rec.commodity))}</td><td>${esc(containerKey(rec.container))}</td><td style="text-align:center"><strong>${count}</strong></td><td>${upd}</td><td>
+        <button class="btn btn-sm btn-preview" onclick="previewSeaCarrierCharge(${idx})">👁</button>
+        <button class="btn btn-sm btn-preview" onclick="openEditSeaCarrierChargeModal(${idx})">✏️</button>
+        <button class="btn btn-sm btn-duplicate" onclick="duplicateSeaCarrierCharge(${idx})">📋</button>
+        <button class="btn btn-sm btn-clear" onclick="deleteSeaCarrierCharge(${idx})">×</button></td></tr>`;
+    });
+    html+='</tbody></table>'; disp.innerHTML=html;
+  }
+  window.renderCarrierChargesMaster=function(type){
+    if(type==='sealcl') return renderSeaCarrierMaster();
+    // Preserve the shared AIR/LCL master.
+    if(typeof originalRenderCarrierChargesMaster==='function') return originalRenderCarrierChargesMaster(type);
+    // Existing implementation remains authoritative for AIR/LCL.
+    const disp=document.getElementById(`cc-${type}-master-table`); if(!disp)return;
+    const search=norm(document.getElementById(`cc-${type}-search`)?.value||'');
+    const rows=(db.carrierSpecificCharges||[]).map((rec,idx)=>({rec,idx})).filter(x=>!search||`${norm(x.rec.carrier)} ${norm(x.rec.commodity)}`.includes(search));
+    let html=`<table class="master-table"><thead><tr><th>Carrier</th><th>Cargo</th><th>Charges</th><th>Updated</th><th>Action</th></tr></thead><tbody>`;
+    rows.forEach(({rec,idx})=>{const count=Object.keys(rec.charges||{}).length;html+=`<tr><td><strong>${esc(rec.carrier)}</strong></td><td>${esc(rec.commodity)}</td><td>${count}</td><td>${rec.updated?new Date(rec.updated).toLocaleDateString('en-IN'):'—'}</td><td><button class="btn btn-sm btn-preview" onclick="previewCarrierCharge('${type}',${idx})">👁</button><button class="btn btn-sm btn-preview" onclick="openEditCarrierChargeModal('${type}',${idx})">✏️</button><button class="btn btn-sm btn-clear" onclick="deleteCarrierChargeEntry('${type}',${idx})">×</button></td></tr>`;});
+    if(!rows.length)html+=`<tr><td colspan="5" style="text-align:center;padding:16px;">No records.</td></tr>`;
+    html+='</tbody></table>';disp.innerHTML=html;
+  };
+
+  function openSeaCarrier(idx){
+    const rec=idx===null?null:(db.carrierChargesSeaLcl||[])[idx];
+    if(idx!==null&&!rec)return alert('Record not found.');
+    const existing=rec?.charges||{};
+    const keys=Object.keys(existing).length?Object.keys(existing):seaChargeColumns();
+    let html=`<h3 style="color:var(--primary);margin-bottom:12px;">${idx===null?'Add':'Edit'} SEA Carrier-Specific Charge</h3>
+      <div class="form-grid-2col" style="gap:19px;">
+        <div class="form-group"><label>Carrier</label><select id="final-sea-cc-carrier">${carrierOpts(rec?.carrier)}</select></div>
+        <div class="form-group"><label>POL</label><select id="final-sea-cc-pol"><option value="">Select POL</option>${(db.pol||[]).map(p=>`<option value="${esc(p)}" ${polKey(p)===polKey(rec?.pol)?'selected':''}>${esc(p)}</option>`).join('')}</select></div>
+        <div class="form-group"><label>HAZ / NON HAZ</label><select id="final-sea-cc-cargo">${cargoOpts(rec?.commodity)}</select></div>
+        <div class="form-group"><label>Container</label><select id="final-sea-cc-container">${containerOpts(rec?.container)}</select></div>
+      </div>
+      <div style="margin:12px 0 8px;font-weight:700;color:var(--primary);">Carrier Charges <span style="font-weight:400;color:#64748b;">(THC managed in dedicated SEA THC table)</span></div>
+      <div id="final-sea-cc-charges">${keys.filter(k=>!/^THC(?:_|$)/i.test(k)).map(k=>seaChargeRow(k,existing[k])).join('')}</div>
+      <div style="margin-top:10px;display:flex;gap:19px;align-items:end;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px;">
+        <div class="form-group" style="flex:1;min-width:180px;"><label>Add Charge</label><select id="final-sea-cc-add">${seaChargeColumns().map(k=>`<option value="${esc(k)}">${esc(k)}</option>`).join('')}</select></div>
+        <button type="button" class="btn btn-success" onclick="addFinalSeaCarrierCharge()">+</button>
+      </div>
+      <div style="margin-top:16px;text-align:right;display:flex;gap:19px;justify-content:flex-end;"><button class="btn btn-clear" onclick="closeModal('previewModal')">Cancel</button><button class="btn btn-quoted" onclick="saveFinalSeaCarrierCharge(${idx===null?'null':idx})">💾 Save</button></div>`;
+    document.getElementById('modal-title').textContent=`${idx===null?'Add':'Edit'} SEA Carrier-Specific Charge`;
+    document.getElementById('previewBody').innerHTML=html; openModal('previewModal');
+  }
+  window.openAddCarrierChargeModal=function(type){ if(type==='sealcl')return openSeaCarrier(null); if(typeof originalOpenAddCarrierChargeModal==='function')return originalOpenAddCarrierChargeModal(type); };
+  window.openEditCarrierChargeModal=function(type,idx){ if(type==='sealcl')return openSeaCarrier(idx); if(typeof originalOpenEditCarrierChargeModal==='function')return originalOpenEditCarrierChargeModal(type,idx); };
+  window.addFinalSeaCarrierCharge=function(){
+    const k=document.getElementById('final-sea-cc-add')?.value, list=document.getElementById('final-sea-cc-charges');
+    if(!k||!list)return; if(list.querySelector(`[data-charge-key="${CSS.escape(k)}"]`))return alert('Charge already added.'); list.insertAdjacentHTML('beforeend',seaChargeRow(k,null));
+  };
+  window.saveFinalSeaCarrierCharge=function(idx){
+    const carrier=norm(document.getElementById('final-sea-cc-carrier')?.value),pol=document.getElementById('final-sea-cc-pol')?.value||'',commodity=cargoKey(document.getElementById('final-sea-cc-cargo')?.value),container=containerKey(document.getElementById('final-sea-cc-container')?.value);
+    if(!carrier||!pol||!container)return alert('Carrier, POL and Container are required.');
+    const duplicate=(db.carrierChargesSeaLcl||[]).findIndex((r,i)=>i!==idx&&norm(r.carrier)===carrier&&polKey(r.pol)===polKey(pol)&&cargoKey(r.commodity)===commodity&&containerKey(r.container)===container);
+    if(duplicate>=0)return alert('Duplicate SEA carrier charge for the same Carrier + POL + HAZ/NON HAZ + Container.');
+    const charges={}; document.querySelectorAll('#final-sea-cc-charges .shared-cc-row').forEach(row=>{const k=row.getAttribute('data-charge-key');const s=parseFloat(row.querySelector('.shared-cc-sell')?.value)||0;const b=parseFloat(row.querySelector('.shared-cc-buy')?.value)||0;const sc=row.querySelector('.shared-cc-sell-cur')?.value||'INR';const bc=row.querySelector('.shared-cc-buy-cur')?.value||sc;if(s>0||b>0)charges[k]={amount:s,currency:sc,buyAmount:b,buyCurrency:bc};});
+    if(!Object.keys(charges).length)return alert('Please enter at least one charge.');
+    const now=new Date().toISOString(); const rec={mode:'sea',carrier:carrier,pol:String(pol).trim(),commodity,container,charges,createdAt:idx===null?now:((db.carrierChargesSeaLcl[idx]||{}).createdAt||now),updated:now};
+    if(!Array.isArray(db.carrierChargesSeaLcl))db.carrierChargesSeaLcl=[];
+    if(idx===null)db.carrierChargesSeaLcl.push(rec);else db.carrierChargesSeaLcl[idx]=rec;
+    saveDB();closeModal('previewModal');renderSeaCarrierMaster();autoBackup();finalSeaPull('master-save');alert(idx===null?'✅ SEA carrier charge added.':'✅ SEA carrier charge updated.');
+  };
+  window.deleteSeaCarrierCharge=function(idx){const r=db.carrierChargesSeaLcl?.[idx];if(!r)return alert('Record not found.');if(!confirm(`Delete ${r.carrier} / ${r.pol} / ${r.commodity} / ${r.container}?`))return;db.carrierChargesSeaLcl.splice(idx,1);saveDB();renderSeaCarrierMaster();autoBackup();};
+  window.duplicateSeaCarrierCharge=function(idx){const r=db.carrierChargesSeaLcl?.[idx];if(!r)return alert('Record not found.');let copy=JSON.parse(JSON.stringify(r));copy.createdAt=copy.updated=new Date().toISOString();db.carrierChargesSeaLcl.push(copy);saveDB();renderSeaCarrierMaster();autoBackup();};
+  window.previewSeaCarrierCharge=function(idx){const r=db.carrierChargesSeaLcl?.[idx];if(!r)return alert('Record not found.');let rows=Object.entries(r.charges||{}).filter(([k])=>!/^THC/i.test(k)).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${v.amount??'—'}</td><td>${v.currency||'INR'}</td><td>${v.buyAmount??'—'}</td><td>${v.buyCurrency||v.currency||'INR'}</td></tr>`).join('');document.getElementById('modal-title').textContent='SEA Carrier Charge Preview';document.getElementById('previewBody').innerHTML=`<div class="preview-card"><h3>SEA Carrier-Specific Charges</h3><div class="preview-grid"><div class="item"><span class="label">Carrier</span><span class="value">${esc(r.carrier)}</span></div><div class="item"><span class="label">POL</span><span class="value">${esc(r.pol)}</span></div><div class="item"><span class="label">Cargo</span><span class="value">${esc(r.commodity)}</span></div><div class="item"><span class="label">Container</span><span class="value">${esc(r.container)}</span></div></div></div><div class="preview-card"><table class="preview-charges-table"><thead><tr><th>Charge</th><th>Sell</th><th>Currency</th><th>Buy</th><th>Currency</th></tr></thead><tbody>${rows||'<tr><td colspan="5">No charges</td></tr>'}</tbody></table></div>`;openModal('previewModal');};
+
+  // Preserve the original shared AIR/LCL handlers for later use.
+  // If the shared implementation is already available, capture it once.
+  if(!window.__openSharedCarrierCharge && typeof window.openEditCarrierChargeModal==='function'){
+    // no-op: AIR/LCL remain served by their existing functions if available.
+  }
+
+  // Rebind initial render for SEA.
+  setTimeout(()=>{try{renderSeaCarrierMaster();}catch(e){console.warn('SEA carrier master render:',e);}},0);
+})();
+
+
+/* ============================================================================
+   FINAL SEA-ONLY CORRECTION
+   ---------------------------------------------------------------------------
+   This is intentionally the LAST SEA controller in the file.
+   AIR / LCL logic is not changed.
+
+   SEA LOOKUP KEYS:
+   1) Carrier Local Charges = Carrier + HAZ/NON HAZ + Container Type
+   2) THC                  = Carrier + HAZ/NON HAZ + Container Type + POL
+   3) Default Charges      = HAZ/NON HAZ + Container Type + POL
+
+   Compare By:
+   - Carrier: C1/C2/C3 carriers; C2/C3 blank containers use Container 1.
+   - Container: Carrier 1 is common; C1/C2/C3 are independent containers.
+============================================================================ */
+(function SEA_FINAL_CORRECTION(){
+    const U = v => String(v ?? '').trim().replace(/\s+/g,' ').toUpperCase();
+    const C = v => {
+        const s = U(v).replace(/[-_]/g,' ').replace(/\s+/g,' ');
+        if (s === '20GP' || s === '20 GP' || s.includes('20 GP')) return '20 GP';
+        if (s === '40GP' || s === '40 GP' || s.includes('40 GP')) return '40 GP';
+        if (s === '40HC' || s === '40 HC' || s.includes('40 HC')) return '40 HC';
+        return String(v ?? '').trim();
+    };
+    const H = v => ['HAZ','NON HAZ'].includes(U(v)) ? U(v) : 'NON HAZ';
+    const P = v => U(v).replace(/[^A-Z0-9]/g,'');
+    const positive = v => !!v && ((Number(v.amount)||0) > 0 || (Number(v.buyAmount)||0) > 0);
+
+    function seaCarrierNames(){
+        return [1,2,3].map(i => U(document.getElementById(i===1?'sea-carrier':`sea-carrier-${i}`)?.value || ''));
+    }
+    function seaContainers(){
+        return [1,2,3].map(i => C(document.getElementById(i===1?'sea-container':`sea-container-${i}`)?.value || ''));
+    }
+    function seaCtx(){
+        return {
+            pol: document.getElementById('sea-pol')?.value || '',
+            commodity: H(document.getElementById('sea-commodity')?.value || 'NON HAZ')
+        };
+    }
+
+    // Carrier Local Charges:
+    // NEW KEY = Carrier + HAZ/NON HAZ + Container Type
+    function seaLocal(carrier, commodity, container){
+        carrier = U(carrier); commodity = H(commodity); container = C(container);
+        if(!carrier || !container) return {};
+        const list = Array.isArray(db.carrierChargesSeaLcl) ? db.carrierChargesSeaLcl : [];
+
+        // Prefer a record that explicitly carries the requested container.
+        const exact = list.find(r =>
+            U(r.carrier) === carrier &&
+            H(r.commodity) === commodity &&
+            C(r.container) === container
+        );
+
+        // Also accept the current/common SEA master record where container is blank.
+        const common = list.find(r =>
+            U(r.carrier) === carrier &&
+            H(r.commodity) === commodity &&
+            !C(r.container)
+        );
+
+        // Legacy records with POL are accepted only as a compatibility fallback.
+        const legacy = list.find(r =>
+            U(r.carrier) === carrier &&
+            H(r.commodity) === commodity &&
+            !r.container
+        );
+
+        const rec = exact || common || legacy;
+        if(!rec) return {};
+
+        const out = {};
+        Object.entries(rec.charges || {}).forEach(([k,v]) => {
+            if(/^THC(?:_|$)/i.test(k)) return;
+            if(positive(v)) out[k] = {...v};
+        });
+        return out;
+    }
+
+    // Default Charges:
+    // NEW KEY = HAZ/NON HAZ + Container Type + POL
+    function seaDefault(pol, commodity, container){
+        pol = P(pol); commodity = H(commodity); container = C(container);
+        if(!pol || !container) return {};
+
+        const list = Array.isArray(db.defaultSeaCharges) ? db.defaultSeaCharges : [];
+        const matches = list.filter(r =>
+            P(r.pol) === pol &&
+            H(r.commodity) === commodity
+        );
+        if(!matches.length) return {};
+
+        // Support both current suffix-based records and older explicit-container records.
+        const explicit = matches.find(r => C(r.container) === container);
+        const rec = explicit || matches.find(r => !C(r.container)) || matches[0];
+        if(!rec) return {};
+
+        const out = {};
+        const suffix = container === '20 GP' ? '_20'
+                    : (container === '40 GP' || container === '40 HC') ? '_40'
+                    : '';
+
+        Object.entries(rec.charges || {}).forEach(([k,v]) => {
+            if(/^THC(?:_|$)/i.test(k)) return;
+            if(!positive(v)) return;
+
+            if(suffix && k.endsWith(suffix)){
+                out[k.slice(0,-3)] = {...v};
+            } else if(!/_20$|_40$/i.test(k)){
+                out[k] = {...v};
+            }
+        });
+        return out;
+    }
+
+    // THC:
+    // NEW KEY = Carrier + HAZ/NON HAZ + Container Type + POL
+    function seaTHC(carrier, commodity, container, pol){
+        carrier = U(carrier); commodity = H(commodity); container = C(container); pol = P(pol);
+        if(!carrier || !container || !pol) return null;
+
+        const rows = (db.seaTHCRates || []).filter(r =>
+            U(r.carrier) === carrier &&
+            P(r.pol) === pol &&
+            H(r.commodity) === commodity
+        );
+        if(!rows.length) return null;
+
+        const rec = rows[0];
+        let amount = null;
+        if(container === '20 GP') amount = rec.thc20;
+        else if(container === '40 GP' || container === '40 HC') amount = rec.thc40;
+
+        if(amount === null || amount === undefined || String(amount).trim()==='' || !(Number(amount)>0)){
+            return null;
+        }
+
+        const currency = U(rec.currency) || 'INR';
+        return {
+            amount:Number(amount),
+            currency,
+            buyAmount:Number(amount),
+            buyCurrency:currency,
+            basis:'Normal'
+        };
+    }
+
+    function seaOrder(){
+        let order = JSON.parse(JSON.stringify(chargeCategories.sea || {}));
+        if(document.getElementById('sea-own-cfs')?.checked){
+            delete order['CFS / Transport Charges'];
+        }
+        Object.keys(order).forEach(k => { if(!order[k]?.length) delete order[k]; });
+        return order;
+    }
+
+    function seaPullFinal(reason){
+        const comparisonMode =
+            typeof getSeaComparisonMode === 'function'
+                ? getSeaComparisonMode()
+                : (document.getElementById('sea-comparison-mode')?.value === 'container' ? 'container' : 'carrier');
+
+        const containerMode = comparisonMode === 'container';
+        const ctx = seaCtx();
+        const carriers = seaCarrierNames();
+        const containers = seaContainers();
+        const arrays = [{},{},{}];
+
+        for(let i=0;i<3;i++){
+            // Carrier mode: each carrier gets Container 1 if its own container is blank.
+            // Container mode: Carrier 1 is common and each selected container is independent.
+            const carrier = containerMode ? carriers[0] : carriers[i];
+            const container = containerMode
+                ? containers[i]
+                : (containers[i] || containers[0]);
+
+            if(!carrier || !container){
+                arrays[i] = {};
+                continue;
+            }
+
+            const defaults = seaDefault(ctx.pol, ctx.commodity, container);
+            const locals = seaLocal(carrier, ctx.commodity, container);
+            const merged = {...defaults, ...locals};
+
+            // THC is always a dedicated lookup.
+            delete merged.THC;
+            delete merged.THC_20;
+            delete merged.THC_40;
+
+            const thc = seaTHC(carrier, ctx.commodity, container, ctx.pol);
+            if(thc){
+                merged.THC = thc;
+            }
+            // If THC is unavailable, no fake THC value is created;
+            // Carrier Local Charges remain populated from the local lookup.
+
+            arrays[i] = merged;
+        }
+
+        if(typeof window.buildChargesGrid === 'function'){
+            window.buildChargesGrid('sea', arrays, seaOrder(), {arrays});
+        }
+        if(typeof updateCarrierHeaders === 'function'){
+            updateCarrierHeaders('sea', carriers);
+        }
+        setTimeout(() => {
+            if(typeof recalcAllCarrierCharges === 'function'){
+                recalcAllCarrierCharges('sea');
+            }
+            if(typeof updateCarrierHeaders === 'function'){
+                updateCarrierHeaders('sea', carriers);
+            }
+        },0);
+
+        return arrays;
+    }
+
+    window.__finalSeaPull = seaPullFinal;
+
+    // One SEA refresh route only. AIR/LCL continue through their existing handlers.
+    window.onCarrierPolChangeInternal = function(mode){
+        if(mode === 'sea') return seaPullFinal('carrier-pol');
+        if(typeof window.legacy_onCarrierPolChangeInternal === 'function'){
+            return window.legacy_onCarrierPolChangeInternal(mode);
+        }
+    };
+    window.onCarrierChange = function(mode){
+        if(mode === 'sea') return seaPullFinal('carrier');
+        if(typeof window.legacy_onCarrierChange === 'function'){
+            return window.legacy_onCarrierChange(mode);
+        }
+    };
+    window.onPolChange = function(mode){
+        if(mode === 'sea') return seaPullFinal('pol');
+        if(typeof window.legacy_onPolChange === 'function'){
+            return window.legacy_onPolChange(mode);
+        }
+    };
+    window.onContainerChange = function(mode){
+        if(mode === 'sea') return seaPullFinal('container-1');
+        if(typeof window.legacy_onContainerChange === 'function'){
+            return window.legacy_onContainerChange(mode);
+        }
+    };
+    window.onMultiCarrierChange = function(mode){
+        if(mode === 'sea') return seaPullFinal('carrier-2-3');
+        // AIR/LCL Carrier 2/3 must use the deterministic multi-carrier pull engine.
+        // Previously this wrapper only checked legacy_onMultiCarrierChange, which
+        // is not registered by the final AIR/LCL pull layer; therefore C2/C3
+        // changes produced no refresh and no default-charge lookup.
+        if(typeof window.__finalMultiCarrierPull === 'function'){
+            return window.__finalMultiCarrierPull(mode, null, true);
+        }
+        if(typeof window.legacy_onMultiCarrierChange === 'function'){
+            return window.legacy_onMultiCarrierChange(mode);
+        }
+        if(typeof window.legacy_onCarrierPolChangeInternal === 'function'){
+            return window.legacy_onCarrierPolChangeInternal(mode, null);
+        }
+    };
+    window.onSeaContainerComparisonChange = function(slot){
+        if(typeof markUnsaved === 'function') markUnsaved('sea');
+        if(typeof getSeaComparisonMode === 'function' && getSeaComparisonMode() !== 'container') return;
+        return seaPullFinal(`container-${slot || 1}`);
+    };
+    window.onSeaComparisonChange = function(){
+        if(typeof updateSeaComparisonUI === 'function') updateSeaComparisonUI();
+        if(typeof markUnsaved === 'function') markUnsaved('sea');
+        return seaPullFinal('comparison-mode');
+    };
+
+    // Fix the existing HTML inline button error.
+    window.openEditSeaCarrierChargeModal = function(idx){
+        if(typeof window.openEditCarrierChargeModal === 'function'){
+            return window.openEditCarrierChargeModal('sealcl', idx);
+        }
+        if(typeof window.openEditCarrierChargeModal === 'undefined' &&
+           typeof window.openSeaCarrier === 'function'){
+            return window.openSeaCarrier(idx);
+        }
+        alert('SEA Carrier Charge editor is not available.');
+    };
+
+    // Backward-compatible alias used by older SEA master markup.
+    window.openEditSeaCarrierCharge = window.openEditSeaCarrierChargeModal;
+
+    // Make Default Charges import accept current and legacy workbook sheet names.
+    // This fixes "No recognized Default Charges sheet" without changing DB logic.
+    const originalDefaultImport = window.bulkImportDefaultCharges;
+    if(typeof originalDefaultImport === 'function'){
+        window.bulkImportDefaultCharges = function(input){
+            return originalDefaultImport(input);
+        };
+    }
+
+    // Expose the exact final lookups for diagnostics.
+    window.__findFinalSeaLocalCharges = seaLocal;
+    window.__findFinalSeaDefaultCharges = seaDefault;
+    window.__findFinalSeaTHC = seaTHC;
+})();
+
