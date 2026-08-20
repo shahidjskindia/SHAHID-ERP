@@ -5050,3 +5050,990 @@ th[data-sort]:hover {
 .local-content-panel.active {
     display: block;
 }
+
+/* ============================================================
+   LDB CONTAINER TRACKING - PROFESSIONAL ERP CONTROL
+   ============================================================ */
+.ldb-track-slot {
+    min-height: 28px;
+    margin-top: 5px;
+    display: flex;
+    align-items: center;
+}
+.ldb-track-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 9px;
+    border: 2px solid #0b3b8f;
+    border-radius: 4px;
+    background: #eaf2ff;
+    color: #0b3b8f;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-decoration: none;
+    text-transform: uppercase;
+    letter-spacing: .2px;
+    box-shadow: 2px 2px 0 #0b3b8f;
+    transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+}
+.ldb-track-btn:hover {
+    background: #d6e6ff;
+    transform: translate(-1px,-1px);
+    box-shadow: 3px 3px 0 #0b3b8f;
+}
+.ldb-track-btn:active {
+    transform: translate(1px,1px);
+    box-shadow: 1px 1px 0 #0b3b8f;
+}
+.ldb-track-btn .ldb-container-ref {
+    font-family: 'Courier New', monospace;
+    font-weight: 900;
+}
+.ldb-track-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+}
+.report-table .ldb-track-btn {
+    padding: 4px 7px;
+    font-size: .68rem;
+}
+.truck-shipment-card .ldb-track-btn {
+    margin-top: 7px;
+}
+@media (max-width: 768px) {
+    .ldb-track-btn {
+        min-height: 34px;
+        padding: 7px 10px;
+    }
+}
+
+
+/* ============================================================
+   ENTERPRISE ALERT CENTER + LOGIN SECURITY
+   ============================================================ */
+.alert-center-wrap{position:relative;display:flex;align-items:center}
+.alert-bell{position:relative;min-width:74px}
+.alert-count-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;margin-left:4px;background:#ef4444;color:#fff;border:2px solid currentColor;border-radius:999px;font-size:.64rem;font-weight:900;line-height:1}
+.alert-center-panel{position:absolute;right:0;top:calc(100% + 8px);width:min(420px,calc(100vw - 24px));background:var(--card-bg);color:var(--text);border:3px solid var(--primary);box-shadow:8px 8px 0 rgba(15,23,42,.25);z-index:3000;display:none}
+.alert-center-panel.open{display:block}
+.alert-center-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;background:var(--secondary);color:#fff;border-bottom:3px solid var(--primary)}
+.alert-center-head strong{display:block;font-size:.84rem;letter-spacing:.7px}
+.alert-center-head small{display:block;opacity:.8;margin-top:3px;font-size:.68rem}
+.alert-clear-btn{border:2px solid #fff;background:transparent;color:#fff;padding:4px 8px;font-weight:800;cursor:pointer;text-transform:uppercase;font-size:.65rem}
+.alert-center-list{max-height:430px;overflow:auto;padding:8px}
+.alert-item{display:grid;grid-template-columns:34px 1fr auto;gap:9px;align-items:start;padding:10px;border:2px solid var(--border);margin-bottom:7px;background:var(--bg);cursor:pointer}
+.alert-item:hover{border-color:var(--primary);background:var(--input-focus-bg)}
+.alert-icon{font-size:1.05rem;text-align:center}
+.alert-title{font-size:.76rem;font-weight:900;text-transform:uppercase}
+.alert-detail{font-size:.7rem;color:var(--text-light);margin-top:3px;line-height:1.35}
+.alert-time{font-size:.62rem;color:var(--text-light);white-space:nowrap}
+.alert-empty{padding:28px 12px;text-align:center;color:var(--text-light);font-size:.8rem}
+.alert-critical{border-left:7px solid var(--danger)}
+.alert-warning{border-left:7px solid var(--warning)}
+.alert-info{border-left:7px solid var(--info)}
+.alert-success{border-left:7px solid var(--success)}
+.login-security-note{margin-top:12px;padding:8px 10px;border:2px solid var(--border);background:var(--bg);font-size:.65rem;color:var(--text-light);text-align:center;font-weight:700}
+.login-box.login-locked{border-color:var(--danger)!important;box-shadow:10px 10px 0 rgba(239,68,68,.2)!important}
+.login-lock-message{margin-top:8px;padding:8px;border:2px solid var(--danger);background:#fee2e2;color:#991b1b;font-weight:800;font-size:.72rem;text-align:center}
+[data-theme="dark"] .login-lock-message{background:#450a0a;color:#fecaca}
+@media(max-width:700px){.alert-center-panel{position:fixed;right:10px;top:58px;width:calc(100vw - 20px)}.alert-center-list{max-height:55vh}.alert-bell{min-width:58px}}
+
+/* ============================================================================
+   MULTI-CARRIER QUOTE TABLE
+   Keeps the existing input-box / row visual language while changing only the
+   requested charge columns.
+   ============================================================================ */
+.carrier-rate-selectors{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(180px,1fr));
+    gap:8px;
+    margin:8px 0;
+    padding:8px;
+    background:var(--card-bg);
+    border:1px solid var(--border);
+    border-radius:4px;
+}
+.carrier-rate-selector{display:flex;align-items:center;gap:7px;min-width:0}
+.carrier-rate-selector label{font-size:.68rem;font-weight:700;color:var(--primary);white-space:nowrap}
+.carrier-rate-selector input{height:28px;padding:4px 7px;border:1px solid var(--border);border-radius:3px;background:var(--card-bg);color:var(--text);font-size:.72rem;width:100%;min-width:0}
+.carrier-rate-selector select{height:28px;padding:4px 7px;border:1px solid var(--border);border-radius:3px;background:var(--card-bg);color:var(--text);font-size:.72rem;width:100%;min-width:0}
+.sea-comparison-selectors{grid-template-columns:minmax(115px,.65fr) repeat(4,minmax(145px,1fr));gap:6px;align-items:center}
+.sea-comparison-selectors .carrier-rate-selector{gap:5px}
+.sea-comparison-selectors .carrier-rate-selector label{font-size:.64rem}
+.sea-comparison-selectors .carrier-rate-selector input,.sea-comparison-selectors .carrier-rate-selector select{height:26px;font-size:.68rem;padding:3px 6px}
+.sea-comparison-selectors .carrier-rate-selector input:disabled,.sea-comparison-selectors .carrier-rate-selector select:disabled{opacity:.55;cursor:not-allowed;background:var(--bg-light,#f1f5f9)}
+
+/* SEA comparison mode visual state: green = editable/active, red = locked. */
+.sea-comparison-selectors .comparison-active{
+    background:#dcfce7 !important;
+    border:1.5px solid #22c55e !important;
+    color:#166534 !important;
+    box-shadow:inset 0 0 0 1px rgba(34,197,94,.08);
+}
+.sea-comparison-selectors .comparison-active::placeholder{color:#3f7f50 !important;opacity:1}
+.sea-comparison-selectors .comparison-locked,
+.sea-comparison-selectors .comparison-locked:disabled{
+    background:#fee2e2 !important;
+    border:1.5px solid #ef4444 !important;
+    color:#991b1b !important;
+    opacity:1 !important;
+    cursor:not-allowed !important;
+}
+.sea-comparison-selectors .comparison-locked::placeholder{color:#b91c1c !important;opacity:1}
+.charges-section{overflow-x:auto}
+.charges-header.multi-carrier-header{
+    grid-template-columns:260px repeat(3, minmax(240px,1fr)) 80px 35px;
+    min-width:1100px;
+    align-items:stretch;
+    text-align:center;
+}
+.charges-header.multi-carrier-header .charge-header-main{text-align:left}
+.charges-header.multi-carrier-header .carrier-header{
+    grid-column:auto;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    gap:2px;
+    background:#173b7a;
+    border-left:1px solid rgba(255,255,255,.25);
+    border-right:1px solid rgba(255,255,255,.25);
+    padding:3px 4px;
+}
+.charges-header.multi-carrier-header .carrier-header small{font-size:.56rem;font-weight:500;opacity:.92;white-space:nowrap}
+.charges-header.multi-carrier-header .carrier-empty{opacity:.48}
+.charge-row{
+    grid-template-columns:260px repeat(3,minmax(240px,1fr)) 80px 35px;
+    min-width:1100px;
+}
+.carrier-rate-cell{
+    display:grid;
+    grid-template-columns:minmax(80px,1fr) minmax(80px,1fr) 68px;
+    gap:3px;
+    align-items:center;
+    min-width:0;
+}
+.carrier-rate-cell input{min-width:0}
+.carrier-rate-cell .carrier-buy-amt{background:#fef2f2;border-color:#fca5a5;color:var(--buy-red);font-weight:600}
+.carrier-rate-cell .carrier-margin-pct{font-weight:700;text-align:right;font-size:.68rem;white-space:nowrap}
+[data-theme="dark"] .carrier-rate-selector input{background:#0f172a;color:#e5e7eb}
+[data-theme="dark"] .carrier-rate-selectors{background:#111827;border-color:#334155}
+
+@media(max-width:1024px){
+    .carrier-rate-selectors{grid-template-columns:1fr 1fr}
+    .sea-comparison-selectors{grid-template-columns:repeat(3,minmax(150px,1fr))}
+    .charges-header.multi-carrier-header,.charge-row{grid-template-columns:180px repeat(3,minmax(220px,1fr)) 70px 30px;min-width:1000px}
+}
+@media(max-width:700px){
+    .carrier-rate-selectors{grid-template-columns:1fr}
+    .sea-comparison-selectors{grid-template-columns:1fr 1fr}
+    .charges-section{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .charges-header.multi-carrier-header,.charge-row{min-width:980px}
+}
+
+/* ================================================================
+   SEA / AIR / LCL — SELL AMOUNT INPUT HIGHLIGHT
+   User requested all quote SELL amount inputs to use light green.
+   Applies only to the quote charge rows, not BUY or unrelated forms.
+   ================================================================ */
+.charges-grid .charge-row .sell-amt,
+.charges-grid .charge-row .carrier-sell-amt {
+    background: #dcfce7 !important;
+    border-color: #86efac !important;
+    color: #166534 !important;
+    font-weight: 700 !important;
+}
+
+.charges-grid .charge-row .sell-amt::placeholder,
+.charges-grid .charge-row .carrier-sell-amt::placeholder {
+    color: #4d7c5a !important;
+    opacity: 1;
+}
+
+.charges-grid .charge-row .sell-amt:focus,
+.charges-grid .charge-row .carrier-sell-amt:focus {
+    background: #dcfce7 !important;
+    border-color: #22c55e !important;
+    color: #14532d !important;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(34,197,94,.18);
+}
+
+/* Keep the requested light-green SELL appearance in dark theme too. */
+[data-theme="dark"] .charges-grid .charge-row .sell-amt,
+[data-theme="dark"] .charges-grid .charge-row .carrier-sell-amt {
+    background: #dcfce7 !important;
+    border-color: #86efac !important;
+    color: #166534 !important;
+}
+
+/* ============================================================
+   ACTION & EXCEPTION CENTER
+   New module only — existing module styles intentionally untouched.
+   ============================================================ */
+.action-center-nav-btn{display:flex!important;align-items:center;justify-content:space-between;gap:8px}
+.action-center-nav-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;background:#ef4444;color:#fff;border:2px solid currentColor;border-radius:999px;font-size:.62rem;font-weight:900;line-height:1}
+.action-center-nav-badge:empty{display:none}
+.action-center-kpis{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:10px;margin:12px 0}
+.action-kpi{border:3px solid var(--border);background:var(--card-bg);color:var(--text);padding:12px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:4px;box-shadow:4px 4px 0 rgba(15,23,42,.12)}
+.action-kpi strong{font-size:1.35rem;line-height:1}
+.action-kpi span{font-size:.68rem;font-weight:800;text-transform:uppercase}
+.action-kpi-critical{border-color:var(--danger)}
+.action-kpi-high{border-color:var(--warning)}
+.action-kpi-due{border-color:var(--info)}
+.action-kpi-overdue{border-color:#f97316}
+.action-center-tabs{display:flex;gap:0;margin:10px 0;border-bottom:3px solid var(--border)}
+.action-center-tab{border:0;border-bottom:4px solid transparent;background:transparent;color:var(--text-light);padding:9px 14px;font-size:.7rem;font-weight:900;cursor:pointer}
+.action-center-tab.active{color:var(--primary);border-bottom-color:var(--primary);background:var(--card-bg)}
+.action-center-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.action-center-table-wrap{overflow:auto}
+.action-center-table{width:100%;border-collapse:collapse;font-size:.74rem}
+.action-center-table th{background:var(--secondary);color:#fff;padding:7px 8px;text-align:left;white-space:nowrap}
+.action-center-table td{padding:7px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+.action-center-table tr:hover{background:var(--input-focus-bg)}
+.action-center-priority{font-weight:900;white-space:nowrap}
+.action-center-open{border:2px solid var(--primary);background:var(--card-bg);color:var(--primary);padding:4px 8px;font-size:.64rem;font-weight:900;cursor:pointer}
+.action-center-empty{padding:30px;text-align:center;color:var(--text-light);font-size:.8rem}
+@media(max-width:800px){.action-center-kpis{grid-template-columns:repeat(2,minmax(120px,1fr))}.action-center-toolbar{align-items:flex-start;flex-direction:column}}
+
+/* Action Center moved to the top application header */
+.header-action-center-btn{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    min-height:34px;
+    padding:7px 11px;
+    border:1px solid #1e3a8a;
+    border-radius:6px;
+    background:#1e3a8a;
+    color:#fff;
+    font-weight:700;
+    cursor:pointer;
+    white-space:nowrap;
+}
+.header-action-center-btn:hover{filter:brightness(.96);}
+
+
+/* ============================================================
+   SHAHID ERP — FINAL QUOTATION OUTPUT SIZING
+   Rate Request: 15cm table / 17cm outer
+   SEA/AIR/LCL Quote: 20cm table/outer
+   Single + Multi Carrier: identical outer width
+   No forced horizontal overflow; controlled vertical spacing.
+   ============================================================ */
+:root{
+  --rate-request-table-width:15cm;
+  --rate-request-outer-width:17cm;
+  --quote-table-width:20cm;
+  --quote-outer-width:20cm;
+  --quote-section-gap:4px;
+}
+
+.rate-request-output,
+.rate-request-output table{
+  box-sizing:border-box;
+}
+.rate-request-output{
+  width:var(--rate-request-outer-width) !important;
+  max-width:var(--rate-request-outer-width) !important;
+  min-width:var(--rate-request-outer-width) !important;
+  margin:0 auto !important;
+}
+.rate-request-output table{
+  width:var(--rate-request-table-width) !important;
+  max-width:var(--rate-request-table-width) !important;
+  min-width:var(--rate-request-table-width) !important;
+  margin-left:auto !important;
+  margin-right:auto !important;
+}
+
+.quote-output,
+.quote-output > table,
+.quote-output .quote-table,
+.quote-output .quotation-table{
+  width:100% !important;
+  max-width:20cm !important;
+  min-width:0 !important;
+  margin-left:auto !important;
+  margin-right:auto !important;
+  box-sizing:border-box !important;
+}
+.quote-output{
+  width:var(--quote-outer-width) !important;
+  max-width:var(--quote-outer-width) !important;
+  min-width:var(--quote-outer-width) !important;
+  margin:0 auto !important;
+}
+.quote-output > table,
+.quote-output .quote-table,
+.quote-output .quotation-table{
+  width:var(--quote-table-width) !important;
+  max-width:var(--quote-table-width) !important;
+  min-width:var(--quote-table-width) !important;
+  margin-left:auto !important;
+  margin-right:auto !important;
+}
+.quote-output .quote-section-gap{
+  height:var(--quote-section-gap);
+  line-height:0;
+  font-size:0;
+}
+.quote-output br + br{ display:none !important; }
+.quote-output p:empty,
+.quote-output div:empty{ display:none !important; }
+
+@media (max-width: 800px){
+  .rate-request-output,
+  .quote-output{
+    max-width:100% !important;
+    min-width:0 !important;
+    overflow-x:auto;
+  }
+  .rate-request-output table,
+  .quote-output > table,
+  .quote-output .quote-table,
+  .quote-output .quotation-table{
+    min-width:0 !important;
+    max-width:100% !important;
+  }
+}
+
+
+/* FINAL V10 — A4 preview/PDF and blank-line control */
+.quote-preview-a4{
+  box-sizing:border-box !important;
+  width:200mm !important;
+  max-width:200mm !important;
+  min-width:0 !important;
+  margin:5mm auto !important;
+  padding:0 !important;
+  overflow:hidden !important;
+}
+.quote-preview-a4 .quote-output{
+  width:20cm !important;
+  max-width:20cm !important;
+  min-width:20cm !important;
+  margin:0 auto !important;
+}
+.rate-request-preview-a4{
+  box-sizing:border-box !important;
+  width:170mm !important;
+  max-width:170mm !important;
+  margin:5mm auto !important;
+}
+
+
+/* ============================================================
+   SHAHID ERP V12 — FINAL OUTPUT SIZING
+   ============================================================ */
+.quote-output{
+  width:20cm !important;
+  max-width:20cm !important;
+  min-width:20cm !important;
+  margin-left:auto !important;
+  margin-right:auto !important;
+  box-sizing:border-box !important;
+}
+.quote-output table{
+  width:20cm !important;
+  max-width:20cm !important;
+  min-width:20cm !important;
+  table-layout:fixed !important;
+  box-sizing:border-box !important;
+}
+.quote-output th,
+.quote-output td{
+  box-sizing:border-box !important;
+  white-space:nowrap !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+}
+.quote-output .quote-section-gap{
+  height:9px !important;
+  line-height:9px !important;
+  font-size:0 !important;
+}
+.rate-request-output{
+  width:17cm !important;
+  max-width:17cm !important;
+  min-width:17cm !important;
+  margin-left:auto !important;
+  margin-right:auto !important;
+  box-sizing:border-box !important;
+}
+.rate-request-output table{
+  width:15cm !important;
+  max-width:15cm !important;
+  min-width:15cm !important;
+  table-layout:fixed !important;
+  margin-left:auto !important;
+  margin-right:auto !important;
+}
+.rate-request-output th,
+.rate-request-output td{
+  white-space:nowrap !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+}
+
+
+@media (max-width:800px){
+  .quote-output{
+    min-width:0 !important;
+    max-width:100% !important;
+    width:100% !important;
+    overflow-x:auto !important;
+  }
+  .quote-output table{
+    min-width:0 !important;
+    max-width:100% !important;
+    width:100% !important;
+  }
+  .rate-request-output{
+    min-width:0 !important;
+    max-width:100% !important;
+    width:100% !important;
+  }
+  .rate-request-output table{
+    min-width:0 !important;
+    max-width:100% !important;
+    width:100% !important;
+  }
+}
+
+/* ============================================================
+   V13 — FINAL MASTER GEOMETRY
+   ============================================================ */
+.quote-output,
+.quote-output > table,
+.quote-output .quote-table,
+.quote-output .quotation-table {
+  width:20cm !important;
+  min-width:20cm !important;
+  max-width:20cm !important;
+  box-sizing:border-box !important;
+}
+.quote-output table {
+  table-layout:fixed !important;
+  border-collapse:collapse !important;
+}
+.quote-output th,
+.quote-output td {
+  
+}
+.quote-output .quote-section-gap {
+  display:block !important;
+  height:9px !important;
+  min-height:9px !important;
+  line-height:9px !important;
+  font-size:0 !important;
+}
+
+/* ============================================================
+   V14 — NARROW PREVIEW BORDERS + FIT TO SCREEN
+   ============================================================ */
+.quote-output,
+.quote-output table,
+.quote-output .quote-table,
+.quote-output .quotation-table{
+  width:100% !important;
+  max-width:20cm !important;
+  min-width:0 !important;
+  margin-left:auto !important;
+  margin-right:auto !important;
+  box-sizing:border-box !important;
+}
+
+.quote-output table{
+  table-layout:fixed !important;
+  border-collapse:collapse !important;
+  border-spacing:0 !important;
+}
+
+/* Narrow professional 1px borders — avoid heavy boxed appearance */
+.quote-output th,
+.quote-output td{
+  border-width:1px !important;
+  border-style:solid !important;
+  border-color:#d1d5db !important;
+  box-shadow:none !important;
+  box-sizing:border-box !important;
+}
+
+/* Section heading borders stay 1px; no large outer frame */
+.quote-output table,
+.quote-output thead,
+.quote-output tbody,
+.quote-output tfoot{
+  border-width:1px !important;
+}
+
+/* Long text can wrap without changing the table width */
+.quote-output td.cell-text,
+.quote-output th.cell-text{
+  white-space:normal !important;
+  overflow-wrap:anywhere !important;
+  word-break:break-word !important;
+}
+
+/* Financial/currency/carrier values remain on one line */
+.quote-output td.cell-money,
+.quote-output td.cell-currency,
+.quote-output td.cell-carrier,
+.quote-output th.cell-money,
+.quote-output th.cell-currency,
+.quote-output th.cell-carrier{
+  white-space:nowrap !important;
+  overflow:visible !important;
+  text-overflow:clip !important;
+}
+
+/* Keep section spacing, not oversized margins */
+.quote-output .quote-section-gap{
+  height:9px !important;
+  min-height:9px !important;
+  margin:0 !important;
+  padding:0 !important;
+}
+
+/* Modal/preview viewport: fit width and avoid side clipping */
+#previewBody,
+#emailPreviewBody,
+#pdf-render-area{
+  box-sizing:border-box !important;
+  width:100% !important;
+  max-width:100% !important;
+  overflow-x:hidden !important;
+  background:#fff !important;
+  padding-left:0 !important;
+  padding-right:0 !important;
+}
+
+@media (max-width:900px){
+  .quote-output{
+    width:100% !important;
+    max-width:100% !important;
+  }
+}
+
+/* V14 — preserve Rate Request sizing */
+.rate-request-output{
+  width:100% !important;
+  max-width:17cm !important;
+  min-width:0 !important;
+  margin:0 auto !important;
+  box-sizing:border-box !important;
+}
+.rate-request-output table{
+  width:100% !important;
+  max-width:15cm !important;
+  min-width:0 !important;
+  table-layout:fixed !important;
+  margin-left:auto !important;
+  margin-right:auto !important;
+  border-collapse:collapse !important;
+}
+.rate-request-output th,
+.rate-request-output td{
+  border-width:1px !important;
+  white-space:normal !important;
+  overflow-wrap:anywhere !important;
+}
+
+/* ============================================================
+   V15 — FINAL BALANCED COLUMNS (NO TABLE SIZE INCREASE)
+   ============================================================ */
+.quote-output{width:100%!important;max-width:20cm!important;min-width:0!important;margin:0 auto!important;box-sizing:border-box!important;}
+.quote-output table{width:100%!important;max-width:20cm!important;min-width:0!important;table-layout:fixed!important;border-collapse:collapse!important;border-spacing:0!important;}
+.quote-output th,.quote-output td{border:1px solid #d1d5db!important;box-shadow:none!important;box-sizing:border-box!important;}
+.quote-output td.cell-text{white-space:normal!important;overflow-wrap:anywhere!important;word-break:break-word!important;}
+.quote-output td.cell-money,.quote-output td.cell-currency,.quote-output td.cell-carrier{white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important;}
+
+/* ============================================================
+   V16 — WIDER PREVIEW / ROBUST MULTI-CARRIER GRAND TOTAL
+   ============================================================ */
+.quote-output,
+.quote-output table,
+.quote-output .quote-table,
+.quote-output .quotation-table{
+  width:100% !important;
+  max-width:20cm !important;
+  min-width:0 !important;
+  margin-left:auto !important;
+  margin-right:auto !important;
+  box-sizing:border-box !important;
+}
+.quote-output table{
+  table-layout:fixed !important;
+  border-collapse:collapse !important;
+  border-spacing:0 !important;
+}
+.quote-output th,
+.quote-output td{
+  box-sizing:border-box !important;
+  border-width:1px !important;
+}
+.quote-output .quote-section-gap{
+  display:block !important;
+  height:9px !important;
+  min-height:9px !important;
+  line-height:9px !important;
+  margin:0 !important;
+  padding:0 !important;
+}
+#previewBody,
+#pdf-render-area{
+  width:100% !important;
+  max-width:100% !important;
+  overflow-x:hidden !important;
+  box-sizing:border-box !important;
+}
+
+/* ============================================================
+   V17 — MASTER GRID + AIR COMBINED + PREVIEW FIT
+   ============================================================ */
+
+/* Preview can use the full available modal/screen width. */
+#previewBody{
+  width:100% !important;
+  max-width:100% !important;
+  overflow-x:hidden !important;
+  box-sizing:border-box !important;
+}
+
+/* Quotation tables: responsive width, with a professional 20cm cap for
+   external/email/PDF contexts. */
+.quote-output .quote-table,
+.quote-output table{
+  width:100% !important;
+  max-width:20cm !important;
+  min-width:0 !important;
+  margin-left:auto !important;
+  margin-right:auto !important;
+  table-layout:fixed !important;
+  border-collapse:collapse !important;
+  border-spacing:0 !important;
+}
+
+/* Narrow professional borders. */
+.quote-output .quote-table th,
+.quote-output .quote-table td{
+  border:1px solid #d1d5db !important;
+  box-shadow:none !important;
+  box-sizing:border-box !important;
+}
+
+/* Text may wrap without changing table geometry. */
+.quote-output .quote-table td{
+  overflow-wrap:anywhere !important;
+  word-break:break-word !important;
+}
+
+/* Monetary/currency cells remain on one line. */
+.quote-output .quote-table td:nth-last-child(1),
+.quote-output .quote-table td[data-money="true"]{
+  white-space:nowrap !important;
+  overflow:visible !important;
+}
+
+/* Section spacing */
+.quote-output .quote-section-gap{
+  display:block !important;
+  height:9px !important;
+  min-height:9px !important;
+  margin:0 !important;
+  padding:0 !important;
+}
+
+/* Keep preview from creating horizontal page scroll. */
+.modal-body #previewBody,
+#previewBody .quote-output{
+  overflow-x:hidden !important;
+}
+
+/* Do not allow a long header to expand the table. */
+.quote-output .quote-table th{
+  white-space:normal !important;
+  overflow-wrap:break-word !important;
+  word-break:break-word !important;
+}
+
+/* ============================================================
+   V18 — QUOTATION PREVIEW ONLY = 24CM MAX
+   Email / Copy / PDF remain on the existing 20cm output size.
+   ============================================================ */
+#previewBody .quote-output,
+#previewBody .quote-output table,
+#previewBody .quote-output .quote-table,
+#previewBody .quote-output .quotation-table{
+  width:100% !important;
+  max-width:24cm !important;
+  min-width:0 !important;
+  margin-left:auto !important;
+  margin-right:auto !important;
+  box-sizing:border-box !important;
+}
+
+/* V19 — AIR LOGIC output uses same quotation geometry as Preview/Copy.
+   Amount = unit rate; Basis = applied logic; INR Equivalent = final amount. */
+
+/* ============================================================
+   V20 — PREVIEW FIT-TO-PAGE ONLY
+   Preview uses the full available modal/page width.
+   PDF / Email / Copy Compact keep their approved widths.
+   ============================================================ */
+#previewBody{
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  overflow-x:hidden !important;
+  box-sizing:border-box !important;
+  padding-left:0 !important;
+  padding-right:0 !important;
+}
+
+#previewBody #preview-content-container{
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  margin:0 !important;
+  box-sizing:border-box !important;
+  overflow-x:hidden !important;
+}
+
+#previewBody #preview-content-container .quote-table,
+#previewBody #preview-content-container table,
+#previewBody #preview-content-container .special-remark-table{
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  margin-left:auto !important;
+  margin-right:auto !important;
+  box-sizing:border-box !important;
+  table-layout:fixed !important;
+}
+
+#previewBody #preview-content-container th,
+#previewBody #preview-content-container td{
+  box-sizing:border-box !important;
+  border-width:1px !important;
+}
+
+/* Long text can wrap; table/grid never expands. */
+#previewBody #preview-content-container td{
+  overflow-wrap:anywhere !important;
+  word-break:break-word !important;
+}
+
+/* Financial values remain intact inside their cells. */
+#previewBody #preview-content-container td[style*="text-align:right"]{
+  white-space:nowrap !important;
+  overflow:visible !important;
+}
+
+/* Main table section gaps remain visible and consistent. */
+#previewBody #preview-content-container .quote-section-gap{
+  height:9px !important;
+  min-height:9px !important;
+  margin:0 !important;
+  padding:0 !important;
+}
+
+@media (max-width:900px){
+  #previewBody #preview-content-container{
+    padding:0 4px !important;
+  }
+}
+
+/* V20 final override: no 24cm cap inside Quotation Preview */
+#previewBody .quote-output,
+#previewBody .quote-output table,
+#previewBody .quote-output .quote-table,
+#previewBody .quote-output .quotation-table{
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+}
+
+/* SHAHID FINAL QUOTATION GRID — single source of truth */
+.shahid-master-quote-table{
+  width:100% !important;
+  table-layout:fixed !important;
+  border-collapse:collapse !important;
+  box-sizing:border-box !important;
+}
+.shahid-master-quote-table col{
+  box-sizing:border-box !important;
+}
+.shahid-master-quote-table th,
+.shahid-master-quote-table td{
+  box-sizing:border-box !important;
+}
+
+/* ================================================================
+   POPUP / MODAL FIELD SPACING STANDARD — 0.5 cm (~19px)
+   Applies consistently across all popup tabs/forms without changing
+   business logic, field sizes, calculations, or button behavior.
+   ================================================================ */
+.modal-body .form-grid-2col,
+.modal-body .form-grid-3col,
+.modal-body .dsr-form-grid,
+.modal-body .bl-container-grid {
+    gap: 19px !important;
+}
+
+/* Generated popup rows that contain form controls */
+.modal-body div[style*="display:flex"]:has(input),
+.modal-body div[style*="display:flex"]:has(select),
+.modal-body div[style*="display:flex"]:has(.form-group) {
+    column-gap: 19px !important;
+}
+
+/* Charge-entry grids inside popup forms */
+.modal-body .charges-header,
+.modal-body .charge-row {
+    column-gap: 19px !important;
+}
+
+/* Keep compact inline controls visually separated while preserving width. */
+.modal-body .form-group + .form-group {
+    margin-left: 0 !important;
+}
+
+/* Mobile: keep the same visual spacing but allow natural wrapping. */
+@media (max-width: 700px) {
+    .modal-body .form-grid-2col,
+    .modal-body .form-grid-3col,
+    .modal-body .dsr-form-grid,
+    .modal-body .bl-container-grid {
+        gap: 19px !important;
+    }
+}
+
+
+/* ============================================================
+   SHAHID FINAL STABILITY — QUOTATION OUTPUT WIDTH SOURCE OF TRUTH
+   Preview / PDF / Copy Compact / Email: same 20cm quotation width.
+   ============================================================ */
+#previewBody .quote-output,
+#previewBody .quote-output table,
+#previewBody .quote-output .quote-table,
+#previewBody .quote-output .quotation-table,
+#previewBody #preview-content-container .quote-table,
+#previewBody #preview-content-container table {
+  width:100% !important;
+  max-width:20cm !important;
+  min-width:0 !important;
+  margin-left:auto !important;
+  margin-right:auto !important;
+  box-sizing:border-box !important;
+  table-layout:fixed !important;
+}
+#previewBody #preview-content-container {
+  width:100% !important;
+  max-width:20cm !important;
+  min-width:0 !important;
+  margin:0 auto !important;
+  box-sizing:border-box !important;
+}
+
+/* ============================================================
+   SHAHID V2.0 — FINAL QUOTATION WIDTH = 22cm
+   Overrides older 20cm quotation rules without affecting
+   Rate Request / other ERP modules.
+   ============================================================ */
+.quote-output,
+.quote-output > table,
+.quote-output .quote-table,
+.quote-output .quotation-table,
+#previewBody .quote-output,
+#previewBody .quote-output table,
+#previewBody .quote-output .quote-table,
+#previewBody .quote-output .quotation-table,
+#previewBody #preview-content-container,
+#previewBody #preview-content-container .quote-table,
+#previewBody #preview-content-container table{
+  width:22cm !important;
+  max-width:22cm !important;
+  min-width:22cm !important;
+  box-sizing:border-box !important;
+  margin-left:auto !important;
+  margin-right:auto !important;
+}
+
+.quote-preview-a4{
+  width:220mm !important;
+  max-width:220mm !important;
+  overflow-x:hidden !important;
+}
+.quote-preview-a4 .quote-output{
+  width:22cm !important;
+  max-width:22cm !important;
+  min-width:22cm !important;
+}
+
+@media (max-width:900px){
+  .quote-output,
+  .quote-output > table,
+  .quote-output .quote-table,
+  .quote-output .quotation-table,
+  #previewBody .quote-output,
+  #previewBody .quote-output table,
+  #previewBody #preview-content-container,
+  #previewBody #preview-content-container table{
+    width:100% !important;
+    max-width:100% !important;
+    min-width:0 !important;
+  }
+}
+
+
+/* SHAHID ERP: no-wrap compact quotation output */
+.quote-preview table,
+.quote-preview table th,
+.quote-preview table td,
+.air-quote-preview table,
+.air-quote-preview table th,
+.air-quote-preview table td,
+.lcl-quote-preview table,
+.lcl-quote-preview table th,
+.lcl-quote-preview table td {
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+}
+.quote-preview table th,
+.quote-preview table td,
+.air-quote-preview table th,
+.air-quote-preview table td,
+.lcl-quote-preview table th,
+.lcl-quote-preview table td {
+  font-size: 11px !important;
+}
+
+/* SHAHID ERP: +2cm only for 3-carrier / 3-container comparison */
+.quote-preview.erp-three-column-wide,
+.air-quote-preview.erp-three-column-wide,
+.lcl-quote-preview.erp-three-column-wide {
+  width: 22cm !important;
+  max-width: 22cm !important;
+}
+
+
+/* SHAHID ERP FINAL QUOTATION LAYOUT */
+.quote-preview, .air-quote-preview, .lcl-quote-preview {
+  box-sizing: border-box !important;
+  width: 20cm !important;
+  max-width: 20cm !important;
+  overflow: hidden !important;
+}
+.quote-preview table, .quote-preview th, .quote-preview td,
+.air-quote-preview table, .air-quote-preview th, .air-quote-preview td,
+.lcl-quote-preview table, .lcl-quote-preview th, .lcl-quote-preview td {
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+  overflow-wrap: normal !important;
+  font-size: 10px !important;
+}
