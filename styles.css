@@ -6037,3 +6037,29 @@ th[data-sort]:hover {
   overflow-wrap: normal !important;
   font-size: 10px !important;
 }
+
+/* FINAL USER PATCH */
+.invoice-email-modal{width:min(1000px,94vw);max-height:92vh;overflow:auto;background:#fff;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.invoice-email-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px}
+.invoice-email-grid input{width:100%;box-sizing:border-box}
+.invoice-email-preview{margin:0 12px 12px;padding:10px;background:#fff;border:1px solid #d1d5db;overflow:auto;max-height:52vh}
+.invoice-email-actions{display:flex;justify-content:flex-end;gap:8px;padding:12px;border-top:1px solid #e5e7eb}
+@media(max-width:700px){.invoice-email-grid{grid-template-columns:1fr}}
+/* === FINAL INVOICE EDITOR === */
+.v91-edit-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.v91-edit-grid label{display:block;font-size:.72rem;font-weight:700;margin-bottom:4px;color:#334155}
+.v91-edit-grid input,.v91-edit-grid select{width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid #cbd5e1;border-radius:6px;background:#fff}
+.v91-charge-editor{width:100%;border-collapse:collapse;font-size:.78rem}
+.v91-charge-editor th,.v91-charge-editor td{border:1px solid #d1d5db;padding:6px;vertical-align:middle}
+.v91-charge-editor th{background:#1e3a8a;color:#fff;white-space:nowrap}
+.v91-charge-editor input,.v91-charge-editor select{width:100%;box-sizing:border-box;padding:5px;border:1px solid #cbd5e1;border-radius:4px}
+.v91-edit-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:12px}
+@media(max-width:900px){.v91-edit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.v91-edit-grid{grid-template-columns:1fr}.v91-charge-editor{font-size:.7rem}}
+
+/* Invoice / Receivables remaining-days indicator */
+.invoice-remaining-days{display:inline-block;white-space:nowrap;font-weight:700;font-size:.74rem;padding:3px 7px;border-radius:6px;}
+.invoice-remaining-days.remaining{background:#e8f5e9;color:#2e7d32;}
+.invoice-remaining-days.today{background:#fff3cd;color:#8a5a00;}
+.invoice-remaining-days.overdue{background:#fdecea;color:#b42318;}
+.invoice-remaining-days.paid{background:#e8f5e9;color:#18794e;}
