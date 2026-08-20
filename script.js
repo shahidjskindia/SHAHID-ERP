@@ -2896,7 +2896,15 @@ function clearFilters(target) {
     document.getElementById(`${target}-search-text`).value = '';
     document.getElementById(`${target}-search-qn`).value = '';
     document.getElementById(`${target}-search-date`).value = '';
-    if (target === 'rates') document.getElementById('rates-margin-filter').value = '';
+    if (target === 'rates') {
+        const mf = document.getElementById('rates-margin-filter'); if (mf) mf.value = '';
+        const qf = document.getElementById('rates-quick-filter'); if (qf) qf.value = '';
+        sessionStorage.removeItem('ratesQuickFilter');
+    }
+    if (target === 'drafts') {
+        const qf = document.getElementById('drafts-quick-filter'); if (qf) qf.value = '';
+        sessionStorage.removeItem('draftsQuickFilter');
+    }
     renderRecords(target);
 }
 function debouncedSearch(target) {
@@ -16946,6 +16954,36 @@ function clearRRDraftsFilters() {
 }
 
 
+// ==================== RATE QUOTE FILTER HELPERS ====================
+function normalizeDateOnly(value) {
+    if (!value) return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    d.setHours(0,0,0,0);
+    return d;
+}
+
+function isQuoteExpired(q) {
+    const d = normalizeDateOnly(q?.validityDate || q?.validTill || q?.validUntil);
+    if (!d) return false;
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    return d < today;
+}
+
+function isQuoteConverted(q) {
+    if (!q) return false;
+    if (q.convertedToShipment === true || q.converted === true || q.convertedShipmentId) return true;
+    const refs = [q.shipmentCode, q.shipmentNo, q.jobNo, q.jobNumber, q.convertedJobNo]
+        .map(v => String(v || '').trim().toLowerCase()).filter(Boolean);
+    if (!refs.length) return false;
+    return (db.shipments || []).some(s => {
+        const sRefs = [s.jobNo, s.code, s.shipmentCode, s.quoteRef, s.quoteNumber, s.rateQuoteRef]
+            .map(v => String(v || '').trim().toLowerCase()).filter(Boolean);
+        return refs.some(r => sRefs.includes(r));
+    });
+}
+
 // ==================== ENHANCED RATES VIEW ====================
 let ratesSortColumn = 'timestamp';
 let ratesSortOrder = 'desc'; // 'asc' or 'desc'
@@ -17026,13 +17064,11 @@ function renderEnhancedRates() {
         if (statusFilter && (q.followUpStatus || 'PENDING') !== statusFilter) return false;
         if (modeFilter && q._modeLabel !== modeFilter) return false;
         if (userFilter && (q.sales || q.createdBy || db.defaultUser) !== userFilter) return false;
-        if (quickFilter === 'converted' && q.convertedToShipment !== true) return false;
-        if (quickFilter === 'expired') {
-            if (!q.validityDate) return false;
-            const vd = new Date(q.validityDate); vd.setHours(0,0,0,0);
-            const td = new Date(); td.setHours(0,0,0,0);
-            if (!(vd < td)) return false;
-        }
+        if (quickFilter === 'converted' && !isQuoteConverted(q)) return false;
+        if (quickFilter === 'expired' && !isQuoteExpired(q)) return false;
+        if (quickFilter === 'sea' && q._mode !== 'sea') return false;
+        if (quickFilter === 'air' && q._mode !== 'air') return false;
+        if (quickFilter === 'lcl' && q._mode !== 'lcl') return false;
         return true;
     });
 
@@ -17127,7 +17163,7 @@ function renderEnhancedRates() {
 
         html += `
             <tr style="background:${rowBg};" data-quote='${JSON.stringify(q).replace(/'/g,"&apos;")}'>
-                <td style="text-align:center;"><input type="checkbox" class="rates-row-checkbox" data-quote='${JSON.stringify(q).replace(/'/g,"&apos;")}' onchange="updateSelectedCount()" /></td>
+                <td style="text-align:center;"><input type="checkbox" class="rates-row-checkbox" data-mode="${q._mode}" data-index="${q._idx}" onchange="updateSelectedCount()" /></td>
                 <td><strong>${q.quoteNumber || 'N/A'}</strong></td>
                 <td>${q.client || '-'}</td>
                 <td>${q.pol || '-'}</td>
@@ -17226,12 +17262,13 @@ function updateSelectedCount() {
 function getSelectedQuotes() {
     const selected = [];
     document.querySelectorAll('.rates-row-checkbox:checked').forEach(cb => {
-        const q = JSON.parse(cb.dataset.quote);
-        selected.push(q);
+        const mode = cb.dataset.mode;
+        const idx = Number(cb.dataset.index);
+        const q = db.rates?.[mode]?.[idx];
+        if (q) selected.push({ ...q, _mode: mode, _idx: idx });
     });
     return selected;
 }
-
 function ratesBulkAction(action) {
     const selected = getSelectedQuotes();
     if (selected.length === 0) {
@@ -17272,7 +17309,7 @@ function ratesBulkAction(action) {
             if (!confirm(`Convert ${selected.length} selected quote(s) to shipments?`)) return;
             let converted = 0, skipped = 0;
             selected.forEach(q => {
-                if (q.convertedToShipment) {
+                if (isQuoteConverted(q)) {
                     skipped++;
                     return;
                 }
@@ -17298,12 +17335,15 @@ function changeRatesPage(page) {
 }
 
 function setRatesQuickFilter(value) {
+    const normalized = String(value || '').toLowerCase();
+    const allowed = ['', 'total', 'converted', 'expired', 'sea', 'air', 'lcl'];
+    const next = allowed.includes(normalized) ? normalized : '';
     const el = document.getElementById('rates-quick-filter');
-    if (el) el.value = value || '';
-    if (value) sessionStorage.setItem('ratesQuickFilter', value);
+    if (el) el.value = next;
+    if (next) sessionStorage.setItem('ratesQuickFilter', next);
     else sessionStorage.removeItem('ratesQuickFilter');
     sessionStorage.setItem('ratesPage', '1');
-    renderRecords('rates');
+    renderEnhancedRates();
 }
 
 function clearRatesFilters() {
@@ -17328,22 +17368,16 @@ function updateRatesCounters(allQuotes, filtered) {
     const totalLcl = db.rates.lcl ? db.rates.lcl.length : 0;
     const totalAll = totalSea + totalAir + totalLcl;
 
-    const converted = allQuotes.filter(q => q.convertedToShipment === true).length;
-    const expired = allQuotes.filter(q => {
-        if (!q.validityDate) return false;
-        const v = new Date(q.validityDate);
-        const today = new Date();
-        today.setHours(0,0,0,0);
-        return v < today;
-    }).length;
+    const converted = allQuotes.filter(q => isQuoteConverted(q)).length;
+    const expired = allQuotes.filter(q => isQuoteExpired(q)).length;
 
     countersEl.innerHTML = `
-        <div class="counter-card" style="border-color:#3b82f6;"><div class="counter-label">🚢 SEA</div><div class="counter-value">${totalSea}</div></div>
-        <div class="counter-card" style="border-color:#f59e0b;"><div class="counter-label">✈️ AIR</div><div class="counter-value">${totalAir}</div></div>
-        <div class="counter-card" style="border-color:#10b981;"><div class="counter-label">📦 LCL</div><div class="counter-value">${totalLcl}</div></div>
-        <div class="counter-card" style="border-color:#8b5cf6;cursor:pointer;" onclick="setRatesQuickFilter('converted')"><div class="counter-label">📋 CONVERTED</div><div class="counter-value">${converted}</div></div>
-        <div class="counter-card" style="border-color:#ef4444;cursor:pointer;" onclick="setRatesQuickFilter('expired')"><div class="counter-label">⏰ EXPIRED</div><div class="counter-value">${expired}</div></div>
-        <div class="counter-card" style="border-color:#1e3a8a;cursor:pointer;" onclick="setRatesQuickFilter('')"><div class="counter-label">📊 TOTAL</div><div class="counter-value">${totalAll}</div></div>
+        <div class="counter-card" style="border-color:#3b82f6;cursor:pointer;" onclick="setRatesQuickFilter('sea')" title="Show SEA quotes"><div class="counter-label">🚢 SEA</div><div class="counter-value">${totalSea}</div></div>
+        <div class="counter-card" style="border-color:#f59e0b;cursor:pointer;" onclick="setRatesQuickFilter('air')" title="Show AIR quotes"><div class="counter-label">✈️ AIR</div><div class="counter-value">${totalAir}</div></div>
+        <div class="counter-card" style="border-color:#10b981;cursor:pointer;" onclick="setRatesQuickFilter('lcl')" title="Show LCL quotes"><div class="counter-label">📦 LCL</div><div class="counter-value">${totalLcl}</div></div>
+        <div class="counter-card" style="border-color:#8b5cf6;cursor:pointer;" title="Show converted quotes" onclick="setRatesQuickFilter('converted')"><div class="counter-label">📋 CONVERTED</div><div class="counter-value">${converted}</div></div>
+        <div class="counter-card" style="border-color:#ef4444;cursor:pointer;" title="Show expired quotes" onclick="setRatesQuickFilter('expired')"><div class="counter-label">⏰ EXPIRED</div><div class="counter-value">${expired}</div></div>
+        <div class="counter-card" style="border-color:#1e3a8a;cursor:pointer;" title="Show all quotes" onclick="setRatesQuickFilter('total')"><div class="counter-label">📊 TOTAL</div><div class="counter-value">${totalAll}</div></div>
     `;
 }
 
@@ -17403,6 +17437,7 @@ function renderEnhancedDrafts() {
     const searchText = (document.getElementById('drafts-search-text')?.value || '').toLowerCase();
     const searchQN = (document.getElementById('drafts-search-qn')?.value || '').toLowerCase();
     const searchDate = document.getElementById('drafts-search-date')?.value || '';
+    const quickFilter = document.getElementById('drafts-quick-filter')?.value || sessionStorage.getItem('draftsQuickFilter') || '';
 
     let allDrafts = [];
     ['sea', 'air', 'lcl'].forEach(mode => {
@@ -17426,6 +17461,9 @@ function renderEnhancedDrafts() {
             const dDate = new Date(d.timestamp).toISOString().split('T')[0];
             if (dDate !== searchDate) return false;
         }
+        if (quickFilter === 'sea' && d._mode !== 'sea') return false;
+        if (quickFilter === 'air' && d._mode !== 'air') return false;
+        if (quickFilter === 'lcl' && d._mode !== 'lcl') return false;
         return true;
     });
 
@@ -17469,7 +17507,7 @@ function renderEnhancedDrafts() {
         <table class="rates-enhanced-table">
             <thead>
                 <tr>
-                    <th style="width:5%"checkbox" id="drafts-select-all" onchange="toggleAllDraftsCheckboxes()" /></th>
+                    <th style="width:5%;"><input type="checkbox" id="drafts-select-all" onchange="toggleAllDraftsCheckboxes()" /></th>
                     <th style="width:12%;" data-sort="quoteNumber" onclick="sortDrafts('quoteNumber')">QUOTE REF <span class="sort-arrow"></span></th>
                     <th style="width:15%;" data-sort="client" onclick="sortDrafts('client')">CUSTOMER <span class="sort-arrow"></span></th>
                     <th style="width:14%;" data-sort="pol" onclick="sortDrafts('pol')">ORIGIN <span class="sort-arrow"></span></th>
@@ -17613,11 +17651,21 @@ function updateDraftsCounters(allDrafts, filtered) {
     const lcl = allDrafts.filter(d => d._mode === 'lcl').length;
     const total = allDrafts.length;
     countersEl.innerHTML = `
-        <div class="counter-card" style="border-color:#3b82f6;"><div class="counter-label">🚢 SEA Drafts</div><div class="counter-value">${sea}</div></div>
-        <div class="counter-card" style="border-color:#f59e0b;"><div class="counter-label">✈️ AIR Drafts</div><div class="counter-value">${air}</div></div>
-        <div class="counter-card" style="border-color:#10b981;"><div class="counter-label">📦 LCL Drafts</div><div class="counter-value">${lcl}</div></div>
-        <div class="counter-card" style="border-color:#1e3a8a;"><div class="counter-label">📊 TOTAL</div><div class="counter-value">${total}</div></div>
+        <div class="counter-card" style="border-color:#3b82f6;cursor:pointer;" onclick="setDraftsQuickFilter('sea')" title="Show SEA drafts"><div class="counter-label">🚢 SEA Drafts</div><div class="counter-value">${sea}</div></div>
+        <div class="counter-card" style="border-color:#f59e0b;cursor:pointer;" onclick="setDraftsQuickFilter('air')" title="Show AIR drafts"><div class="counter-label">✈️ AIR Drafts</div><div class="counter-value">${air}</div></div>
+        <div class="counter-card" style="border-color:#10b981;cursor:pointer;" onclick="setDraftsQuickFilter('lcl')" title="Show LCL drafts"><div class="counter-label">📦 LCL Drafts</div><div class="counter-value">${lcl}</div></div>
+        <div class="counter-card" style="border-color:#1e3a8a;cursor:pointer;" onclick="setDraftsQuickFilter('')" title="Show all drafts"><div class="counter-label">📊 TOTAL</div><div class="counter-value">${total}</div></div>
     `;
+}
+
+function setDraftsQuickFilter(value) {
+    const next = ['', 'sea', 'air', 'lcl'].includes(String(value || '').toLowerCase()) ? String(value || '').toLowerCase() : '';
+    const el = document.getElementById('drafts-quick-filter');
+    if (el) el.value = next;
+    if (next) sessionStorage.setItem('draftsQuickFilter', next);
+    else sessionStorage.removeItem('draftsQuickFilter');
+    sessionStorage.setItem('draftsPage', '1');
+    renderRecords('drafts');
 }
 
 function sortDrafts(column) {
@@ -18266,9 +18314,6 @@ function ratesheetBulkAction(action) {
 
         case 'renew':
             if (!confirm(`Renew ${indices.length} selected rate(s)?`)) return;
-            indices.forEach(idx => {
-                renewRateSheet(idx);
-            });
             // The renew function opens a modal for each – we need to handle it differently.
             // We'll open the first one and after it's done, continue.
             // For simplicity, we'll just open the first one and let user do rest manually.
@@ -18922,10 +18967,83 @@ const buy = parseRateInput(
         return data;
     }
 
+    function editRateRequestDraft(target, mode, idx) {
+        const rec = db?.[target]?.[mode]?.[idx];
+        if (!rec) return alert('Rate Request Draft not found.');
+
+        const format = rec.format || (rec.mode === 'AIR' ? 'air' : (rec.forwarder && !rec.shipper ? 'seaWithoutShipper' : 'seaWithShipper'));
+        currentRateRequestFormat = format;
+        switchRateRequestFormat(format);
+
+        const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value ?? ''; };
+        if (format === 'seaWithShipper') {
+            set('rr-shipper', rec.shipper);
+            set('rr-forwarder-sea1', rec.forwarder || db.companyName || 'GATEWAY EXIM');
+            set('rr-pol-sea1', rec.pol); set('rr-pod-sea1', rec.pod);
+            set('rr-commodity-sea1', rec.commodity || 'NON HAZ');
+            set('rr-inventory-sea1', rec.inventory || '');
+            set('rr-weight-sea1', rec.weight || ''); set('rr-term-sea1', rec.term || 'PREPAID');
+            set('rr-validity-sea1', rec.validity || ''); set('rr-freeTime-sea1', rec.freeTime || '14 Days');
+            set('rr-remarks-sea1', rec.remarks || '');
+        } else if (format === 'seaWithoutShipper') {
+            set('rr-forwarder-sea2', rec.forwarder || db.companyName || 'GATEWAY EXIM');
+            set('rr-pol-sea2', rec.pol); set('rr-pod-sea2', rec.pod);
+            set('rr-commodity-sea2', rec.commodity || 'NON HAZ');
+            set('rr-inventory-sea2', rec.inventory || '');
+            set('rr-weight-sea2', rec.weight || ''); set('rr-term-sea2', rec.term || 'PREPAID');
+            set('rr-validity-sea2', rec.validity || ''); set('rr-freeTime-sea2', rec.freeTime || '14 Days');
+            set('rr-remarks-sea2', rec.remarks || '');
+        } else {
+            set('rr-shipper-air', rec.shipper); set('rr-pol-air', rec.pol); set('rr-pod-air', rec.pod);
+            set('rr-clearance-air', rec.clearance || 'INQUIRY'); set('rr-commodity-air', rec.commodity || 'NON HAZ');
+            set('rr-weight-air', rec.weight || ''); set('rr-packaging-air', rec.packaging || '');
+            set('rr-pallet-air', rec.pallet || 'PALLETIZED'); set('rr-dimension-air', rec.dimension || '');
+            set('rr-temp-air', rec.temp || 'NORMAL'); set('rr-remarks-air', rec.remarks || '');
+        }
+
+        window.__editingRRDraft = { target, mode, idx, quoteNumber: rec.quoteNumber || '' };
+        // Change the existing Save-as-Draft buttons to Update while editing, without redesigning the form.
+        document.querySelectorAll('#raterequest .btn-save').forEach(btn => {
+            if (btn.textContent.includes('Save as Draft') || btn.textContent.includes('Update Draft')) {
+                btn.textContent = '💾 Update Draft';
+                btn.dataset.rrEdit = '1';
+            }
+        });
+        const firstInput = document.querySelector(`#rr-format-${format} input, #rr-format-${format} select, #rr-format-${format} textarea`);
+        if (firstInput) firstInput.focus();
+    }
+
+    function saveRateRequestDraft() {
+        const format = currentRateRequestFormat;
+        const data = getRateRequestData(format);
+        if (!data.pol || !data.pod) {
+            alert('Please select both POL and POD.');
+            return;
+        }
+        const editing = window.__editingRRDraft;
+        if (editing && editing.mode === 'rr') {
+            const rec = db?.[editing.target]?.[editing.mode]?.[editing.idx];
+            if (!rec) { window.__editingRRDraft = null; return saveRateRequestDraft(); }
+            data.quoteNumber = rec.quoteNumber || data.quoteNumber || '';
+            data.timestamp = rec.timestamp || new Date().toISOString();
+            data.lastModified = new Date().toISOString();
+            data.mode = 'rr'; data.status = rec.status || 'DRAFT'; data.followUpStatus = rec.followUpStatus || 'PENDING';
+            db[editing.target][editing.mode][editing.idx] = { ...rec, ...data };
+            saveDB(); autoBackup();
+            window.__editingRRDraft = null;
+            document.querySelectorAll('#raterequest .btn-save[data-rr-edit="1"]').forEach(btn => { btn.textContent = '💾 Save as Draft'; delete btn.dataset.rrEdit; });
+            alert(`Rate Request Draft updated successfully.\nQuote Number: ${data.quoteNumber || '-'} `);
+            renderRRDrafts();
+            return;
+        }
+        const qn = saveRateRequestDraftWithData(data);
+        alert(`Rate Request saved as Draft!\nQuote Number: ${qn}`);
+    }
+
     function editRecord(target, mode, idx) {
         const rec = db[target]?.[mode]?.[idx];
         if (!rec) return alert('Record not found.');
-        if (mode === 'rr') return;
+        if (mode === 'rr') return editRateRequestDraft(target, mode, idx);
         document.querySelectorAll('.tab-btn-vertical').forEach(b=>b.classList.remove('active'));
         document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
         document.querySelector(`.tab-btn-vertical[data-tab="${mode}"]`)?.classList.add('active');
