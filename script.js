@@ -6035,8 +6035,6 @@ function buildDsrForm(s, mode, isEdit) {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <div class="form-group"><label>JOB NO.</label><input type="text" id="dsr-job-no" list="dsr-job-quote-ref-list" value="${s.jobNo || s.code || ''}" style="width:100%;" oninput="onDsrJobReferenceChange()" onchange="onDsrJobReferenceChange()" onblur="onDsrJobReferenceChange()" placeholder="JOB NO. / select Quote Ref"><datalist id="dsr-job-quote-ref-list"></datalist><datalist id="dsr-job-list"></datalist></div>
             <div class="form-group"><label>QUOTE REF NO.</label><input type="text" id="dsr-quote-ref" list="dsr-quote-ref-list" value="${s.quoteRef || s.quoteNumber || s.rateQuoteRef || ''}" style="width:100%;" oninput="onDsrQuoteRefChange()" onchange="onDsrQuoteRefChange()" onblur="onDsrQuoteRefChange()"><datalist id="dsr-quote-ref-list"></datalist></div>
-            <div class="form-group"><label>Date</label><input type="date" id="dsr-date" value="${s.date || ''}" style="width:100%;"></div>
-
             <div class="form-group"><label>Shipper</label><input type="text" id="dsr-shipper" value="${s.shipper || ''}" style="width:100%;"></div>
             <div class="form-group"><label>No. of Pkgs / Cntr.</label><input type="text" id="dsr-packages" value="${s.packages || ''}" style="width:100%;"></div>
             
@@ -10338,18 +10336,6 @@ function saveInvoiceFromQuote() {
     alert(`✅ Invoice ${no} finalized from ${q.quoteNumber || ref}.`);
 }
 
-function invoiceRemainingDays(dueDate, paid=false) {
-    if (paid) return { text: 'Paid', days: null, cls: 'paid' };
-    if (!dueDate) return { text: '-', days: null, cls: '' };
-    const today = new Date(); today.setHours(0,0,0,0);
-    const due = new Date(String(dueDate).slice(0,10) + 'T00:00:00');
-    if (Number.isNaN(due.getTime())) return { text: '-', days: null, cls: '' };
-    const days = Math.round((due - today) / 86400000);
-    if (days > 0) return { text: `${days} Days`, days, cls: 'remaining' };
-    if (days === 0) return { text: 'Due Today', days: 0, cls: 'today' };
-    return { text: `${Math.abs(days)} Days Overdue`, days, cls: 'overdue' };
-}
-
 // ---------- Render Invoice List ----------
 function getSelectedInvoiceIndex() {
     const checked = Array.from(document.querySelectorAll('.invoice-row-check:checked'));
@@ -10388,15 +10374,13 @@ function renderInvoiceTab() {
 
     // Build table rows
     if (db.invoices.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" class="v9-empty">No invoices yet. Click "+ New Invoice" to generate one.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="v9-empty">No invoices yet. Click "+ New Invoice" to generate one.</td></tr>';
         return;
     }
 
     tbody.innerHTML = db.invoices.slice().reverse().map((x, idx) => {
         const realIdx = db.invoices.length - 1 - idx;
-        const statusUpper = String(x.status || '').toUpperCase();
-        const statusClass = statusUpper === 'PAID' ? 'v9-status-final' : 'v9-status-draft';
-        const rem = invoiceRemainingDays(x.dueDate || x.due || x.invoiceDueDate || '', statusUpper === 'PAID');
+        const statusClass = String(x.status || '').toUpperCase() === 'PAID' ? 'v9-status-final' : 'v9-status-draft';
         return `
             <tr>
                 <td style="text-align:center;"><input type="checkbox" class="invoice-row-check" data-idx="${realIdx}" onchange="updateInvoiceSelection()"></td>
@@ -10408,7 +10392,6 @@ function renderInvoiceTab() {
                 <td>${escapeHtml(x.pod || '-')}</td>
                 <td><strong>${formatINR(x.amount || x.total)}</strong></td>
                 <td>${fmtDate(x.invoiceDate || x.date)}</td>
-                <td><span class="invoice-remaining-days ${rem.cls}">${escapeHtml(rem.text)}</span></td>
                 <td><span class="${statusClass}">${escapeHtml(x.status || 'ISSUED')}</span></td>
             </tr>
         `;
@@ -11561,8 +11544,6 @@ function renderReceivables() {
     const received = rows.reduce((a, x) => a + x.received, 0);
     const outstanding = rows.reduce((a, x) => a + x.outstanding, 0);
     const over90 = rows.filter(x => x.bucket === '90+').reduce((a, x) => a + x.outstanding, 0);
-    const overdueOutstanding = rows.filter(x => x.outstanding > 0 && x.dueDate && new Date(String(x.dueDate).slice(0,10)+'T23:59:59') < new Date()).reduce((a,x)=>a+x.outstanding,0);
-    const dueTodayOutstanding = rows.filter(x => x.outstanding > 0 && x.dueDate && String(x.dueDate).slice(0,10) === new Date().toISOString().slice(0,10)).reduce((a,x)=>a+x.outstanding,0);
 
     const kpiContainer = document.getElementById('receivable-kpis');
     if (kpiContainer) {
@@ -11572,32 +11553,25 @@ function renderReceivables() {
             <div class="feature-kpi good"><span>Received</span><strong>${formatINR(received)}</strong></div>
             <div class="feature-kpi warn"><span>Outstanding</span><strong>${formatINR(outstanding)}</strong></div>
             <div class="feature-kpi danger"><span>90+ Days</span><strong>${formatINR(over90)}</strong></div>
-            <div class="feature-kpi danger"><span>Overdue Outstanding</span><strong>${formatINR(overdueOutstanding)}</strong></div>
-            <div class="feature-kpi warn"><span>Due Today</span><strong>${formatINR(dueTodayOutstanding)}</strong></div>
         `;
     }
 
     const body = document.getElementById('receivable-detail');
     if (body) {
-        body.innerHTML = rows.map(x => {
-            const paid = x.outstanding <= 0 || String(x.status || '').toUpperCase() === 'PAID';
-            const rem = invoiceRemainingDays(x.dueDate || '', paid);
-            return `
+        body.innerHTML = rows.map(x => `
             <tr>
                 <td>${escapeHtml(x.customer)}</td>
                 <td>${escapeHtml(x.invoice)}</td>
                 <td>${fmtDate(x.date || x.invoiceDate)}</td>
                 <td>${fmtDate(x.dueDate)}</td>
-                <td><span class="invoice-remaining-days ${rem.cls}">${escapeHtml(rem.text)}</span></td>
                 <td>${formatINR(x.amount)}</td>
                 <td>${formatINR(x.received)}</td>
                 <td>${formatINR(x.outstanding)}</td>
                 <td>${x.ageDays} d</td>
                 <td><span class="feature-status ${x.outstanding === 0 ? 'low' : x.ageDays > 90 ? 'critical' : x.ageDays > 30 ? 'high' : 'medium'}">${x.outstanding === 0 ? 'PAID' : x.bucket}</span></td>
-            </tr>`;
-        }).join('') || '<tr><td colspan="10" class="report-empty">No invoice data found.</td></tr>';
+            </tr>
+        `).join('') || '<tr><td colspan="9" class="report-empty">No invoice data found.</td></tr>';
     }
-
 }
 
 function clearReceivableFilters() {
@@ -11631,7 +11605,6 @@ function exportReceivablesExcel() {
             'Invoice': x.invoiceNo || x.id || '-',
             'Date': x.date || x.invoiceDate || '',
             'Due Date': due,
-            'Remaining Days': invoiceRemainingDays(due, outstanding <= 0).text,
             'Amount': amount,
             'Received': received,
             'Outstanding': outstanding,
