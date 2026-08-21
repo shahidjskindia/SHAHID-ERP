@@ -47,7 +47,7 @@
 
 
 <style id="shahid-final-quotation-layout">
-.quote-preview,.air-quote-preview,.lcl-quote-preview{box-sizing:border-box!important;width:20cm!important;max-width:20cm!important;overflow:hidden!important}
+.quote-preview,.air-quote-preview,.lcl-quote-preview{box-sizing:border-box!important;width:100%!important;max-width:100%!important;overflow:hidden!important}
 .quote-preview table,.quote-preview th,.quote-preview td,.air-quote-preview table,.air-quote-preview th,.air-quote-preview td,.lcl-quote-preview table,.lcl-quote-preview th,.lcl-quote-preview td{white-space:nowrap!important;word-break:keep-all!important;overflow-wrap:normal!important;font-size:10px!important}
 </style>
 
@@ -129,7 +129,6 @@
                 </div>
                 <div class="nav-category-items" id="cat-reports">
 					<button class="tab-btn-vertical" data-tab="planner" type="button">📅 Planner</button>
-                    <button class="tab-btn-vertical" data-tab="receivables" type="button">💳 Receivables</button>
 					<button class="tab-btn-vertical" data-tab="reporting" type="button">📊 Reporting</button>
 					<button class="tab-btn-vertical" data-tab="measurement" type="button">📏 Measurement</button>
                 </div>
@@ -940,7 +939,7 @@
 			<!-- ===== DSR (ENHANCED) ===== -->
 			<div class="tab-panel" id="dsr">
 				<div class="tab-heading">
-					<h2>🚢 Shipment List (DSR)</h2>
+					<div><h2>🚢 Shipment List (DSR)</h2><div class="dsr-module-subtitle">Active shipments • Operations overview</div></div>
 					<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
 						<button class="btn btn-export btn-sm" onclick="exportDSRToExcel()">📊 Export DSR</button>
 						<div class="add-shipment-wrapper">
@@ -1121,6 +1120,10 @@
 							<div style="font-size:2rem;">🚢</div>
 							<div style="font-weight:700;">Carrier Performance</div>
 						</div>
+						<div class="form-section" style="cursor:pointer;text-align:center;padding:20px;" onclick="switchReportTab('receivables')">
+							<div style="font-size:2rem;">💳</div>
+							<div style="font-weight:700;">Receivables & Credit Control</div>
+						</div>
 					</div>
 				</div>
 
@@ -1260,6 +1263,13 @@
 						</div>
 						<div class="report-kpi-grid" id="carrier-kpis"></div>
 						<div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Carrier</th><th>Shipments</th><th>Containers</th><th>Routes</th><th>Delivered</th><th>In Transit</th><th>Avg Delay</th><th>Profit</th><th>Performance</th></tr></thead><tbody id="carrier-detail"></tbody></table></div></div>
+					</div>
+
+					<!-- ===== RECEIVABLES & CREDIT CONTROL ===== -->
+					<div class="report-panel" id="report-panel-receivables">
+						<div class="tab-heading"><div><h2>💳 Receivables & Credit Control</h2><div class="module-subtitle">Outstanding, ageing and customer credit exposure</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderReceivables()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportReceivablesExcel()">📊 Excel</button></div></div>
+						<div class="report-filter-bar"><input id="receivable-search" class="search-box" placeholder="Customer / Invoice" oninput="renderReceivables()"><select id="receivable-age" onchange="renderReceivables()"><option value="">All Ageing</option><option value="0-30">0–30</option><option value="31-60">31–60</option><option value="61-90">61–90</option><option value="90+">90+</option></select><button class="btn btn-clear btn-sm" onclick="clearReceivableFilters()">Clear</button></div>
+						<div class="report-kpi-grid" id="receivable-kpis"></div><div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Customer</th><th>Invoice</th><th>Date</th><th>Due Date</th><th>Amount</th><th>Received</th><th>Outstanding</th><th>Age</th><th>Status</th></tr></thead><tbody id="receivable-detail"></tbody></table></div></div>
 					</div>
 
 				</div><!-- /reporting-content -->
@@ -2340,12 +2350,6 @@
 			
 			
 			
-			<!-- ===== RECEIVABLES ===== -->
-			<div class="tab-panel" id="receivables">
-				<div class="tab-heading"><div><h2>💳 Receivables & Credit Control</h2><div class="module-subtitle">Outstanding, ageing and customer credit exposure</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderReceivables()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportReceivablesExcel()">📊 Excel</button></div></div>
-				<div class="report-filter-bar"><input id="receivable-search" class="search-box" placeholder="Customer / Invoice" oninput="renderReceivables()"><select id="receivable-age" onchange="renderReceivables()"><option value="">All Ageing</option><option value="0-30">0–30</option><option value="31-60">31–60</option><option value="61-90">61–90</option><option value="90+">90+</option></select><button class="btn btn-clear btn-sm" onclick="clearReceivableFilters()">Clear</button></div>
-				<div class="report-kpi-grid" id="receivable-kpis"></div><div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Customer</th><th>Invoice</th><th>Date</th><th>Due Date</th><th>Amount</th><th>Received</th><th>Outstanding</th><th>Age</th><th>Status</th></tr></thead><tbody id="receivable-detail"></tbody></table></div></div>
-			</div>
 			
 			
 			<!-- ===== LOCAL CHARGES (UNIFIED) ===== -->
@@ -2382,7 +2386,7 @@
 									<select id="dc-sea-filter-pol" onchange="renderDefaultChargesMaster('sea')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">All POLs</option></select>
 									<button class="btn btn-quoted" type="button" onclick="openAddDefaultChargeModal('sea')">+ Add</button>
 								</div>
-								<div class="table-wrap" id="dc-sea-master-table"></div>
+								<div class="lc-action-bar" id="lc-actions-dc-sea"><div class="lc-actions-left"><strong>Actions:</strong><button class="btn btn-sm btn-preview" type="button" onclick="localChargesAction('preview','dc','sea')">👁 PREVIEW</button><button class="btn btn-sm btn-preview" type="button" onclick="localChargesAction('edit','dc','sea')">✏️ EDIT</button><button class="btn btn-sm btn-duplicate" type="button" onclick="localChargesAction('duplicate','dc','sea')">📋 DUPLICATE</button><button class="btn btn-sm btn-clear" type="button" onclick="localChargesAction('delete','dc','sea')">🗑 DELETE</button></div><div class="lc-actions-right">Total: <strong id="lc-total-dc-sea">0</strong> | <strong id="lc-selected-dc-sea">0</strong> selected</div></div><div class="table-wrap" id="dc-sea-master-table"></div>
 							</div>
 						</div>
 						<div class="db-section">
@@ -2392,7 +2396,7 @@
 									<input type="text" id="sea-thc-search" class="search-box" placeholder="🔍 Search Carrier / POL / Cargo..." oninput="renderSeaTHCMaster()" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
 									<button class="btn btn-quoted" type="button" onclick="openAddSeaTHCModal()">+ Add THC</button>
 								</div>
-								<div class="table-wrap" id="sea-thc-master-table"></div>
+								<div class="lc-action-bar" id="lc-actions-thc-sea"><div class="lc-actions-left"><strong>Actions:</strong><button class="btn btn-sm btn-preview" type="button" onclick="localChargesAction('preview','thc','sea')">👁 PREVIEW</button><button class="btn btn-sm btn-preview" type="button" onclick="localChargesAction('edit','thc','sea')">✏️ EDIT</button><button class="btn btn-sm btn-duplicate" type="button" onclick="localChargesAction('duplicate','thc','sea')">📋 DUPLICATE</button><button class="btn btn-sm btn-clear" type="button" onclick="localChargesAction('delete','thc','sea')">🗑 DELETE</button></div><div class="lc-actions-right">Total: <strong id="lc-total-thc-sea">0</strong> | <strong id="lc-selected-thc-sea">0</strong> selected</div></div><div class="table-wrap" id="sea-thc-master-table"></div>
 							</div>
 						</div>
 						<div class="db-section">
@@ -2403,7 +2407,7 @@
 									
 									<button class="btn btn-quoted" type="button" onclick="openAddCarrierChargeModal('sealcl')">+ Add</button>
 								</div>
-								<div class="table-wrap" id="cc-sealcl-master-table"></div>
+								<div class="lc-action-bar" id="lc-actions-cc-sealcl"><div class="lc-actions-left"><strong>Actions:</strong><button class="btn btn-sm btn-preview" type="button" onclick="localChargesAction('preview','cc','sealcl')">👁 PREVIEW</button><button class="btn btn-sm btn-preview" type="button" onclick="localChargesAction('edit','cc','sealcl')">✏️ EDIT</button><button class="btn btn-sm btn-duplicate" type="button" onclick="localChargesAction('duplicate','cc','sealcl')">📋 DUPLICATE</button><button class="btn btn-sm btn-clear" type="button" onclick="localChargesAction('delete','cc','sealcl')">🗑 DELETE</button></div><div class="lc-actions-right">Total: <strong id="lc-total-cc-sealcl">0</strong> | <strong id="lc-selected-cc-sealcl">0</strong> selected</div></div><div class="table-wrap" id="cc-sealcl-master-table"></div>
 							</div>
 						</div>
 					</div>
@@ -2420,7 +2424,7 @@
 									<select id="dc-air-filter-pol" onchange="renderDefaultChargesMaster('air')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">All POLs</option></select>
 									<button class="btn btn-quoted" type="button" onclick="openAddDefaultChargeModal('air')">+ Add</button>
 								</div>
-								<div class="table-wrap" id="dc-air-master-table"></div>
+								<div class="lc-action-bar" id="lc-actions-dc-air"><div class="lc-actions-left"><strong>Actions:</strong><button class="btn btn-sm btn-preview" type="button" onclick="localChargesAction('preview','dc','air')">👁 PREVIEW</button><button class="btn btn-sm btn-preview" type="button" onclick="localChargesAction('edit','dc','air')">✏️ EDIT</button><button class="btn btn-sm btn-duplicate" type="button" onclick="localChargesAction('duplicate','dc','air')">📋 DUPLICATE</button><button class="btn btn-sm btn-clear" type="button" onclick="localChargesAction('delete','dc','air')">🗑 DELETE</button></div><div class="lc-actions-right">Total: <strong id="lc-total-dc-air">0</strong> | <strong id="lc-selected-dc-air">0</strong> selected</div></div><div class="table-wrap" id="dc-air-master-table"></div>
 							</div>
 						</div>
 						<div class="db-section">
@@ -2430,7 +2434,7 @@
 									<input type="text" id="cc-air-search" class="search-box" placeholder="🔍 Search Carrier / Cargo..." oninput="renderCarrierChargesMaster('air')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
 									<button class="btn btn-quoted" type="button" onclick="openAddCarrierChargeModal('air')">+ Add</button>
 								</div>
-								<div class="table-wrap" id="cc-air-master-table"></div>
+								<div class="lc-action-bar" id="lc-actions-cc-air"><div class="lc-actions-left"><strong>Actions:</strong><button class="btn btn-sm btn-preview" type="button" onclick="localChargesAction('preview','cc','air')">👁 PREVIEW</button><button class="btn btn-sm btn-preview" type="button" onclick="localChargesAction('edit','cc','air')">✏️ EDIT</button><button class="btn btn-sm btn-duplicate" type="button" onclick="localChargesAction('duplicate','cc','air')">📋 DUPLICATE</button><button class="btn btn-sm btn-clear" type="button" onclick="localChargesAction('delete','cc','air')">🗑 DELETE</button></div><div class="lc-actions-right">Total: <strong id="lc-total-cc-air">0</strong> | <strong id="lc-selected-cc-air">0</strong> selected</div></div><div class="table-wrap" id="cc-air-master-table"></div>
 							</div>
 						</div>
 					</div>
@@ -2447,7 +2451,7 @@
 									<select id="dc-lcl-filter-pol" onchange="renderDefaultChargesMaster('lcl')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)"><option value="">All POLs</option></select>
 									<button class="btn btn-quoted" type="button" onclick="openAddDefaultChargeModal('lcl')">+ Add</button>
 								</div>
-								<div class="table-wrap" id="dc-lcl-master-table"></div>
+								<div class="lc-action-bar" id="lc-actions-dc-lcl"><div class="lc-actions-left"><strong>Actions:</strong><button class="btn btn-sm btn-preview" type="button" onclick="localChargesAction('preview','dc','lcl')">👁 PREVIEW</button><button class="btn btn-sm btn-preview" type="button" onclick="localChargesAction('edit','dc','lcl')">✏️ EDIT</button><button class="btn btn-sm btn-duplicate" type="button" onclick="localChargesAction('duplicate','dc','lcl')">📋 DUPLICATE</button><button class="btn btn-sm btn-clear" type="button" onclick="localChargesAction('delete','dc','lcl')">🗑 DELETE</button></div><div class="lc-actions-right">Total: <strong id="lc-total-dc-lcl">0</strong> | <strong id="lc-selected-dc-lcl">0</strong> selected</div></div><div class="table-wrap" id="dc-lcl-master-table"></div>
 							</div>
 						</div>
 						<div class="db-section">
@@ -2457,7 +2461,7 @@
 									<input type="text" id="cc-lcl-search" class="search-box" placeholder="🔍 Search Carrier / Cargo..." oninput="renderCarrierChargesMaster('lcl')" style="flex:1;min-width:200px;margin:0;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
 									<button class="btn btn-quoted" type="button" onclick="openAddCarrierChargeModal('lcl')">+ Add</button>
 								</div>
-								<div class="table-wrap" id="cc-lcl-master-table"></div>
+								<div class="lc-action-bar" id="lc-actions-cc-lcl"><div class="lc-actions-left"><strong>Actions:</strong><button class="btn btn-sm btn-preview" type="button" onclick="localChargesAction('preview','cc','lcl')">👁 PREVIEW</button><button class="btn btn-sm btn-preview" type="button" onclick="localChargesAction('edit','cc','lcl')">✏️ EDIT</button><button class="btn btn-sm btn-duplicate" type="button" onclick="localChargesAction('duplicate','cc','lcl')">📋 DUPLICATE</button><button class="btn btn-sm btn-clear" type="button" onclick="localChargesAction('delete','cc','lcl')">🗑 DELETE</button></div><div class="lc-actions-right">Total: <strong id="lc-total-cc-lcl">0</strong> | <strong id="lc-selected-cc-lcl">0</strong> selected</div></div><div class="table-wrap" id="cc-lcl-master-table"></div>
 							</div>
 						</div>
 					</div>
