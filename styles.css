@@ -6057,9 +6057,43 @@ th[data-sort]:hover {
 @media(max-width:900px){.v91-edit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.v91-edit-grid{grid-template-columns:1fr}.v91-charge-editor{font-size:.7rem}}
 
-/* Invoice / Receivables remaining-days indicator */
-.invoice-remaining-days{display:inline-block;white-space:nowrap;font-weight:700;font-size:.74rem;padding:3px 7px;border-radius:6px;}
-.invoice-remaining-days.remaining{background:#e8f5e9;color:#2e7d32;}
-.invoice-remaining-days.today{background:#fff3cd;color:#8a5a00;}
-.invoice-remaining-days.overdue{background:#fdecea;color:#b42318;}
-.invoice-remaining-days.paid{background:#e8f5e9;color:#18794e;}
+/* Invoice — Due Date Remaining Days (display only) */
+.invoice-remaining-ok,
+.invoice-remaining-today,
+.invoice-remaining-overdue,
+.invoice-remaining-neutral{
+    display:inline-block;
+    white-space:nowrap;
+    font-weight:700;
+}
+.invoice-remaining-ok{color:#047857;}
+.invoice-remaining-today{color:#d97706;}
+.invoice-remaining-overdue{color:#dc2626;}
+.invoice-remaining-neutral{color:#64748b;}
+
+/* Operations Report — ETD/ETA remaining-day status pills */
+.ops-days-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 82px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-weight: 900;
+    font-size: .72rem;
+    line-height: 1.1;
+    white-space: nowrap;
+    box-sizing: border-box;
+}
+.ops-days-green {
+    background: #16a34a;
+    color: #fff;
+}
+.ops-days-red {
+    background: #dc2626;
+    color: #fff;
+}
+.ops-days-neutral {
+    background: #e5e7eb;
+    color: #374151;
+}
