@@ -63,7 +63,7 @@
 		<div class="header-actions">
 			<div class="global-search-wrapper">
 				<input type="text" id="global-search" class="global-search-input"
-					   placeholder="🔍 Search quotes, shipments, rates..."
+					   placeholder="🔍 Search quotes, shipments, rates, booking, container..."
 					   oninput="debouncedGlobalSearch()" autocomplete="off" />
 				<div id="global-search-results" class="global-search-results"></div>
 			</div>
@@ -239,6 +239,64 @@
 									</tr>
 								</thead>
 								<tbody>
+									<tr class="sea-fs-unit-row" style="background:#f8fafc;">
+										<td style="border:2px solid #000; padding:4px 6px; font-weight:700; text-align:center;">Unit</td>
+										<td style="border:2px solid #000; padding:4px 6px; text-align:center;">
+											<select id="sea-fs-unit-oft" class="sea-fs-unit" data-charge="oft" onchange="onSeaFSUnitChange('oft')" style="width:100%; padding:3px; border:1px solid #cbd5e1; border-radius:4px; text-align:center;">
+												<option value="CNT" selected>CNT</option>
+												<option value="TEU" >TEU</option>
+											</select>
+										</td>
+										<td style="border:2px solid #000; padding:4px 6px; text-align:center;">
+											<select id="sea-fs-unit-subc" class="sea-fs-unit" data-charge="subc" onchange="onSeaFSUnitChange('subc')" style="width:100%; padding:3px; border:1px solid #cbd5e1; border-radius:4px; text-align:center;">
+												<option value="CNT" >CNT</option>
+												<option value="TEU" selected>TEU</option>
+											</select>
+										</td>
+										<td style="border:2px solid #000; padding:4px 6px; text-align:center;">
+											<select id="sea-fs-unit-haz" class="sea-fs-unit" data-charge="haz" onchange="onSeaFSUnitChange('haz')" style="width:100%; padding:3px; border:1px solid #cbd5e1; border-radius:4px; text-align:center;">
+												<option value="CNT" >CNT</option>
+												<option value="TEU" selected>TEU</option>
+											</select>
+										</td>
+										<td style="border:2px solid #000; padding:4px 6px; text-align:center;">
+											<select id="sea-fs-unit-ow" class="sea-fs-unit" data-charge="ow" onchange="onSeaFSUnitChange('ow')" style="width:100%; padding:3px; border:1px solid #cbd5e1; border-radius:4px; text-align:center;">
+												<option value="CNT" >CNT</option>
+												<option value="TEU" selected>TEU</option>
+											</select>
+										</td>
+										<td style="border:2px solid #000; padding:4px 6px; text-align:center;">
+											<select id="sea-fs-unit-other" class="sea-fs-unit" data-charge="other" onchange="onSeaFSUnitChange('other')" style="width:100%; padding:3px; border:1px solid #cbd5e1; border-radius:4px; text-align:center;">
+												<option value="CNT" selected>CNT</option>
+												<option value="TEU" >TEU</option>
+											</select>
+										</td>
+										<td style="border:2px solid #000; padding:4px 6px; text-align:center;">
+											<select id="sea-fs-unit-other2" class="sea-fs-unit" data-charge="other2" onchange="onSeaFSUnitChange('other2')" style="width:100%; padding:3px; border:1px solid #cbd5e1; border-radius:4px; text-align:center;">
+												<option value="CNT" selected>CNT</option>
+												<option value="TEU" >TEU</option>
+											</select>
+										</td>
+										<td style="border:2px solid #000; padding:4px 6px; text-align:center;">
+											<select id="sea-fs-unit-other3" class="sea-fs-unit" data-charge="other3" onchange="onSeaFSUnitChange('other3')" style="width:100%; padding:3px; border:1px solid #cbd5e1; border-radius:4px; text-align:center;">
+												<option value="CNT" selected>CNT</option>
+												<option value="TEU" >TEU</option>
+											</select>
+										</td>
+										<td style="border:2px solid #000; padding:4px 6px; text-align:center;">
+											<select id="sea-fs-unit-trk" class="sea-fs-unit" data-charge="trk" onchange="onSeaFSUnitChange('trk')" style="width:100%; padding:3px; border:1px solid #cbd5e1; border-radius:4px; text-align:center;">
+												<option value="CNT" selected>CNT</option>
+												<option value="TEU" >TEU</option>
+											</select>
+										</td>
+										<td style="border:2px solid #000; padding:4px 6px; text-align:center;">
+											<select id="sea-fs-unit-ddp" class="sea-fs-unit" data-charge="ddp" onchange="onSeaFSUnitChange('ddp')" style="width:100%; padding:3px; border:1px solid #cbd5e1; border-radius:4px; text-align:center;">
+												<option value="CNT" selected>CNT</option>
+												<option value="TEU" >TEU</option>
+											</select>
+										</td>
+										<td style="border:2px solid #000; padding:4px 6px; text-align:center; font-weight:700;">-</td>
+									</tr>
 									<tr>
 										<td style="border:2px solid #000; padding:4px 6px; font-weight:700; text-align:center;">20 GP</td>
 										<td style="border:2px solid #000; padding:4px 6px;"><input type="number" id="sea-fs-oft-20" step="0.01" class="fs-input" data-row="20" oninput="calcSeaFSTotal()" style="width:100%; padding:4px; border:2px solid #ccc; border-radius:4px; text-align:center;" /></td>
@@ -739,6 +797,12 @@
                     <input type="text" id="drafts-search-text" class="search-box" placeholder="🔍 Client / POL / POD" style="flex:2;margin:0;" oninput="debouncedSearch('drafts')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
                     <input type="text" id="drafts-search-qn" class="search-box" placeholder="🔍 Quote No." style="flex:1;margin:0;" oninput="debouncedSearch('drafts')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
                     <input type="date" id="drafts-search-date" class="search-box" style="flex:1;margin:0;" onchange="renderRecords('drafts')" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
+                    <select id="drafts-quick-filter" onchange="setDraftsQuickFilter(this.value)" style="flex:1;">
+                        <option value="">All Drafts</option>
+                        <option value="sea">🚢 SEA Drafts</option>
+                        <option value="air">✈️ AIR Drafts</option>
+                        <option value="lcl">📦 LCL Drafts</option>
+                    </select>
                     <button class="btn btn-clear" type="button" onclick="clearFilters('drafts')" style="height:36px;">Clear</button>
                 </div>
                 <div class="section-heading highlight-sea">🚢 SEA DRAFTS</div>
@@ -777,6 +841,9 @@
 					<select id="rates-quick-filter" onchange="setRatesQuickFilter(this.value)" style="flex:1;" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
 						<option value="">All Quotes</option>
 						<option value="total">📊 Total</option>
+						<option value="sea">🚢 SEA</option>
+						<option value="air">✈️ AIR</option>
+						<option value="lcl">📦 LCL</option>
 						<option value="converted">📋 Converted</option>
 						<option value="expired">⏰ Expired</option>
 					</select>
@@ -837,6 +904,7 @@
                 <div class="quick-filters">
                     <button class="filter-btn active" data-filter="all" type="button" onclick="filterRateSheet('all')">All</button>
                     <button class="filter-btn" data-filter="active" type="button" onclick="filterRateSheet('active')">Active</button>
+                    <button class="filter-btn" data-filter="expiring30" type="button" onclick="filterRateSheet('expiring30')">30 Days</button>
                     <button class="filter-btn" data-filter="expiring15" type="button" onclick="filterRateSheet('expiring15')">15 Days</button>
                     <button class="filter-btn" data-filter="expiring7" type="button" onclick="filterRateSheet('expiring7')">7 Days</button>
                     <button class="filter-btn" data-filter="today" type="button" onclick="filterRateSheet('today')">Today</button>
@@ -897,14 +965,15 @@
 					<button class="btn btn-sm btn-info" onclick="toggleDSRColumns()">⚙️ Columns</button>
 					<div id="dsr-column-settings" style="display:none; background:var(--bg); padding:8px; border-radius:6px; flex-wrap:wrap; gap:6px; width:100%;">
 						<label><input type="checkbox" class="dsr-col-toggle" data-col="code" checked> Code</label>
+						<label><input type="checkbox" class="dsr-col-toggle" data-col="mode" checked> Mode</label>
+						<label><input type="checkbox" class="dsr-col-toggle" data-col="bookingNo" checked> Booking No.</label>
 						<label><input type="checkbox" class="dsr-col-toggle" data-col="shipper" checked> Shipper</label>
 						<label><input type="checkbox" class="dsr-col-toggle" data-col="pol" checked> POL</label>
 						<label><input type="checkbox" class="dsr-col-toggle" data-col="pod" checked> POD</label>
 						<label><input type="checkbox" class="dsr-col-toggle" data-col="liner" checked> Liner</label>
 						<label><input type="checkbox" class="dsr-col-toggle" data-col="cargoStatus" checked> Cargo Status</label>
 						<label><input type="checkbox" class="dsr-col-toggle" data-col="docsStatus" checked> Docs Status</label>
-						<label><input type="checkbox" class="dsr-col-toggle" data-col="actions" checked> Actions</label>
-						<button class="btn btn-sm btn-success" onclick="saveDSRColumns()">✅ Save</button>
+												<button class="btn btn-sm btn-success" onclick="saveDSRColumns()">✅ Save</button>
 					</div>
 				</div>
 
@@ -915,6 +984,7 @@
 						<option value="">All Types</option>
 						<option value="SEA">🚢 SEA</option>
 						<option value="AIR">✈️ AIR</option>
+						<option value="LCL">📦 LCL</option>
 					</select>
 					<select id="dsr-status-filter" onchange="renderShipments()" onfocus="highlightInput(this)" onblur="unhighlightInput(this)">
 						<option value="">All Status</option>
@@ -946,7 +1016,11 @@
                     <span style="font-weight:600;font-size:0.8rem;color:var(--text-light);margin-right:8px;">Actions:</span>
                     <button class="btn btn-sm btn-success" type="button" onclick="dsrAddNew()">＋ New Shipment</button>
                     <button class="btn btn-sm btn-preview" type="button" onclick="renderShipments()">↻ Refresh</button>
-                    <button class="btn btn-sm btn-pdf" type="button" onclick="dsrPDF()">📄 PDF</button>
+                    <button class="btn btn-sm btn-info" type="button" onclick="dsrRunSelectedAction('preview')">👁 Preview</button>
+                    <button class="btn btn-sm btn-pdf" type="button" onclick="dsrRunSelectedAction('pdf')">📄 PDF</button>
+                    <button class="btn btn-sm btn-duplicate" type="button" onclick="dsrRunSelectedAction('duplicate')">📋 Duplicate</button>
+                    <button class="btn btn-sm btn-preview" type="button" onclick="dsrRunSelectedAction('edit')">✏️ Edit</button>
+                    <button class="btn btn-sm btn-clear" type="button" onclick="dsrRunSelectedAction('delete')">🗑️ Delete</button>
                     <button class="btn btn-sm btn-export" type="button" onclick="exportDSRToExcel()">📊 Excel</button>
                 </div>
 
@@ -1102,7 +1176,7 @@
 							<div class="form-section"><h3>📦 Cargo Status</h3><div id="ops-cargo-report"></div></div>
 							<div class="form-section"><h3>📄 Documentation Status</h3><div id="ops-docs-report"></div></div>
 						</div>
-						<div class="form-section"><h3>🧭 Shipment Detail</h3><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Job</th><th>Mode</th><th>Shipper</th><th>Route</th><th>Liner</th><th>ETD</th><th>ETA</th><th>Cargo</th><th>Docs</th></tr></thead><tbody id="ops-detail-report"></tbody></table></div></div>
+						<div class="form-section"><h3>🧭 Shipment Detail</h3><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Job</th><th>Mode</th><th>Shipper</th><th>Route</th><th>Liner</th><th>ETD</th><th>Days ( before ETD )</th><th>ETA</th><th>Days ( After ETA )</th><th>Cargo</th><th>Docs</th></tr></thead><tbody id="ops-detail-report"></tbody></table></div></div>
 					</div>
 
 					<!-- ===== PROFITABILITY ===== -->
@@ -1548,7 +1622,7 @@
                                         <tbody>
                                             <tr style="border-bottom:1px solid var(--border);background:var(--bg);">
                                                 <td style="padding:10px 14px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px;">
-                                                    <span style="background:#dbeafe;color:#1e3a8a;padding:2px 8px;border-radius:4px;font-size:0.7rem;">VAL</span> Cargo Value
+                                                    <span style="background:#dbeafe;color:#1e3a8a;padding:2px 8px;border-radius:4px;font-size:0.7rem;">VAL</span> Cargo Value (110%)
                                                 </td>
                                                 <td style="padding:10px 14px;text-align:right;font-weight:700;color:var(--primary);" id="ins-inr">₹ 0.00</td>
                                                 <td style="padding:10px 14px;text-align:right;font-weight:600;color:var(--text-light);" id="ins-usd">$ 0.00</td>
@@ -2230,12 +2304,12 @@
 								<th>POD</th>
 								<th>AMOUNT</th>
 								<th>DATE</th>
-                                <th>REMAINING DAYS</th>
+								<th>REMAINING DAYS</th>
 								<th>STATUS</th>
 							</tr>
 						</thead>
 						<tbody id="invoice-list">
-							<tr><td colspan="11" class="v9-empty">No invoices yet. Click "+ New Invoice" to generate one.</td></tr>
+							<tr><td colspan="10" class="v9-empty">No invoices yet. Click "+ New Invoice" to generate one.</td></tr>
 						</tbody>
 					</table>
 				</div>
@@ -2270,7 +2344,7 @@
 			<div class="tab-panel" id="receivables">
 				<div class="tab-heading"><div><h2>💳 Receivables & Credit Control</h2><div class="module-subtitle">Outstanding, ageing and customer credit exposure</div></div><div class="module-actions"><button class="btn btn-info btn-sm" onclick="renderReceivables()">↻ Refresh</button><button class="btn btn-export btn-sm" onclick="exportReceivablesExcel()">📊 Excel</button></div></div>
 				<div class="report-filter-bar"><input id="receivable-search" class="search-box" placeholder="Customer / Invoice" oninput="renderReceivables()"><select id="receivable-age" onchange="renderReceivables()"><option value="">All Ageing</option><option value="0-30">0–30</option><option value="31-60">31–60</option><option value="61-90">61–90</option><option value="90+">90+</option></select><button class="btn btn-clear btn-sm" onclick="clearReceivableFilters()">Clear</button></div>
-				<div class="report-kpi-grid" id="receivable-kpis"></div><div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Customer</th><th>Invoice</th><th>Date</th><th>Due Date</th><th>Remaining Days</th><th>Amount</th><th>Received</th><th>Outstanding</th><th>Age</th><th>Status</th></tr></thead><tbody id="receivable-detail"></tbody></table></div></div>
+				<div class="report-kpi-grid" id="receivable-kpis"></div><div class="form-section"><div class="report-table-wrap"><table class="report-table"><thead><tr><th>Customer</th><th>Invoice</th><th>Date</th><th>Due Date</th><th>Amount</th><th>Received</th><th>Outstanding</th><th>Age</th><th>Status</th></tr></thead><tbody id="receivable-detail"></tbody></table></div></div>
 			</div>
 			
 			
