@@ -527,15 +527,19 @@ function plannerUpsertAutoTask(sourceKey, title, dueDate, details, openAction) {
 function syncPlannerAutoTasksForShipment(s) {
     if (!s || !s.jobNo) return;
     const job = s.jobNo || s.code || '-';
+    // Planner task display should use Booking No. instead of JOB NO.
+    // Keep the source key based on JOB NO./code so changing Booking No. updates
+    // the existing task instead of creating a duplicate task.
+    const bookingDisplay = String(s.bookingNo || s.jobBkg || '').trim() || job;
     const route = `${s.pol || '-'} → ${s.pod || '-'}`;
-    const common = `${job} • ${s.shipper || '-'} • ${route}`;
+    const common = `${bookingDisplay} • ${s.shipper || '-'} • ${route}`;
     const milestones = [
         ['SI', s.siCutoff], ['GATE', s.gateCutoff], ['SB', s.sbCutoff], ['GATE OPENING', s.gateOpening],
         ['VGM', s.vgmCutoff || s.vgmDeadline || s.vgmDate], ['CY', s.cyCutoff || s.cyDeadline || s.cyDate],
         ['ETD', s.etd], ['ETA', s.eta], ['PICKUP', s.pickupDate], ['CLEARANCE', s.clearanceDate],
         ['DOCS HANDOVER', s.docsHandDate], ['DGD INDEXING', s.dgdIndexingDate], ['BL RELEASE', s.blReleaseDate]
     ];
-    milestones.forEach(([type, date]) => plannerUpsertAutoTask(`shipment:${s.mode || s.type || 'SEA'}:${job}:${type}`, `${type} — ${job}`, dateOnly(date), common, `shipment:${s.code || job}`));
+    milestones.forEach(([type, date]) => plannerUpsertAutoTask(`shipment:${s.mode || s.type || 'SEA'}:${job}:${type}`, `${type} — ${bookingDisplay}`, dateOnly(date), common, `shipment:${s.code || job}`));
 }
 
 function syncPlannerAutoTasksFromInvoices() {
@@ -2103,7 +2107,51 @@ function legacy_recalcTotal(mode) {
     }
 }
 
+function getSeaFSUnits() {
+    const keys = ['oft','subc','haz','ow','other','other2','other3','trk','ddp'];
+    const units = {};
+    keys.forEach(key => {
+        const el = document.getElementById(`sea-fs-unit-${key}`);
+        units[key] = (el?.value === 'TEU') ? 'TEU' : 'CNT';
+    });
+    return units;
+}
+
+function applySeaFSUnits(units) {
+    const defaults = {oft:'CNT',subc:'TEU',haz:'TEU',ow:'TEU',other:'CNT',other2:'CNT',other3:'CNT',trk:'CNT',ddp:'CNT'};
+    const source = (units && typeof units === 'object') ? units : {};
+    Object.keys(defaults).forEach(key => {
+        const el = document.getElementById(`sea-fs-unit-${key}`);
+        if (el) el.value = source[key] === 'TEU' ? 'TEU' : (source[key] === 'CNT' ? 'CNT' : defaults[key]);
+    });
+    syncSeaFSTeuValues();
+}
+
+function syncSeaFSTeuValues(changedKey = null) {
+    const keys = ['oft','subc','haz','ow','other','other2','other3','trk','ddp'];
+    keys.forEach(key => {
+        const unit = document.getElementById(`sea-fs-unit-${key}`)?.value;
+        if (unit !== 'TEU') return;
+        const v20 = document.getElementById(`sea-fs-${key}-20`);
+        const v40 = document.getElementById(`sea-fs-${key}-40`);
+        if (!v20 || !v40) return;
+        const n20 = parseFloat(v20.value);
+        if (Number.isFinite(n20) && n20 !== 0) {
+            v40.value = (n20 * 2).toFixed(2).replace(/\.00$/, '');
+        } else if (changedKey === key && (v20.value === '' || n20 === 0)) {
+            v40.value = '';
+        }
+    });
+}
+
+function onSeaFSUnitChange(key) {
+    markUnsaved('sea');
+    syncSeaFSTeuValues(key);
+    calcSeaFSTotal();
+}
+
 function calcSeaFSTotal() {
+    syncSeaFSTeuValues();
     ['20', '40'].forEach(row => {
         const ids = ['oft', 'subc', 'haz', 'ow', 'other', 'other2', 'other3', 'trk', 'ddp'];
         let total = 0;
@@ -2424,9 +2472,23 @@ function legacy_onCarrierPolChangeInternal(mode) {
 }
 
 function onOwnCfsToggle(mode) {
-    if (mode === 'sea') {
-        onCarrierPolChangeInternal('sea');
+    if (mode !== 'sea') return;
+
+    const checkbox = document.getElementById('sea-own-cfs');
+    if (!checkbox) return;
+
+    // Mark the quotation as changed and immediately rebuild the SEA charge grid.
+    // The grid builder itself enforces the checked state so the CFS / Transport
+    // section cannot reappear during later carrier/POL/container refreshes.
+    if (typeof markUnsaved === 'function') markUnsaved('sea');
+
+    if (typeof window.__finalSeaPull === 'function') {
+        window.__finalSeaPull('own-cfs-toggle');
+    } else if (typeof window.onCarrierPolChangeInternal === 'function') {
+        window.onCarrierPolChangeInternal('sea');
     }
+
+    if (typeof recalcAllCarrierCharges === 'function') recalcAllCarrierCharges('sea');
 }
 
 // ==================== SEA AUTO RATE SELECTION ====================
@@ -2555,6 +2617,7 @@ function legacy_getFormData(mode) {
     // ---- Freight & Surcharges (only for SEA) ----
     if (mode === 'sea') {
         data.freightSurcharges = {
+            units: getSeaFSUnits(),
             '20': {
                 oft: parseFloat(document.getElementById('sea-fs-oft-20')?.value) || 0,
                 subc: parseFloat(document.getElementById('sea-fs-subc-20')?.value) || 0,
@@ -2842,11 +2905,12 @@ function legacy_editRecord(target, mode, idx) {
 
     if (mode === 'sea' && rec.freightSurcharges) {
         const fs = rec.freightSurcharges;
+        applySeaFSUnits(fs.units);
         ['20', '40'].forEach(row => {
             const keys = ['oft', 'subc', 'haz', 'ow', 'other', 'other2', 'other3', 'trk', 'ddp'];
             keys.forEach(key => {
                 const el = document.getElementById(`sea-fs-${key}-${row}`);
-                if (el) el.value = fs[row]?.[key] || 0;
+                if (el) el.value = fs[row]?.[key] ?? '';
             });
         });
         calcSeaFSTotal();
@@ -6044,7 +6108,7 @@ function buildDsrForm(s, mode, isEdit) {
             <div class="form-group"><label>JOB NO.</label><input type="text" id="dsr-job-no" list="dsr-job-quote-ref-list" value="${s.jobNo || s.code || ''}" style="width:100%;" oninput="onDsrJobReferenceChange()" onchange="onDsrJobReferenceChange()" onblur="onDsrJobReferenceChange()" placeholder="JOB NO. / select Quote Ref"><datalist id="dsr-job-quote-ref-list"></datalist><datalist id="dsr-job-list"></datalist></div>
             <div class="form-group"><label>QUOTE REF NO.</label><input type="text" id="dsr-quote-ref" list="dsr-quote-ref-list" value="${s.quoteRef || s.quoteNumber || s.rateQuoteRef || ''}" style="width:100%;" oninput="onDsrQuoteRefChange()" onchange="onDsrQuoteRefChange()" onblur="onDsrQuoteRefChange()"><datalist id="dsr-quote-ref-list"></datalist></div>
             <div class="form-group"><label>Shipper</label><input type="text" id="dsr-shipper" value="${s.shipper || ''}" style="width:100%;"></div>
-            <div class="form-group"><label>No. of Pkgs / Cntr.</label><input type="text" id="dsr-packages" value="${s.packages || ''}" style="width:100%;"></div>
+            <div class="form-group"><label>Booking No.</label><input type="text" id="dsr-booking-no" value="${s.bookingNo || s.jobBkg || ''}" style="width:100%;"></div>
             
             <div class="form-group"><label>Port of Loading (POL)</label><select id="dsr-pol" style="width:100%;"><option value="">Select</option></select></div>
             <div class="form-group"><label>Port of Discharge (POD)</label><select id="dsr-pod" style="width:100%;"><option value="">Select</option></select></div>
@@ -6272,7 +6336,7 @@ function applyDsrQuoteData(q, mode, options={}) {
     set('dsr-liner',q.carrier || q.shippingLine || q.liner || '',options.force);
     set('dsr-etd',q.etd || q.etdDate || '',options.force);
     set('dsr-eta',q.eta || q.etaDate || '',options.force);
-    set('dsr-packages',q.packages || q.packageCount || '',options.force);
+    set('dsr-booking-no',q.bookingNo || q.jobBkg || q.booking || '',options.force);
     // Preserve current mode unless the quote mode is explicit and the form is new.
     const modeEl=document.getElementById('dsr-mode');
     if(modeEl && mode && !options.keepMode) modeEl.value=String(mode).toUpperCase();
@@ -6308,7 +6372,7 @@ function onDsrJobReferenceChange(silent=false) {
     if(shipment) {
         const set=(id,value)=>{const el=document.getElementById(id); if(el && value!==undefined && value!==null && String(value).trim() && !String(el.value||'').trim()) el.value=String(value);};
         set('dsr-quote-ref',shipment.quoteRef||shipment.quoteNumber||shipment.rateQuoteRef||'');
-        set('dsr-shipper',shipment.shipper||''); set('dsr-pol',shipment.pol||''); set('dsr-pod',shipment.pod||''); set('dsr-liner',shipment.liner||shipment.carrier||'');
+        set('dsr-shipper',shipment.shipper||''); set('dsr-booking-no',shipment.bookingNo||shipment.jobBkg||''); set('dsr-pol',shipment.pol||''); set('dsr-pod',shipment.pod||''); set('dsr-liner',shipment.liner||shipment.carrier||'');
         return true;
     }
     if(!silent) console.warn('DSR JOB NO./Quote Ref not found:',job);
@@ -6455,7 +6519,8 @@ function saveDsrShipment(isUpdate) {
             quoteNumber: old?.quoteNumber || rawVal('dsr-quote-ref') || '',
             date: val('dsr-date') || old?.date || '',
             shipper: rawVal('dsr-shipper') || old?.shipper || '',
-            packages: rawVal('dsr-packages') || old?.packages || '',
+            bookingNo: rawVal('dsr-booking-no') || old?.bookingNo || old?.jobBkg || '',
+            jobBkg: rawVal('dsr-booking-no') || old?.jobBkg || old?.bookingNo || '',
             pol: val('dsr-pol') || old?.pol || '',
             pod: val('dsr-pod') || old?.pod || '',
             liner: val('dsr-liner') || old?.liner || '',
@@ -6578,25 +6643,13 @@ function renderShipments() {
         return;
     }
     
-    // Separate SEA and AIR
-    const seaData = pageData.filter(s => s.mode === 'SEA' || s.type === 'SEA');
-    const airData = pageData.filter(s => s.mode === 'AIR' || s.type === 'AIR');
-    const lclData = pageData.filter(s => s.mode === 'LCL' || s.type === 'LCL');
-    
-    let html = '';
-    if (seaData.length > 0) {
-        html += `<div class="dsr-section-header sea-header">🚢 SEA Shipments <span class="badge">${seaData.length}</span></div>`;
-        html += buildShipmentTable(seaData);
-    }
-    if (airData.length > 0) {
-        html += `<div class="dsr-section-header">✈️ AIR Shipments <span class="badge">${airData.length}</span></div>`;
-        html += buildShipmentTable(airData);
-    }
-    if (lclData.length > 0) {
-        html += `<div class="dsr-section-header">📦 LCL Shipments <span class="badge">${lclData.length}</span></div>`;
-        html += buildShipmentTable(lclData);
-    }
-    
+    // ALL shipment modes are intentionally rendered in ONE common table.
+    // Keep the original filtered/sorted page order so SEA, AIR and LCL stay together.
+    const seaCount = pageData.filter(s => String(s.mode || s.type || '').toUpperCase() === 'SEA').length;
+    const airCount = pageData.filter(s => String(s.mode || s.type || '').toUpperCase() === 'AIR').length;
+    const lclCount = pageData.filter(s => String(s.mode || s.type || '').toUpperCase() === 'LCL').length;
+    const modeSummary = `SEA ${seaCount} | AIR ${airCount} | LCL ${lclCount}`;
+    const html = `<div class="dsr-section-header sea-header">🚢 ✈️ 📦 ALL SHIPMENTS — SEA + AIR + LCL <span class="badge">${total}</span><span style="margin-left:auto;font-size:.72rem;font-weight:600;opacity:.95;">${modeSummary}</span></div>${buildShipmentTable(pageData)}`;
     list.innerHTML = html;
     
     // Pagination
@@ -6628,10 +6681,43 @@ function getShipmentQuoteRef(s) {
         .some(v => normalizeRef(v) === key));
     return hit ? String(hit.data.quoteNumber || hit.data.quoteNo || hit.data.id || hit.data.reference || '').trim() : '';
 }
+let dsrSelectedIdx = -1;
+
+function dsrSelectRow(idx, event) {
+    if (event && event.target && event.target.tagName === 'BUTTON') return;
+    dsrSelectedIdx = Number(idx);
+    renderShipments();
+}
+
+function dsrTogglePageSelection(checked) {
+    const boxes = document.querySelectorAll('#dsr-list .dsr-row-check');
+    const first = boxes.length ? Number(boxes[0].dataset.idx) : -1;
+    if (checked && first >= 0) dsrSelectedIdx = first;
+    else dsrSelectedIdx = -1;
+    renderShipments();
+}
+
+function dsrRunSelectedAction(action) {
+    const idx = Number(dsrSelectedIdx);
+    if (!Number.isInteger(idx) || idx < 0 || !db.shipments?.[idx]) {
+        alert('Please select a shipment first.');
+        return;
+    }
+    if (action === 'preview') return previewDsrShipment(idx);
+    if (action === 'pdf') return downloadDsrPDF(idx);
+    if (action === 'duplicate') return duplicateDsrShipment(idx);
+    if (action === 'edit') return editDsrShipment(idx);
+    if (action === 'delete') {
+        deleteDsrShipment(idx);
+        dsrSelectedIdx = -1;
+    }
+}
+
 function buildShipmentTable(data) {
     const colMap = {
         'code': { label: 'JOB NO.', key: 'code' },
-        'quoteRef': { label: 'QUOTE REF NO.', key: 'quoteRef' },
+        'mode': { label: 'MODE', key: 'mode' },
+        'bookingNo': { label: 'BOOKING NO.', key: 'bookingNo' },
         'shipper': { label: 'Shipper', key: 'shipper' },
         'pol': { label: 'POL', key: 'pol' },
         'pod': { label: 'POD', key: 'pod' },
@@ -6640,29 +6726,35 @@ function buildShipmentTable(data) {
         'docsStatus': { label: 'Docs Status', key: 'docsStatus' }
     };
 
-    let headerHtml = '<tr><th>SR No.</th>';
+    let headerHtml = '<tr><th style="width:34px;text-align:center;"><input type="checkbox" title="Select all on this page" onchange="dsrTogglePageSelection(this.checked)"></th><th>SR No.</th>';
     dsrColumns.forEach(col => {
         if (col !== 'actions' && colMap[col]) headerHtml += `<th>${colMap[col].label}</th>`;
     });
-    // Quote Ref is a core DSR reference and must remain visible even for older saved dsrColumns.
-    if (!dsrColumns.includes('quoteRef')) headerHtml += '<th>QUOTE REF NO.</th>';
-    if (dsrColumns.includes('actions')) headerHtml += `<th>Actions</th>`;
+    // Mode and Booking No. are core DSR fields and remain visible for older saved dsrColumns.
+    if (!dsrColumns.includes('mode')) headerHtml += '<th>MODE</th>';
+    if (!dsrColumns.includes('bookingNo')) headerHtml += '<th>BOOKING NO.</th>';
     headerHtml += '</tr>';
 
     let html = `<table class="dsr-table"><thead>${headerHtml}</thead><tbody>`;
     data.forEach((s, idx) => {
         const realIdx = db.shipments.indexOf(s);
         const qref = getShipmentQuoteRef(s);
-        html += `<tr><td>${idx + 1}</td>`;
+        const bookingNo = s.bookingNo || s.jobBkg || '';
+        const isSelected = dsrSelectedIdx === realIdx;
+        html += `<tr class="${isSelected ? 'dsr-row-selected' : ''}" onclick="dsrSelectRow(${realIdx}, event)"><td style="text-align:center;"><input type="checkbox" class="dsr-row-check" data-idx="${realIdx}" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); dsrSelectRow(${realIdx}, event)"></td><td>${idx + 1}</td>`;
         dsrColumns.forEach(col => {
             if (col === 'actions') return;
             if (col === 'code') {
                 html += `<td><a href="javascript:void(0)" onclick="editDsrShipment(${realIdx})" style="color:var(--primary);font-weight:700;text-decoration:underline;cursor:pointer;">${escapeHtml(s.jobNo || s.code || '-')}</a></td>`;
-            } else if (col === 'quoteRef') {
-                html += `<td>${qref ? `<a href="javascript:void(0)" onclick="openDsrByCode('${escapeHtml(s.jobNo || s.code || '')}')" style="color:var(--primary);font-weight:700;text-decoration:underline;cursor:pointer;">${escapeHtml(qref)}</a>` : '-'}</td>`;
+            } else if (col === 'bookingNo') {
+                html += `<td>${escapeHtml(bookingNo || '-')}</td>`;
             } else {
-                const val = s[col] || '-';
-                if (col === 'cargoStatus') {
+                const val = s[col] || (col === 'mode' ? (s.type || '-') : '-');
+                if (col === 'mode') {
+                    const mode = String(val || '-').toUpperCase();
+                    const modeClass = mode === 'AIR' ? 'status-expiring' : mode === 'LCL' ? 'status-active' : 'status-active';
+                    html += `<td><span class="status-badge ${modeClass}">${escapeHtml(mode)}</span></td>`;
+                } else if (col === 'cargoStatus') {
                     const cls = val === 'Delivered' ? 'status-active' : val === 'In Transit' ? 'status-expiring' : 'status-expired';
                     html += `<td><span class="status-badge ${cls}">${escapeHtml(val)}</span></td>`;
                 } else {
@@ -6670,17 +6762,13 @@ function buildShipmentTable(data) {
                 }
             }
         });
-        if (!dsrColumns.includes('quoteRef')) {
-            html += `<td>${qref ? `<a href="javascript:void(0)" onclick="openDsrByCode('${escapeHtml(s.jobNo || s.code || '')}')" style="color:var(--primary);font-weight:700;text-decoration:underline;cursor:pointer;">${escapeHtml(qref)}</a>` : '-'}</td>`;
+        if (!dsrColumns.includes('mode')) {
+            const mode = String(s.mode || s.type || '-').toUpperCase();
+            const modeClass = mode === 'AIR' ? 'status-expiring' : 'status-active';
+            html += `<td><span class="status-badge ${modeClass}">${escapeHtml(mode)}</span></td>`;
         }
-        if (dsrColumns.includes('actions')) {
-            html += `<td>
-                <button class="btn btn-sm btn-preview" onclick="previewDsrShipment(${realIdx})">👁</button>
-                <button class="btn btn-sm btn-pdf" onclick="downloadDsrPDF(${realIdx})">📄</button>
-                <button class="btn btn-sm btn-duplicate" onclick="duplicateDsrShipment(${realIdx})">📋</button>
-                <button class="btn btn-sm btn-preview" onclick="editDsrShipment(${realIdx})">✏️</button>
-                <button class="btn btn-sm btn-clear" onclick="deleteDsrShipment(${realIdx})">×</button>
-            </td>`;
+            if (!dsrColumns.includes('bookingNo')) {
+            html += `<td>${escapeHtml(bookingNo || '-')}</td>`;
         }
         html += `</tr>`;
     });
@@ -9743,8 +9831,10 @@ function performGlobalSearch() {
     let matches = [];
 
     function isMatch(rec, term) {
+        // Global search covers the key ERP identifiers requested for quick lookup:
+        // Booking No., Job No., Invoice No., plus the existing quote/shipment fields.
         const text =
-            `${rec.quoteNumber||''} ${rec.client||''} ${rec.pol||''} ${rec.pod||''} ${rec.carrier||''} ${rec.shipper||''} ${rec.code||''} ${rec.blNumber||''} ${rec.carrierName||''}`.toLowerCase();
+            `${rec.quoteNumber||''} ${rec.quoteNo||''} ${rec.client||''} ${rec.customer||''} ${rec.pol||''} ${rec.pod||''} ${rec.carrier||''} ${rec.shipper||''} ${rec.code||''} ${rec.jobNo||''} ${rec.jobBkg||''} ${rec.bookingNo||''} ${rec.bookingNumber||''} ${rec.invoiceNo||''} ${rec.invoiceNumber||''} ${rec.blNumber||''} ${rec.carrierName||''} ${rec.containerNo||''} ${rec.containerNumber||''} ${rec.container||''} ${Array.isArray(rec.containers) ? rec.containers.map(c => c?.containerNo || c?.number || c?.no || '').join(' ') : ''}`.toLowerCase();
         return text.includes(term);
     }
     ['sea', 'air', 'lcl'].forEach(mode => {
@@ -9811,6 +9901,20 @@ function performGlobalSearch() {
             });
         }
     });
+    // Invoice No. is also searchable from the default/global search.
+    (db.invoices || []).forEach((rec, idx) => {
+        if (isMatch(rec, term)) {
+            matches.push({
+                category: 'Invoice',
+                tab: 'invoice',
+                mode: 'invoice',
+                idx: idx,
+                invoiceNo: rec.invoiceNo || rec.id || '',
+                label: `${rec.invoiceNo || rec.id || 'Invoice'} - ${rec.customer || rec.client || '-'}`,
+                subtitle: `${rec.quoteRef || '-'} • ${rec.pol || 'N/A'} → ${rec.pod || 'N/A'}`
+            });
+        }
+    });
     if (matches.length === 0) {
         resultsContainer.innerHTML =
             `<div class="no-results">No records found matching "<strong>${input.value}</strong>"</div>`;
@@ -9845,6 +9949,9 @@ function jumpToRecord(tab, mode, idx) {
             editRecord(tab, mode, idx);
         } else if (tab === 'dsr') {
             editDsrShipment(idx);
+        } else if (tab === 'invoice') {
+            const inv = (db.invoices || [])[idx];
+            if (inv) openInvoicePreviewV11(inv.invoiceNo || inv.id);
         } else if (tab === 'bldraft') {
             openBLModal(idx);
         } else if (tab === 'ratesheet') {
@@ -10382,13 +10489,36 @@ function renderInvoiceTab() {
 
     // Build table rows
     if (db.invoices.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10" class="v9-empty">No invoices yet. Click "+ New Invoice" to generate one.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="v9-empty">No invoices yet. Click "+ New Invoice" to generate one.</td></tr>';
         return;
     }
+
+    // Remaining Days = Invoice Due Date - Today (calendar days).
+    // Do not change/save invoice data; this is display-only.
+    const getInvoiceRemainingDays = (invoice) => {
+        const dueValue = invoice.dueDate || invoice.due || invoice.invoiceDueDate || '';
+        if (!dueValue) return { text: '-', cls: 'invoice-remaining-neutral' };
+        if (String(invoice.status || '').toUpperCase() === 'PAID') {
+            return { text: '-', cls: 'invoice-remaining-neutral' };
+        }
+
+        const due = new Date(dueValue);
+        if (Number.isNaN(due.getTime())) return { text: '-', cls: 'invoice-remaining-neutral' };
+
+        const today = new Date();
+        const todayUTC = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+        const dueUTC = Date.UTC(due.getFullYear(), due.getMonth(), due.getDate());
+        const days = Math.round((dueUTC - todayUTC) / 86400000);
+
+        if (days > 0) return { text: `${days} Days`, cls: 'invoice-remaining-ok' };
+        if (days === 0) return { text: 'Due Today', cls: 'invoice-remaining-today' };
+        return { text: `Overdue ${Math.abs(days)} Days`, cls: 'invoice-remaining-overdue' };
+    };
 
     tbody.innerHTML = db.invoices.slice().reverse().map((x, idx) => {
         const realIdx = db.invoices.length - 1 - idx;
         const statusClass = String(x.status || '').toUpperCase() === 'PAID' ? 'v9-status-final' : 'v9-status-draft';
+        const remaining = getInvoiceRemainingDays(x);
         return `
             <tr>
                 <td style="text-align:center;"><input type="checkbox" class="invoice-row-check" data-idx="${realIdx}" onchange="updateInvoiceSelection()"></td>
@@ -10400,6 +10530,7 @@ function renderInvoiceTab() {
                 <td>${escapeHtml(x.pod || '-')}</td>
                 <td><strong>${formatINR(x.amount || x.total)}</strong></td>
                 <td>${fmtDate(x.invoiceDate || x.date)}</td>
+                <td><span class="${remaining.cls}">${remaining.text}</span></td>
                 <td><span class="${statusClass}">${escapeHtml(x.status || 'ISSUED')}</span></td>
             </tr>
         `;
@@ -11043,7 +11174,7 @@ function renderSalesReport() {
             <td><strong>${formatINR(r.marginINR)}</strong></td>
             <td>${escapeHtml(r.validityDate || '-')}</td>
         </tr>
-    `).join('') || '<tr><td colspan="9" class="report-empty">No records</td></tr>';
+    `).join('') || '<tr><td colspan="11" class="report-empty">No records</td></tr>';
 }
 
 function clearSalesReportFilters() {
@@ -11086,6 +11217,27 @@ function exportSalesReportExcel() {
 }
 
 // ---------- OPERATIONS REPORT ----------
+function operationsDayDiff(dateValue) {
+    if (!dateValue) return null;
+    const raw = dateOnly(dateValue);
+    if (!raw) return null;
+    const target = new Date(`${raw}T12:00:00`);
+    if (isNaN(target)) return null;
+    const todayRaw = dateOnly(new Date());
+    const today = new Date(`${todayRaw}T12:00:00`);
+    if (isNaN(today)) return null;
+    return Math.round((target - today) / 86400000);
+}
+
+function operationsDaysPill(dateValue) {
+    const diff = operationsDayDiff(dateValue);
+    if (diff === null) return '<span class="ops-days-pill ops-days-neutral">-</span>';
+    if (diff > 0) return `<span class="ops-days-pill ops-days-green">${diff} Day${diff === 1 ? '' : 's'}</span>`;
+    if (diff === 0) return '<span class="ops-days-pill ops-days-green">Today</span>';
+    const overdue = Math.abs(diff);
+    return `<span class="ops-days-pill ops-days-red">${overdue} Day${overdue === 1 ? '' : 's'} Overdue</span>`;
+}
+
 function renderOperationsReport() {
     const all = db.shipments || [];
     const from = document.getElementById('ops-report-from')?.value || '';
@@ -11130,7 +11282,9 @@ function renderOperationsReport() {
             <td>${escapeHtml(s.pol || '-')} → ${escapeHtml(s.pod || '-')}</td>
             <td>${escapeHtml(shipmentCarrier(s))}</td>
             <td>${fmtDate(s.etd)}</td>
+            <td>${operationsDaysPill(s.etd)}</td>
             <td>${fmtDate(s.eta)}</td>
+            <td>${operationsDaysPill(s.eta)}</td>
             <td><span class="v9-validity ${norm(s.cargoStatus) === 'IN TRANSIT' ? 'warning' : norm(s.cargoStatus) === 'DELIVERED' ? 'expired' : ''}">${escapeHtml(s.cargoStatus || '-')}</span></td>
             <td><span class="v9-validity">${escapeHtml(s.docsStatus || '-')}</span></td>
         </tr>
@@ -12168,8 +12322,10 @@ function calcInsurance() {
         document.getElementById('ins-total-usd').textContent = '$ 0.00';
         return;
     }
-    const cargoValueUsd = val;
-    const calculatedIns = cargoValueUsd * (insPct / 100);
+    // Insurance is always calculated on 110% of the entered cargo value.
+    // Example: cargo value 100 => insured cargo value 110.
+    const insuredCargoValue = val * 1.10;
+    const calculatedIns = insuredCargoValue * (insPct / 100);
     const insUsd = Math.max(calculatedIns, 25);
     const insInr = insUsd * ex;
     const gstUsd = insUsd * (gstPct / 100);
@@ -12178,8 +12334,8 @@ function calcInsurance() {
     const totalInr = insInr + gstInr;
     const formatUSD = (n) => '$ ' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2,
         maximumFractionDigits: 2 });
-    document.getElementById('ins-inr').textContent = formatINR(val * ex);
-    document.getElementById('ins-usd').textContent = formatUSD(val);
+    document.getElementById('ins-inr').textContent = formatINR(insuredCargoValue * ex);
+    document.getElementById('ins-usd').textContent = formatUSD(insuredCargoValue);
     document.getElementById('ins-amt').textContent = formatINR(insInr);
     document.getElementById('ins-amt-usd').textContent = formatUSD(insUsd);
     document.getElementById('ins-gst-amt').textContent = formatINR(gstInr);
@@ -15015,7 +15171,7 @@ function downloadBLPDF(idx) {
 }
 
 // ==================== DSR CUSTOM COLUMNS ====================
-let dsrColumns = db.dsrColumns || ['code','shipper','pol','pod','liner','cargoStatus','docsStatus','actions'];
+let dsrColumns = (db.dsrColumns || ['code','shipper','pol','pod','liner','cargoStatus','docsStatus']).filter(c => c !== 'actions');
 
 function toggleDSRColumns() {
     const settings = document.getElementById('dsr-column-settings');
@@ -17092,7 +17248,7 @@ function renderEnhancedRates() {
     updateRatesCounters(allQuotes, filtered);
 
     // ===== Pagination =====
-    const perPage = 10;
+    const perPage = 15;
     const total = filtered.length;
     const totalPages = Math.ceil(total / perPage) || 1;
     let page = parseInt(sessionStorage.getItem('ratesPage') || '1');
@@ -17484,7 +17640,7 @@ function renderEnhancedDrafts() {
 
     updateDraftsCounters(allDrafts, filtered);
 
-    const perPage = 10;
+    const perPage = 15;
     const total = filtered.length;
     const totalPages = Math.ceil(total / perPage) || 1;
     let page = parseInt(sessionStorage.getItem('draftsPage') || '1');
@@ -17782,7 +17938,7 @@ function renderEnhancedRRDrafts() {
 
     updateRRCounters(allRR, filtered);
 
-    const perPage = 10;
+    const perPage = 15;
     const total = filtered.length;
     const totalPages = Math.ceil(total / perPage) || 1;
     let page = parseInt(sessionStorage.getItem('rrPage') || '1');
@@ -18741,11 +18897,17 @@ const buy = parseRateInput(
         Object.entries(categories).forEach(([cat, charges]) => { orderedCategories[cat] = [...charges]; });
         if (customOrder) {
             orderedCategories = {};
-            Object.entries(customOrder).forEach(([cat, charges]) => { orderedCategories[cat] = charges; });
-            Object.entries(categories).forEach(([cat, charges]) => {
-                if (!orderedCategories[cat]) orderedCategories[cat] = [];
-                charges.forEach(ch => { if (!Object.values(orderedCategories).flat().includes(ch)) orderedCategories[cat].push(ch); });
-            });
+            Object.entries(customOrder).forEach(([cat, charges]) => { orderedCategories[cat] = [...charges]; });
+            // IMPORTANT: customOrder is authoritative. Do not automatically add
+            // categories that were intentionally excluded by the caller.
+            // This is required for SEA "Own CFS / Transporter" mode.
+        }
+
+        // SEA: when Own CFS / Transporter is enabled, the complete CFS /
+        // Transport Charges section must stay hidden on every rebuild, including
+        // rebuilds triggered by carrier/POL/container changes.
+        if (mode === 'sea' && document.getElementById('sea-own-cfs')?.checked) {
+            delete orderedCategories['CFS / Transport Charges'];
         }
 
         let sourceArrays = [ {}, {}, {} ];
@@ -18944,7 +19106,7 @@ const buy = parseRateInput(
         data.chargesOrder = chargesOrder[mode] || getCurrentChargesOrder(mode);
 
         if (mode === 'sea') {
-            data.freightSurcharges = { '20': {}, '40': {} };
+            data.freightSurcharges = { units: getSeaFSUnits(), '20': {}, '40': {} };
             ['20','40'].forEach(row => ['oft','subc','haz','ow','other','other2','other3','trk','ddp'].forEach(k => data.freightSurcharges[row][k]=parseFloat(document.getElementById(`sea-fs-${k}-${row}`)?.value)||0));
         }
         if (mode === 'air') {
@@ -18970,6 +19132,21 @@ const buy = parseRateInput(
     function editRateRequestDraft(target, mode, idx) {
         const rec = db?.[target]?.[mode]?.[idx];
         if (!rec) return alert('Rate Request Draft not found.');
+
+        // FIX: RR Drafts are edited from the separate RR Drafts tab.
+        // The previous handler only populated the hidden Rate Request form,
+        // so the user stayed on RR Drafts and the edit appeared not to work.
+        // Activate the Rate Request tab first; this does not modify any quote,
+        // rate-sheet, DSR, invoice, planner, or other tab data.
+        const rrTab = document.querySelector('.tab-btn-vertical[data-tab="raterequest"]');
+        const rrPanel = document.getElementById('raterequest');
+        if (rrTab) {
+            document.querySelectorAll('.tab-btn-vertical').forEach(b => b.classList.remove('active'));
+            rrTab.classList.add('active');
+        }
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        if (rrPanel) rrPanel.classList.add('active');
+        if (db?.navState) db.navState.lastTab = 'raterequest';
 
         const format = rec.format || (rec.mode === 'AIR' ? 'air' : (rec.forwarder && !rec.shipper ? 'seaWithoutShipper' : 'seaWithShipper'));
         currentRateRequestFormat = format;
@@ -19033,7 +19210,7 @@ const buy = parseRateInput(
             window.__editingRRDraft = null;
             document.querySelectorAll('#raterequest .btn-save[data-rr-edit="1"]').forEach(btn => { btn.textContent = '💾 Save as Draft'; delete btn.dataset.rrEdit; });
             alert(`Rate Request Draft updated successfully.\nQuote Number: ${data.quoteNumber || '-'} `);
-            renderRRDrafts();
+            renderRecords('rrdrafts');
             return;
         }
         const qn = saveRateRequestDraftWithData(data);
@@ -19068,7 +19245,7 @@ const buy = parseRateInput(
         chargesOrder[mode]=rec.chargesOrder||null;
         buildChargesGrid(mode, arrays, chargesOrder[mode], {arrays});
         if (rec.freightSurcharges) {
-            if(mode==='sea') ['20','40'].forEach(row=>['oft','subc','haz','ow','other','other2','other3','trk','ddp'].forEach(k=>{const el=document.getElementById(`sea-fs-${k}-${row}`);if(el)el.value=rec.freightSurcharges[row]?.[k]||0;}));
+            if(mode==='sea'){ applySeaFSUnits(rec.freightSurcharges.units); ['20','40'].forEach(row=>['oft','subc','haz','ow','other','other2','other3','trk','ddp'].forEach(k=>{const el=document.getElementById(`sea-fs-${k}-${row}`);if(el)el.value=rec.freightSurcharges[row]?.[k] ?? '';})); calcSeaFSTotal(); }
             if(mode==='air') ['frt','fuel','carting','mcc','xray','other'].forEach(k=>{const el=document.getElementById(`air-fs-${k}`);if(el)el.value=rec.freightSurcharges[k]||0;});
         }
         if(mode==='air') setValidityDefault('air');
@@ -19082,7 +19259,7 @@ const buy = parseRateInput(
         if (mode === 'sea') { const cm=document.getElementById('sea-comparison-mode'); if(cm) cm.value='carrier'; updateSeaComparisonUI(); }
         // Restore carrier 1/2/3 UI explicitly.
         setCarrierNames(mode,['','','']);
-        if(mode==='sea'){document.querySelectorAll('#sea .fs-input').forEach(el=>el.value='');calcSeaFSTotal();}
+        if(mode==='sea'){document.querySelectorAll('#sea .fs-input').forEach(el=>el.value='');applySeaFSUnits();calcSeaFSTotal();}
         if(mode==='air'){document.querySelectorAll('#air .fs-input-air').forEach(el=>el.value='');calcAirFSTotal();}
         document.getElementById(`${mode}-qn-box`)?.classList.remove('show');
         document.getElementById(`${mode}-dup-alert`)?.classList.remove('show');
@@ -23473,15 +23650,9 @@ function shahidPreviewShell(innerHtml, mode='quote') {
         }).catch(e=>{console.error(e);alert('Invoice PDF generation failed.');area.innerHTML='';}),250);
     };
 
+    // HTML already contains the single LCL BL chooser option.
+    // Keep the existing planner initialization only; do not append another LCL option.
     document.addEventListener('DOMContentLoaded',function(){
-        const dd=document.getElementById('blModeChooser');
-        if(dd && !dd.querySelector('[data-lcl-bl-option]')){
-            const item=document.createElement('div');
-            item.className='dropdown-item'; item.setAttribute('data-lcl-bl-option','1');
-            item.innerHTML='<span class="icon">📦</span> LCL BL';
-            item.onclick=()=>openBLModal(null,null,'LCL');
-            dd.appendChild(item);
-        }
         try{syncPlannerAutoTasks();}catch(e){console.warn('Planner initial sync:',e);}
     });
 })();
