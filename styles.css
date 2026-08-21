@@ -5401,6 +5401,12 @@ th[data-sort]:hover {
 }
 
 
+/* SHAHID ERP — quotation preview fills available screen width.
+   PDF/A4 sizing remains controlled separately. */
+#previewBody #preview-content-container{
+  transform-origin:top center !important;
+}
+
 /* FINAL V10 — A4 preview/PDF and blank-line control */
 .quote-preview-a4{
   box-sizing:border-box !important;
@@ -6096,4 +6102,684 @@ th[data-sort]:hover {
 .ops-days-neutral {
     background: #e5e7eb;
     color: #374151;
+}
+
+
+/* ============================================================
+   SHAHID ERP — QUOTATION PREVIEW FIT-TO-SCREEN / A4 SINGLE PAGE
+   Requested amendment only.
+   ============================================================ */
+#previewBody #preview-content-container{
+  transform-origin:top center !important;
+  box-sizing:border-box !important;
+}
+
+/* ============================================================
+   SHAHID ERP — QUOTATION PREVIEW TARGET VIEW
+   Requested amendment only: wide white paper, centered quotation,
+   readable screen scale, vertical scroll retained.
+   ============================================================ */
+#previewModal .modal-content{
+  width:calc(100vw - 80px) !important;
+  max-width:1240px !important;
+  max-height:96vh !important;
+  border-radius:0 !important;
+  background:#333 !important;
+}
+#previewModal .modal-body{
+  padding:12px 0 20px !important;
+  background:#333 !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+}
+#previewModal #previewBody{background:#333 !important;}
+#previewModal #preview-content-container{
+  width:calc(100% - 160px) !important;
+  min-width:0 !important;
+  max-width:1100px !important;
+  margin:0 auto !important;
+  padding:12px !important;
+  box-sizing:border-box !important;
+  transform:none !important;
+}
+#previewModal #preview-content-container table,
+#previewModal #preview-content-container .shahid-master-quote-table,
+#previewModal #preview-content-container .pdf-detail-table,
+#previewModal #preview-content-container .pdf-remarks-table{
+  width:100% !important;
+  min-width:0 !important;
+  max-width:100% !important;
+  box-sizing:border-box !important;
+}
+#previewModal #preview-content-container th,
+#previewModal #preview-content-container td{white-space:nowrap !important;}
+@media (max-width:900px){
+  #previewModal .modal-content{width:calc(100vw - 24px) !important;}
+  #previewModal #preview-content-container{width:calc(100% - 32px) !important;}
+}
+
+/* ============================================================
+   SHAHID ERP — QUOTATION PREVIEW ACTION BAR STICKY
+   Requested amendment only: keep Copy / WhatsApp / Email buttons
+   visible while scrolling the quotation preview.
+   ============================================================ */
+#previewModal .quotation-preview-actions{
+  position:sticky !important;
+  top:0 !important;
+  z-index:100 !important;
+  margin-top:-12px !important;
+  padding:12px 0 10px !important;
+  background:#333 !important;
+  box-sizing:border-box !important;
+}
+
+/* ===== LOCAL CHARGES TABLE SORTING ===== */
+#localcharges .master-table thead th.lc-sortable {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    white-space: nowrap;
+}
+#localcharges .master-table thead th.lc-sortable:hover {
+    filter: brightness(1.08);
+}
+#localcharges .master-table thead th.lc-sortable::after {
+    content: '↕';
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 0.78em;
+    opacity: 0.65;
+}
+#localcharges .master-table thead th.lc-sortable[data-sort-dir="asc"]::after {
+    content: '▲';
+    opacity: 1;
+}
+#localcharges .master-table thead th.lc-sortable[data-sort-dir="desc"]::after {
+    content: '▼';
+    opacity: 1;
+}
+
+/* ============================================================
+   LOCAL CHARGES — FIX STICKY TABLE HEADERS
+   Keep every Local Charges table heading fixed while its table
+   body scrolls vertically. Sorting remains unchanged.
+   ============================================================ */
+#localcharges .table-wrap {
+    overflow: auto !important;
+    position: relative !important;
+}
+#localcharges .master-table {
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+}
+#localcharges .master-table thead th {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 20 !important;
+    background: #1e3a8a !important;
+}
+#localcharges .master-table thead {
+    position: relative !important;
+    z-index: 19 !important;
+}
+
+/* ============================================================
+   LOCAL CHARGES — ACTION BAR ABOVE TABLE
+   Existing actions remain available without action buttons in rows.
+   ============================================================ */
+#localcharges .lc-action-bar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    flex-wrap:wrap;
+    margin:8px 0;
+    padding:8px 10px;
+    background:#eef3f9;
+    border:1px solid var(--border);
+    border-radius:6px;
+    box-sizing:border-box;
+}
+#localcharges .lc-actions-left,
+#localcharges .lc-actions-right{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    flex-wrap:wrap;
+}
+#localcharges .lc-actions-right{
+    margin-left:auto;
+    color:var(--text-light);
+    font-size:.82rem;
+}
+#localcharges .master-table td:last-child:not(:has(button)),
+#localcharges .master-table th:last-child{
+    /* keep normal data-column sizing after row action removal */
+}
+
+
+/* =====================================================================
+   DSR — MODERN LOGISTICS THEME
+   Scoped to Shipment List only. Existing functionality/data preserved.
+   ===================================================================== */
+#dsr {
+    --dsr-navy: #173b7a;
+    --dsr-steel: #2f6faf;
+    --dsr-bg: #f4f7fb;
+    --dsr-card: #ffffff;
+    --dsr-border-modern: #d9e2ef;
+    --dsr-text-modern: #1f2d3d;
+    --dsr-muted-modern: #6b7b8f;
+    --dsr-sea: #0f9d8a;
+    --dsr-air: #f39c12;
+    --dsr-lcl: #7e57c2;
+    background: var(--dsr-bg);
+    border-radius: 12px;
+}
+
+#dsr > .tab-heading {
+    background: linear-gradient(135deg, var(--dsr-navy), var(--dsr-steel));
+    color: #fff;
+    border: 0;
+    border-radius: 12px 12px 0 0;
+    padding: 14px 18px;
+    box-shadow: 0 5px 16px rgba(23,59,122,.14);
+}
+#dsr > .tab-heading h2 {
+    color: #fff;
+    letter-spacing: .1px;
+}
+#dsr .dsr-module-subtitle {
+    margin-top: 3px;
+    font-size: .72rem;
+    color: rgba(255,255,255,.78);
+    font-weight: 500;
+}
+
+#dsr > div[style*="flex-wrap:wrap"]:has(#dsr-column-settings) {
+    margin: 10px 0 8px !important;
+}
+#dsr > div[style*="flex-wrap:wrap"]:has(#dsr-column-settings) > .btn {
+    background: #e8f0fa !important;
+    color: var(--dsr-navy) !important;
+    border: 1px solid #cbd9eb !important;
+    box-shadow: none;
+}
+
+#dsr .filter-row {
+    background: var(--dsr-card);
+    border: 1px solid var(--dsr-border-modern);
+    border-radius: 10px;
+    padding: 10px;
+    gap: 8px;
+    box-shadow: 0 2px 9px rgba(23,59,122,.06);
+}
+#dsr .filter-row .search-box,
+#dsr .filter-row select {
+    border: 1px solid #cbd7e6;
+    background: #fff;
+    color: var(--dsr-text-modern);
+    border-radius: 8px;
+}
+#dsr .filter-row .btn-clear {
+    background: #eef2f7 !important;
+    color: #475569 !important;
+    border: 1px solid #d4deea !important;
+}
+
+#dsr #dsr-action-bar {
+    background: #fff;
+    border: 1px solid var(--dsr-border-modern);
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin: 10px 0 !important;
+    box-shadow: 0 2px 9px rgba(23,59,122,.06);
+}
+#dsr #dsr-action-bar > span {
+    color: var(--dsr-navy) !important;
+    font-weight: 700 !important;
+}
+#dsr #dsr-action-bar .btn {
+    border-radius: 7px;
+    border: 0;
+    box-shadow: none;
+    font-weight: 700;
+}
+#dsr #dsr-action-bar .btn-success { background: var(--dsr-sea) !important; }
+#dsr #dsr-action-bar .btn-preview { background: var(--dsr-steel) !important; }
+#dsr #dsr-action-bar .btn-info { background: #4f8fc8 !important; }
+#dsr #dsr-action-bar .btn-pdf { background: #6d5bd0 !important; }
+#dsr #dsr-action-bar .btn-duplicate { background: #20a7b8 !important; }
+#dsr #dsr-action-bar .btn-clear { background: #dc4c4c !important; }
+#dsr #dsr-action-bar .btn-export { background: #149b75 !important; }
+
+#dsr-list {
+    background: #fff;
+    border: 1px solid var(--dsr-border-modern);
+    border-radius: 11px;
+    padding: 0;
+    overflow: auto;
+    box-shadow: 0 3px 14px rgba(23,59,122,.07);
+}
+#dsr-list .dsr-section-header {
+    background: linear-gradient(135deg, var(--dsr-navy), var(--dsr-steel)) !important;
+    color: #fff !important;
+    border-radius: 10px 10px 0 0;
+    padding: 11px 16px;
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 800;
+    letter-spacing: .1px;
+}
+#dsr-list .dsr-section-header .badge {
+    background: #fff !important;
+    color: var(--dsr-navy) !important;
+    border-radius: 999px;
+    min-width: 28px;
+    text-align: center;
+    padding: 3px 8px;
+    margin-left: auto;
+}
+
+#dsr-list .dsr-table {
+    width: 100%;
+    background: #fff;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: .78rem;
+}
+#dsr-list .dsr-table th {
+    background: var(--dsr-navy) !important;
+    color: #fff !important;
+    padding: 10px 9px;
+    border-right: 1px solid rgba(255,255,255,.15);
+    border-bottom: 0;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    font-size: .75rem;
+    letter-spacing: .2px;
+    white-space: nowrap;
+}
+#dsr-list .dsr-table td {
+    background: #fff !important;
+    color: var(--dsr-text-modern) !important;
+    border-right: 1px solid #e3e9f1;
+    border-bottom: 1px solid #e3e9f1;
+    padding: 10px 9px;
+    font-weight: 600 !important;
+}
+#dsr-list .dsr-table tbody tr:nth-child(even) td {
+    background: #f7faff !important;
+}
+#dsr-list .dsr-table tbody tr:hover td {
+    background: #edf5ff !important;
+}
+#dsr-list .dsr-table tbody tr.dsr-row-selected td {
+    background: #e7f0ff !important;
+    box-shadow: inset 3px 0 0 var(--dsr-steel);
+}
+#dsr-list .dsr-table td a {
+    color: var(--dsr-navy) !important;
+}
+#dsr-list .status-badge {
+    border-radius: 999px;
+    padding: 4px 9px;
+    font-size: .68rem;
+    font-weight: 800;
+    letter-spacing: .1px;
+}
+#dsr-list .status-badge.status-active {
+    background: #d9f5ef !important;
+    color: #087c6d !important;
+}
+#dsr-list .status-badge.status-expiring {
+    background: #fff0d2 !important;
+    color: #a96500 !important;
+}
+#dsr-list .status-badge.status-expired {
+    background: #ffe1e1 !important;
+    color: #b42323 !important;
+}
+
+#dsr-pagination {
+    padding: 10px 2px;
+}
+
+/* ============================================================
+   SHAHID ERP — Generate Invoice Modern Logistics Theme
+   Scoped only to the Generate Invoice modal.
+   ============================================================ */
+.v91-invoice-modal {
+    width: min(1120px, 96vw);
+    max-height: 94vh;
+    border-radius: 16px;
+    background: #f4f7fb;
+    border: 1px solid #d7e2ef;
+    box-shadow: 0 28px 80px rgba(23,59,122,.28);
+}
+
+.v91-invoice-modal > .modal-header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    min-height: 82px;
+    padding: 16px 22px;
+    background: linear-gradient(135deg, #173b7a 0%, #24579b 100%);
+    color: #fff;
+    border-bottom: 0;
+    border-radius: 16px 16px 0 0;
+}
+.v91-invoice-modal > .modal-header h3 {
+    margin: 0;
+    font-size: 1.18rem;
+    font-weight: 900;
+    letter-spacing: .1px;
+}
+.v91-invoice-modal > .modal-header small {
+    display: block;
+    margin-top: 3px;
+    color: #dbe8fb;
+    font-size: .78rem;
+    font-weight: 700;
+}
+.v91-invoice-modal > .modal-header .btn-clear {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    border: 0;
+    border-radius: 10px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 900;
+}
+
+.v91-invoice-body {
+    padding: 18px 22px 24px;
+    background: #f4f7fb;
+}
+.v91-invoice-body > .v91-invoice-summary {
+    margin-bottom: 16px;
+}
+.v91-invoice-summary {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 10px;
+}
+.v91-invoice-summary > div {
+    min-height: 64px;
+    padding: 11px 13px;
+    border: 1px solid #d8e3ef;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 3px 10px rgba(23,59,122,.05);
+}
+.v91-invoice-summary span {
+    color: #64748b;
+    letter-spacing: .04em;
+}
+.v91-invoice-summary b {
+    color: #173b7a;
+    font-size: .8rem;
+}
+
+.v91-invoice-preview {
+    margin-top: 0;
+    padding: 16px;
+    border: 1px solid #d8e3ef;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 5px 16px rgba(23,59,122,.05);
+}
+
+.v91-invoice-preview > div[style*="border-top"] {
+    border-top-color: #d8e3ef !important;
+    padding-top: 12px !important;
+}
+.v91-invoice-preview h4 {
+    color: #173b7a;
+    font-size: .9rem !important;
+    font-weight: 900;
+}
+.v91-invoice-preview .btn-info {
+    background: #0f9d8a;
+    border-color: #0f9d8a;
+    color: #fff;
+    font-weight: 900;
+}
+.v91-invoice-preview .btn-info:hover {
+    background: #0b806f;
+    border-color: #0b806f;
+}
+
+.v91-invoice-preview .v11-inv-table-wrap {
+    border: 1px solid #d3deeb;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 4px 12px rgba(23,59,122,.05);
+}
+.v91-invoice-preview .v11-inv-table {
+    width: 100%;
+    min-width: 850px;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: .78rem;
+}
+.v91-invoice-preview .v11-inv-table th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 11px 10px;
+    background: #173b7a;
+    color: #fff;
+    border-right: 1px solid rgba(255,255,255,.15);
+    font-size: .68rem;
+    letter-spacing: .02em;
+}
+.v91-invoice-preview .v11-inv-table th:last-child {
+    border-right: 0;
+}
+.v91-invoice-preview .v11-inv-table td {
+    padding: 9px 10px;
+    border-bottom: 1px solid #e3eaf2;
+    background: #fff;
+    vertical-align: middle;
+}
+.v91-invoice-preview .v11-inv-table tbody tr:nth-child(even) td {
+    background: #f8fbff;
+}
+.v91-invoice-preview .v11-inv-table tbody tr:hover td {
+    background: #eef5fc;
+}
+.v91-invoice-preview .v11-inv-table input,
+.v91-invoice-preview .v11-inv-table select {
+    width: 100%;
+    height: 36px;
+    padding: 6px 9px;
+    border: 1px solid #cbd8e6;
+    border-radius: 6px;
+    background: #fff;
+    color: #1e293b;
+    font-size: .8rem;
+    outline: none;
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+.v91-invoice-preview .v11-inv-table input:focus,
+.v91-invoice-preview .v11-inv-table select:focus {
+    border-color: #2f6faf;
+    box-shadow: 0 0 0 3px rgba(47,111,175,.12);
+}
+.v91-invoice-preview .v11-inv-table tfoot td {
+    padding: 11px 10px;
+    background: #eaf7f3;
+    color: #173b7a;
+    border-top: 2px solid #0f9d8a;
+    border-bottom: 0;
+    font-weight: 900;
+}
+.v91-invoice-preview .v11-inv-table tfoot td:nth-last-child(2) {
+    color: #087f6d;
+    font-size: .88rem;
+}
+.v91-invoice-preview .v11-inv-table .btn-clear {
+    min-width: 34px;
+    height: 34px;
+    padding: 0 8px;
+    border-radius: 7px;
+}
+
+.v91-invoice-actions {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid #d8e3ef;
+}
+
+@media (max-width: 900px) {
+    .v91-invoice-modal { width: 98vw; }
+    .v91-invoice-body { padding: 14px; }
+    .v91-invoice-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+    .v91-invoice-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .v91-invoice-modal > .modal-header { padding: 14px 16px; }
+}
+
+/* ============================================================
+   INVOICE EMAIL PREVIEW — MODERN LOGISTICS THEME
+   Visual-only amendment. Existing email logic preserved.
+   ============================================================ */
+#invoiceEmailV12.modal-overlay{
+    background:rgba(15,23,42,.72) !important;
+    backdrop-filter:blur(3px);
+    align-items:center !important;
+    justify-content:center !important;
+    padding:18px !important;
+    box-sizing:border-box;
+    z-index:99999 !important;
+}
+#invoiceEmailV12 .invoice-email-modal{
+    width:min(900px,90vw) !important;
+    max-width:900px !important;
+    max-height:94vh !important;
+    overflow:hidden !important;
+    background:#f4f7fb !important;
+    border:1px solid #d8e1ee !important;
+    border-radius:16px !important;
+    box-shadow:0 24px 70px rgba(15,23,42,.35) !important;
+    display:flex;
+    flex-direction:column;
+}
+#invoiceEmailV12 .modal-header{
+    flex:0 0 auto;
+    min-height:72px;
+    box-sizing:border-box;
+    padding:14px 20px !important;
+    background:linear-gradient(135deg,#173b7a,#2456a6) !important;
+    color:#fff !important;
+    border:0 !important;
+    border-radius:16px 16px 0 0 !important;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+}
+#invoiceEmailV12 .modal-header h3{
+    margin:0 !important;
+    font-size:20px !important;
+    font-weight:800 !important;
+    letter-spacing:.1px;
+    color:#fff !important;
+}
+#invoiceEmailV12 .modal-header .btn-clear{
+    width:40px !important;
+    height:40px !important;
+    min-width:40px !important;
+    padding:0 !important;
+    border:0 !important;
+    border-radius:9px !important;
+    background:#ef4444 !important;
+    color:#fff !important;
+    font-size:20px !important;
+    font-weight:800 !important;
+}
+#invoiceEmailV12 .invoice-email-grid{
+    flex:0 0 auto;
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+    padding:18px 20px 12px !important;
+    background:#f4f7fb !important;
+}
+#invoiceEmailV12 .invoice-email-grid > div{
+    min-width:0;
+}
+#invoiceEmailV12 .invoice-email-grid label{
+    display:block;
+    margin:0 0 6px !important;
+    color:#334155 !important;
+    font-size:13px !important;
+    font-weight:800 !important;
+}
+#invoiceEmailV12 .invoice-email-grid input{
+    width:100% !important;
+    height:42px !important;
+    box-sizing:border-box !important;
+    padding:9px 12px !important;
+    border:1px solid #cbd5e1 !important;
+    border-radius:8px !important;
+    background:#fff !important;
+    color:#172033 !important;
+    font-size:14px !important;
+    outline:none !important;
+    transition:border-color .15s,box-shadow .15s;
+}
+#invoiceEmailV12 .invoice-email-grid input:focus{
+    border-color:#2f6faf !important;
+    box-shadow:0 0 0 3px rgba(47,111,175,.14) !important;
+}
+#invoiceEmailV12 .invoice-email-preview{
+    flex:1 1 auto;
+    min-height:240px;
+    margin:0 20px 14px !important;
+    padding:18px !important;
+    background:#fff !important;
+    border:1px solid #d7e0eb !important;
+    border-radius:12px !important;
+    overflow:auto !important;
+    max-height:none !important;
+    box-shadow:0 2px 8px rgba(15,23,42,.06) !important;
+}
+#invoiceEmailV12 .invoice-email-preview table{
+    max-width:100% !important;
+}
+#invoiceEmailV12 .invoice-email-actions{
+    flex:0 0 auto;
+    min-height:64px;
+    box-sizing:border-box;
+    display:flex;
+    justify-content:flex-end;
+    align-items:center;
+    gap:10px;
+    padding:12px 20px !important;
+    background:#fff !important;
+    border-top:1px solid #dbe3ee !important;
+}
+#invoiceEmailV12 .invoice-email-actions .btn{
+    min-height:40px !important;
+    border-radius:8px !important;
+    padding:9px 16px !important;
+    font-weight:800 !important;
+}
+#invoiceEmailV12 .invoice-email-actions .btn-success{
+    background:#0f9d8a !important;
+    border-color:#0f9d8a !important;
+}
+@media(max-width:700px){
+    #invoiceEmailV12.modal-overlay{padding:8px !important;}
+    #invoiceEmailV12 .invoice-email-modal{width:100% !important;max-height:96vh !important;border-radius:12px !important;}
+    #invoiceEmailV12 .modal-header{border-radius:12px 12px 0 0 !important;}
+    #invoiceEmailV12 .invoice-email-grid{grid-template-columns:1fr !important;padding:14px !important;}
+    #invoiceEmailV12 .invoice-email-preview{margin:0 14px 12px !important;padding:12px !important;}
+    #invoiceEmailV12 .invoice-email-actions{padding:10px 14px !important;}
 }
