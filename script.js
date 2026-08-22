@@ -1,4 +1,92 @@
 
+/* SHAHID ERP — BLOCK NUMBER INPUT WHEEL CHANGES
+   Scrolling over a focused numeric field must never modify its value.
+*/
+(function(){
+    const blockNumberWheel = function(e){
+        const el = e.target;
+        if (el && el.matches && el.matches('input[type="number"]')) {
+            e.preventDefault();
+        }
+    };
+
+    document.addEventListener('wheel', blockNumberWheel, {passive:false, capture:true});
+})();
+
+/* SHAHID REMARKS LINE BREAK PRESERVATION */
+
+/* SHAHID ERP — GLOBAL UPPERCASE INPUT NORMALIZATION */
+(function(){
+    'use strict';
+
+    window.SHAHID_UPPERCASE = function(value){
+        return typeof value === 'string' ? value.toUpperCase() : value;
+    };
+
+    function normalizeValue(value){
+        if (typeof value === 'string') return value.toUpperCase();
+        if (Array.isArray(value)) return value.map(normalizeValue);
+        if (value && typeof value === 'object'){
+            Object.keys(value).forEach(function(k){
+                value[k] = normalizeValue(value[k]);
+            });
+        }
+        return value;
+    }
+
+    window.SHAHID_NORMALIZE_DATA_UPPERCASE = function(){
+        if (typeof window.db === 'object' && window.db){
+            normalizeValue(window.db);
+        }
+        return window.db;
+    };
+
+    function normalizeInput(el){
+        if (!el || el.tagName === 'SELECT') return;
+        if (el.matches('input:not([type="number"]):not([type="date"]):not([type="time"]):not([type="datetime-local"]):not([type="range"]), textarea')){
+            var posStart = el.selectionStart;
+            var posEnd = el.selectionEnd;
+            var old = el.value;
+            var upper = old.toUpperCase();
+            if (old !== upper){
+                el.value = upper;
+                try { el.setSelectionRange(posStart, posEnd); } catch(e) {}
+                el.dispatchEvent(new Event('input', {bubbles:true}));
+            }
+        }
+    }
+
+    document.addEventListener('input', function(e){
+        normalizeInput(e.target);
+    }, true);
+
+    document.addEventListener('change', function(e){
+        normalizeInput(e.target);
+    }, true);
+
+    // Normalize existing saved records immediately and before persistence.
+    document.addEventListener('DOMContentLoaded', function(){
+        try { window.SHAHID_NORMALIZE_DATA_UPPERCASE(); } catch(e) {
+            console.warn('Uppercase normalization warning:', e);
+        }
+    });
+
+    // Also normalize data immediately if this layer loads after DOM/database init.
+    try { window.SHAHID_NORMALIZE_DATA_UPPERCASE(); } catch(e) {}
+
+    // Wrap saveDB once so records cannot be persisted in mixed case.
+    if (typeof window.saveDB === 'function' && !window.saveDB.__SHAHID_UPPERCASE_WRAPPED){
+        var originalSaveDB = window.saveDB;
+        var wrappedSaveDB = function(){
+            try { window.SHAHID_NORMALIZE_DATA_UPPERCASE(); } catch(e) {}
+            return originalSaveDB.apply(this, arguments);
+        };
+        wrappedSaveDB.__SHAHID_UPPERCASE_WRAPPED = true;
+        window.saveDB = wrappedSaveDB;
+    }
+})();
+
+
 /* SHAHID MANUAL BACKUP SELECTOR — JSON / SQLITE */
 (function(){
   window.SHAHID_OPEN_MANUAL_BACKUP=function(){
@@ -1330,7 +1418,20 @@ function plannerRenewRate(id) {
                 <input type="date" id="renew-valid-to" value="${rate.validTo || new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0]}" style="width:100%;" />
             </div>
             <div class="form-group" style="grid-column:1/-1;">
-                <label>Remarks</label>
+                <label>
+function shahidRemarksHTML(value) {
+    const text = String(value == null ? '' : value);
+    // Preserve CRLF/LF/CR as HTML line breaks while still escaping HTML.
+    const escaped = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    return escaped.replace(/\r\n|\r|\n/g, '<br>');
+}
+
+Remarks</label>
                 <textarea id="renew-remarks" rows="2" style="width:100%;">${rate.remarks || ''}</textarea>
             </div>
         </div>
@@ -3677,6 +3778,22 @@ function checkExpiryNotifications() {
 }
 
 
+let rateSheetSearch = '';
+
+function searchRateSheet(value) {
+    rateSheetSearch = String(value || '').trim().toLowerCase();
+    rateSheetPage = 1;
+    renderRateSheet();
+}
+
+function clearRateSheetSearch() {
+    rateSheetSearch = '';
+    const input = document.getElementById('rateSheetUniversalSearch');
+    if (input) input.value = '';
+    rateSheetPage = 1;
+    renderRateSheet();
+}
+
 function filterRateSheet(filter) {
     rateSheetFilter = filter;
     rateSheetPage = 1;
@@ -3699,6 +3816,22 @@ function sortRateSheet(key) {
 function getFilteredRateSheet() {
     let rates = [...(db.rateSheet || [])];
     const today = new Date();
+
+    // Universal Rate Sheet search.
+    // Searches all saved fields of each rate, including Carrier, POL, POD,
+    // Container, Commodity/Cargo, Inventory and any future fields added to
+    // the rate record. Existing status filters and sorting remain unchanged.
+    if (rateSheetSearch) {
+        rates = rates.filter(r => {
+            let searchable = '';
+            try {
+                searchable = JSON.stringify(r);
+            } catch (e) {
+                searchable = Object.values(r || {}).join(' ');
+            }
+            return searchable.toLowerCase().includes(rateSheetSearch);
+        });
+    }
     today.setHours(0, 0, 0, 0);
 
     if (rateSheetFilter === 'active') {
@@ -3729,6 +3862,47 @@ function renderRateSheet() {
     const table = document.getElementById('ratesheet-table');
     const container = document.getElementById('ratesheet-table')?.parentElement;
     if (!tbody || !container) return;
+
+    // --- Carrier name search bar ---
+    let searchBar = document.querySelector('.ratesheet-search-bar');
+    if (!searchBar) {
+        searchBar = document.createElement('div');
+        searchBar.className = 'ratesheet-search-bar';
+        searchBar.style.cssText =
+            'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 8px;' +
+            'padding:10px;background:var(--card-bg,#fff);border-radius:8px;';
+
+        searchBar.innerHTML = `
+            <span style="font-weight:600;color:var(--text-light);white-space:nowrap;">🔎 Search</span>
+            <input
+                id="rateSheetUniversalSearch"
+                type="search"
+                autocomplete="off"
+                placeholder="Search POL / POD / Carrier / Inventory / Cargo / etc..."
+                value="${String(rateSheetSearch).replace(/"/g, '&quot;')}"
+                style="flex:1;min-width:220px;padding:9px 12px;border:1px solid #cbd5e1;border-radius:7px;background:#fff;color:#111827;outline:none;"
+                oninput="searchRateSheet(this.value)"
+            />
+            <button
+                type="button"
+                class="btn btn-sm btn-clear"
+                onclick="clearRateSheetSearch()"
+                style="padding:8px 12px;"
+            >CLEAR</button>
+        `;
+
+        const wrapper = container.closest('.table-wrap');
+        if (wrapper) {
+            wrapper.parentNode.insertBefore(searchBar, wrapper);
+        } else {
+            container.parentNode.insertBefore(searchBar, container);
+        }
+    } else {
+        const input = document.getElementById('rateSheetUniversalSearch');
+        if (input && document.activeElement !== input && input.value !== rateSheetSearch) {
+            input.value = rateSheetSearch;
+        }
+    }
 
     // --- Ensure action bar exists (only once) ---
     let actionBar = document.querySelector('.ratesheet-action-bar');
@@ -5135,7 +5309,7 @@ function buildEmailHTML(data, mode) {
         remarksHtml = `
         <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-top:12px;">
             <tr><td style="background:#1e3a8a;color:white;padding:4px 8px;font-weight:bold;font-family:Arial;font-size:11px;">Remarks</td></tr>
-            <tr><td style="border:1px solid #d1d5db;padding:8px;font-family:Arial;font-size:11px;">${data.remarks.toUpperCase()}</td></tr>
+            <tr><td style="border:1px solid #d1d5db;padding:8px;font-family:Arial;font-size:11px;">${mcRemarksHTML(data.remarks)}</td></tr>
         </table>`;
     }
 
@@ -5496,7 +5670,7 @@ function buildPDFDefinition(data, mode) {
             content.push({table:{widths:['*',...carriers.map(()=>'*')],body:[[{text:'Grand Total',style:'Aptos',alignment:'left'},...carriers.map(c=>({text:c.carrier,style:'Aptos',alignment:'center'}))],[{text:'INR Total',bold:true},...overall.map(v=>({text:formatINR(v),bold:true,alignment:'right'}))]]},layout:{hLineWidth:()=>1,vLineWidth:()=>1,hLineColor:'#d1d5db',fillColor:i=>(i===0?'#05964b':i===1?'#ecfdf5':null)},margin:[0,0,0,10]});
         }
     }
-    if(data.remarks)content.push({table:{widths:['*'],body:[[{text:'Remarks',style:'categoryHeader'}],[{text:data.remarks.toUpperCase(),margin:[5,5]}]]},layout:'noBorders',margin:[0,5,0,10]});
+    if(data.remarks)content.push({table:{widths:['*'],body:[[{text:'Remarks',style:'categoryHeader'}],[{text:String(data.remarks).toUpperCase().split(/\\r\\n|\\r|\\n/),margin:[5,5]}]]},layout:'noBorders',margin:[0,5,0,10]});
     content.push({canvas:[{type:'line',x1:0,y1:0,x2:515,y2:0,lineWidth:1,lineColor:'#e2e8f0'}]},{text:'This quotation is system-generated. Rates are subject to change based on validity date.',alignment:'center',fontSize:8,color:'#64748b',margin:[0,8,0,2]},{text:'Generated on '+new Date().toLocaleString('en-IN'),alignment:'center',fontSize:8,color:'#64748b'},{text:'Prepared By: '+userName,alignment:'center',fontSize:8,color:'#64748b',margin:[0,2,0,0]});
     return {content,styles:{companyName:{fontSize:14,bold:true,color:'#1e3a8a'},companyAddress:{fontSize:9,color:'#64748b',margin:[0,2,0,4]},title:{fontSize:18,bold:true,color:'#1e3a8a'},quoteNum:{fontSize:12,bold:true,color:'#d97706'},detailLabel:{fontSize:10,bold:true,color:'#334155'},categoryHeader:{fontSize:11,bold:true,color:'#1e3a8a',margin:[0,8,0,4]},Aptos:{fontSize:10,bold:true,color:'white'}},defaultStyle:{fontSize:10,font:'Roboto'}};
 }
@@ -5562,13 +5736,14 @@ function generatePDFFromHTML(data, mode) {
             #preview-content-container table{width:100%!important;max-width:100%!important;min-width:0!important;table-layout:fixed!important;box-sizing:border-box!important;}
             #preview-content-container .shahid-master-quote-table{width:100%!important;max-width:100%!important;}
             #preview-content-container th,#preview-content-container td{white-space:nowrap!important;overflow:hidden!important;text-overflow:clip!important;overflow-wrap:normal!important;word-break:normal!important;line-height:1.4!important;}
+            #preview-content-container .pdf-remarks-table .special-remark-inline{white-space:pre-line!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:normal!important;line-height:1.4!important;}
             #preview-content-container .shahid-master-quote-table th,#preview-content-container .shahid-master-quote-table td{padding:4px 8px!important;font-size:15px!important;height:auto!important;}
             #preview-content-container .shahid-master-quote-table thead th{font-size:15px!important;height:auto!important;}
             #preview-content-container .shahid-master-quote-table tbody td{height:auto!important;}
             #preview-content-container .shahid-master-quote-table tfoot td{padding:4px 8px!important;font-size:15px!important;}
             #preview-content-container .shahid-master-quote-table th:first-child,#preview-content-container .shahid-master-quote-table td:first-child{white-space:nowrap!important;}
             #preview-content-container p{margin:2px 0!important;line-height:1.4!important;font-size:15px!important;}
-            #preview-content-container .special-remark-inline{white-space:nowrap!important;overflow:hidden!important;text-overflow:clip!important;}
+            #preview-content-container .special-remark-inline{white-space:pre-line!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;}
             #preview-content-container .pdf-section-heading{height:auto!important;padding:4px 8px!important;font-size:17px!important;line-height:1.4!important;white-space:nowrap!important;overflow:hidden!important;}
             #preview-content-container .pdf-detail-table th,#preview-content-container .pdf-detail-table td{padding:4px 8px!important;font-size:15px!important;line-height:1.4!important;white-space:nowrap!important;}
             #preview-content-container .pdf-grand-total{padding:4px 8px!important;font-size:17px!important;line-height:1.4!important;white-space:nowrap!important;}
@@ -5860,7 +6035,7 @@ function legacy_buildPreviewHTML(data, mode, maxWidth = '100%', compact = false)
                 </tr>
                 <tr>
                     <td style="border:1px solid #fee2e2;padding:${tdPadding};background:#fee2e2;color:#b91c1c;font-weight:700;font-size:${baseFont};line-height:1.4;vertical-align:top;">
-                        ${data.remarks.toUpperCase()}
+                        ${mcRemarksHTML(data.remarks)}
                     </td>
                 </tr>
             </tbody>
@@ -6336,40 +6511,89 @@ function copyPreviewTables() {
         alert('No preview data available. Please open a preview first.');
         return;
     }
+
     const { data, mode } = _previewData;
     const compactHtml = buildCompactEmailHTML(data, mode);
+
     const plain = document.createElement('div');
     plain.innerHTML = compactHtml;
     const plainText = plain.innerText || plain.textContent || 'Quotation';
 
-    const copyPlainFallback = () => {
-        const ta = document.createElement('textarea');
-        ta.value = plainText;
-        ta.setAttribute('readonly','');
-        ta.style.position='fixed'; ta.style.opacity='0';
-        document.body.appendChild(ta);
-        ta.select();
-        let ok=false;
-        try { ok=document.execCommand('copy'); } catch(e) {}
-        ta.remove();
-        alert(ok ? '✅ Compact table copied.' : '⚠️ Clipboard access is blocked by the browser.');
+    // ONE clipboard operation: HTML + plain text together.
+    // This prevents the first click from falling back to plain text in EXE.
+    const copyRichClipboard = async () => {
+        if (!(navigator.clipboard && navigator.clipboard.write && window.ClipboardItem)) {
+            return false;
+        }
+
+        const item = new ClipboardItem({
+            'text/html': new Blob([compactHtml], { type: 'text/html' }),
+            'text/plain': new Blob([plainText], { type: 'text/plain' })
+        });
+
+        await navigator.clipboard.write([item]);
+        return true;
     };
 
-    if (navigator.clipboard?.write && window.ClipboardItem) {
+    // Electron/older Chromium fallback: select the actual rendered HTML,
+    // so the fallback is still a formatted table rather than plain text.
+    const copyRenderedHtmlFallback = () => {
+        const holder = document.createElement('div');
+        holder.innerHTML = compactHtml;
+        holder.contentEditable = 'true';
+        holder.style.position = 'fixed';
+        holder.style.left = '-100000px';
+        holder.style.top = '0';
+        holder.style.opacity = '0';
+        holder.style.pointerEvents = 'none';
+        document.body.appendChild(holder);
+
+        const range = document.createRange();
+        range.selectNodeContents(holder);
+
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        let copied = false;
         try {
-            const item = new ClipboardItem({
-                'text/html': new Blob([compactHtml], {type:'text/html'}),
-                'text/plain': new Blob([plainText], {type:'text/plain'})
-            });
-            navigator.clipboard.write([item]).then(() => {
-                alert('✅ Compact tables copied with formatting.');
-            }).catch(copyPlainFallback);
-            return;
+            copied = document.execCommand('copy');
         } catch (e) {
-            console.warn('Rich clipboard unavailable:', e);
+            console.warn('Rendered HTML clipboard fallback failed:', e);
         }
-    }
-    copyPlainFallback();
+
+        selection.removeAllRanges();
+        holder.remove();
+
+        return copied;
+    };
+
+    (async () => {
+        try {
+            let copied = false;
+
+            // Preferred path: rich HTML clipboard.
+            try {
+                copied = await copyRichClipboard();
+            } catch (e) {
+                console.warn('Rich clipboard API unavailable:', e);
+            }
+
+            // EXE/Chromium fallback: still copies rendered HTML.
+            if (!copied) {
+                copied = copyRenderedHtmlFallback();
+            }
+
+            if (!copied) {
+                throw new Error('Formatted clipboard is unavailable.');
+            }
+
+            alert('✅ Compact tables copied with formatting.');
+        } catch (e) {
+            console.error('Copy Compact failed:', e);
+            alert('⚠️ Copy Compact failed. Please try again.');
+        }
+    })();
 }
 
 // ==================== DSR FUNCTIONS ====================
@@ -9960,8 +10184,64 @@ function renderAlertCenter(){
 }
 function handleERPAlertByIndex(i){ const a=window._shahidActiveAlerts?.[i]; if(a) handleERPAlert(a); }
 function handleERPAlert(a){
-    document.getElementById('alert-center-panel')?.classList.remove('open'); document.getElementById('alertCenterBtn')?.setAttribute('aria-expanded','false');
-    if(a.action==='rates'||a.action==='ratesheet'||a.action==='followup'||a.action==='planner'||a.action==='dsr') switchToTab(a.action);
+    document.getElementById('alert-center-panel')?.classList.remove('open');
+    document.getElementById('alertCenterBtn')?.setAttribute('aria-expanded','false');
+
+    if(!a) return;
+
+    // OPEN must take the user to the actual record, not only switch the tab.
+    // This is especially important for Follow-up alerts where the reference is
+    // the quote number shown in the Action Center.
+    if(a.action === 'rates' || a.action === 'followup'){
+        const modes = ['sea','air','lcl'];
+        for(const mode of modes){
+            const idx = (db.rates?.[mode] || []).findIndex(r =>
+                String(r.quoteNumber || '').toUpperCase() === String(a.ref || '').toUpperCase()
+            );
+            if(idx >= 0){
+                switchToTab('rates');
+                setTimeout(() => {
+                    try {
+                        previewSavedRecord('rates', mode, idx);
+                    } catch(e) {
+                        console.error('Action Center quote open failed:', e);
+                        alert('Unable to open this quotation.');
+                    }
+                }, 80);
+                return;
+            }
+        }
+        switchToTab('rates');
+        return;
+    }
+
+    if(a.action === 'ratesheet'){
+        const idx = (db.rateSheet || []).findIndex(r =>
+            String(r.id || r.carrierName || '').toUpperCase() === String(a.ref || '').toUpperCase()
+        );
+        switchToTab('ratesheet');
+        if(idx >= 0){
+            setTimeout(() => {
+                try {
+                    previewRateSheet(idx);
+                } catch(e) {
+                    console.error('Action Center rate open failed:', e);
+                    alert('Unable to open this rate.');
+                }
+            }, 80);
+        }
+        return;
+    }
+
+    if(a.action === 'planner'){
+        switchToTab('planner');
+        return;
+    }
+
+    if(a.action === 'dsr'){
+        switchToTab('dsr');
+        return;
+    }
 }
 function toggleAlertCenter(e){ e?.stopPropagation(); const panel=document.getElementById('alert-center-panel'); const btn=document.getElementById('alertCenterBtn'); if(!panel)return; alertCenterOpen=!panel.classList.contains('open'); panel.classList.toggle('open',alertCenterOpen); btn?.setAttribute('aria-expanded',String(alertCenterOpen)); if(alertCenterOpen)renderAlertCenter(); }
 function clearAllAlerts(){
@@ -14844,7 +15124,7 @@ function legacy_buildCompactEmailHTML(data, mode) {
             </tr>
             <tr>
                 <td style="border:1px solid #d1d5db;padding:${tdPadding};background:#ffffff;font-size:${dataSize};line-height:1.4;vertical-align:top;">
-                    ${specialRemarksHtml}
+                    ${shahidRemarksHTML(specialRemarksHtml)}
                     ${standardRemarksHtml}
                 </td>
             </tr>
@@ -19920,6 +20200,12 @@ function mcEsc(v){
     if (typeof escapeHtml === 'function') return escapeHtml(String(v ?? ''));
     return String(v ?? '').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
+function mcRemarksHTML(v){
+    const text = String(v ?? '').toUpperCase();
+    const escaped = mcEsc(text);
+    return escaped.replace(/\r\n|\r|\n/g, '<br>');
+}
+
 function mcMoney(amount,currency){
     const n=Number(amount)||0;
     if(!n) return '—';
@@ -20597,7 +20883,7 @@ function mcStandardRemarks(mode, baseFont, headingSize, tdPadding, tableWidth='1
         '10. SPOT rates are subject to change at the time of booking.'
     ];
     const special = String(specialRemark||'').trim();
-    const specialRow = special ? `<tr><td class="special-remark-inline" style="border:1px solid #d1d5db;padding:${tdPadding};background:#fff;color:#dc2626;font-weight:800;font-size:${baseFont};line-height:1.4;white-space:nowrap;text-transform:uppercase;text-align:left;">SPECIAL REMARK: ${mcEsc(special.toUpperCase())}</td></tr>` : '';
+    const specialRow = special ? `<tr><td class="special-remark-inline" style="border:1px solid #d1d5db;padding:${tdPadding};background:#fff;color:#dc2626;font-weight:800;font-size:${baseFont};line-height:1.4;white-space:pre-line!important;overflow-wrap:anywhere;word-break:normal;text-transform:uppercase;text-align:left;">SPECIAL REMARK:<br>${mcRemarksHTML(special)}</td></tr>` : '';
     const list=standard.map(x=>`<p style="margin:2px 0;font-size:${baseFont};line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:clip;">${mcEsc(x)}</p>`).join('');
     return `<table class="pdf-remarks-table" style="width:${tableWidth};border-collapse:collapse;font-size:${baseFont};margin-top:8px;table-layout:fixed;"><tbody><tr><th class="pdf-remarks-heading" style="border:1px solid #1e3a8a;padding:${tdPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.2;vertical-align:middle;height:auto;white-space:nowrap;">Remarks</th></tr>${specialRow}<tr><td style="border:1px solid #d1d5db;padding:${tdPadding};background:#fff;font-size:${baseFont};line-height:1.25;vertical-align:top;white-space:normal;">${list}</td></tr></tbody></table>`;
 }
@@ -24167,18 +24453,101 @@ function shahidPreviewShell(innerHtml, mode='quote') {
     };
 
     window.invoiceActionPDF=function(){
-        const idx=getSelectedInvoiceIndex(); if(idx===null)return;
-        const x=db.invoices[idx], area=document.getElementById('pdf-render-area');
-        if(!area) return alert('PDF render area not found.');
+        const idx=getSelectedInvoiceIndex();
+        if(idx===null)return;
+
+        const x=db.invoices[idx];
+        const area=document.getElementById('pdf-render-area');
+        if(!area)return alert('PDF render area not found.');
+
+        // Render at the actual invoice width (15 cm), not a 1400px canvas.
+        // The previous 1400px render caused jsPDF to scale the 15 cm invoice
+        // down dramatically because most of the captured canvas was blank.
+        const RENDER_W_PX = 567; // 15 cm at 96 CSS DPI
         area.innerHTML=buildInvoiceCompactHTML(x);
-        area.style.cssText='position:fixed;left:-10000px;top:0;width:1400px;background:#fff;z-index:-1;padding:0;margin:0;';
-        setTimeout(()=>html2canvas(area,{scale:2,useCORS:true,backgroundColor:'#fff',logging:false}).then(canvas=>{
-            const pdf=new jspdf.jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
-            const pageW=210,pageH=297,margin=5,maxW=pageW-(margin*2),maxH=pageH-(margin*2),sc=Math.min(maxW/canvas.width,maxH/canvas.height),w=canvas.width*sc,h=canvas.height*sc;
-            pdf.addImage(canvas.toDataURL('image/jpeg',.98),'JPEG',margin+(maxW-w)/2,margin+(maxH-h)/2,w,h,undefined,'FAST');
-            pdf.save(`Invoice_${x.invoiceNo||x.id||'Draft'}.pdf`); area.innerHTML='';
-        }).catch(e=>{console.error(e);alert('Invoice PDF generation failed.');area.innerHTML='';}),250);
-    };
+        area.style.cssText=[
+            'position:fixed',
+            'left:0',
+            'top:0',
+            `width:${RENDER_W_PX}px`,
+            `min-width:${RENDER_W_PX}px`,
+            `max-width:${RENDER_W_PX}px`,
+            'background:#fff',
+            'z-index:2147483000',
+            'opacity:1',
+            'visibility:visible',
+            'padding:0',
+            'margin:0',
+            'overflow:visible',
+            'box-sizing:border-box'
+        ].join(';');
+
+        // Force the generated invoice wrapper to use the same physical width.
+        const invoiceRoot=area.firstElementChild;
+        if(invoiceRoot){
+            invoiceRoot.style.width='100%';
+            invoiceRoot.style.minWidth='100%';
+            invoiceRoot.style.maxWidth='100%';
+            invoiceRoot.style.margin='0';
+            invoiceRoot.style.boxSizing='border-box';
+        }
+
+        setTimeout(()=>{
+            html2canvas(area,{
+                scale:2,
+                useCORS:true,
+                backgroundColor:'#fff',
+                logging:false,
+                width:RENDER_W_PX,
+                windowWidth:RENDER_W_PX,
+                scrollX:0,
+                scrollY:0
+            }).then(canvas=>{
+                const pdf=new jspdf.jsPDF({
+                    unit:'mm',
+                    format:'a4',
+                    orientation:'portrait',
+                    compress:true
+                });
+
+                const pageW=pdf.internal.pageSize.getWidth();
+                const pageH=pdf.internal.pageSize.getHeight();
+                const margin=8;
+                const maxW=pageW-(margin*2);
+                const maxH=pageH-(margin*2);
+
+                let imgW=maxW;
+                let imgH=(canvas.height/canvas.width)*imgW;
+
+                // Fit only by height when required; otherwise use full A4 width.
+                if(imgH>maxH){
+                    imgH=maxH;
+                    imgW=(canvas.width/canvas.height)*imgH;
+                }
+
+                const xPos=(pageW-imgW)/2;
+                const yPos=margin;
+
+                pdf.addImage(
+                    canvas.toDataURL('image/jpeg',0.98),
+                    'JPEG',
+                    xPos,
+                    yPos,
+                    imgW,
+                    imgH,
+                    undefined,
+                    'FAST'
+                );
+
+                pdf.save(`Invoice_${x.invoiceNo||x.id||'Draft'}.pdf`);
+                area.innerHTML='';
+            }).catch(e=>{
+                console.error('Invoice PDF generation failed:',e);
+                alert('Invoice PDF generation failed. Please try again.');
+                area.innerHTML='';
+            });
+        },300);
+    };;
 
     // HTML already contains the single LCL BL chooser option.
     // Keep the existing planner initialization only; do not append another LCL option.
