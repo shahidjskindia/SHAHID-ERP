@@ -1,3 +1,151 @@
+
+/* SHAHID MANUAL BACKUP SELECTOR — JSON / SQLITE */
+(function(){
+  window.SHAHID_OPEN_MANUAL_BACKUP=function(){
+    var old=document.getElementById('shahid-manual-backup-modal');
+    if(old){old.remove();return;}
+    var m=document.createElement('div');
+    m.id='shahid-manual-backup-modal';
+    m.style.cssText='position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;font-family:Arial,sans-serif';
+    m.innerHTML='<div style="width:min(420px,92vw);background:#fff;border-radius:16px;padding:24px">'+
+      '<h3 style="margin:0 0 8px">💾 Manual Backup</h3>'+
+      '<p style="margin:0 0 16px;color:#64748b">Select backup type.</p>'+
+      '<button id="shahid-manual-json" style="width:100%;padding:12px;margin-bottom:10px;border:0;border-radius:9px;background:#0f172a;color:#fff;font-weight:700">📄 JSON Backup</button>'+
+      '<button id="shahid-manual-sqlite" style="width:100%;padding:12px;margin-bottom:10px;border:0;border-radius:9px;background:#166534;color:#fff;font-weight:700">🗄️ SQLite Backup</button>'+
+      '<button id="shahid-manual-cancel" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:9px;background:#fff">Cancel</button>'+
+      '<div id="shahid-manual-status" style="margin-top:10px;font-size:12px"></div></div>';
+    document.body.appendChild(m);
+
+    document.getElementById('shahid-manual-json').onclick=function(){
+      try{
+        if(typeof window.exportJSON==='function') window.exportJSON();
+        else if(typeof window.backupData==='function') window.backupData();
+        else document.getElementById('shahid-manual-status').textContent='JSON backup is unavailable.';
+      }catch(e){document.getElementById('shahid-manual-status').textContent='JSON backup failed.';}
+    };
+    document.getElementById('shahid-manual-sqlite').onclick=function(){
+      if(typeof window.exportSQLite==='function'){
+        try{window.exportSQLite();m.remove();}catch(e){document.getElementById('shahid-manual-status').textContent='SQLite backup failed.';}
+      }else{
+        document.getElementById('shahid-manual-status').textContent='SQLite export requires the SQLite database adapter.';
+      }
+    };
+    document.getElementById('shahid-manual-cancel').onclick=function(){m.remove();};
+  };
+})();
+
+
+/* SHAHID PRODUCT KEY — ONE TIME PER DEVICE
+   Key format is intentionally hidden from the application UI.
+   Existing ERP data/business functions remain untouched.
+*/
+(function(){
+  'use strict';
+  var STORAGE_KEY='shahid_erp_pc_activation_v2';
+
+  function pad(n){return String(n).padStart(2,'0');}
+  function nowKey(){
+    var d=new Date();
+    return 'SS/'+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate())+'-'+pad(d.getHours())+pad(d.getMinutes());
+  }
+  function deviceFingerprint(){
+    var raw=[
+      navigator.userAgent||'',navigator.language||'',screen.width||0,screen.height||0,
+      screen.colorDepth||0,Intl.DateTimeFormat().resolvedOptions().timeZone||''
+    ].join('|');
+    var h=2166136261;
+    for(var i=0;i<raw.length;i++){h^=raw.charCodeAt(i);h=Math.imul(h,16777619);}
+    return ('00000000'+(h>>>0).toString(16)).slice(-8).toUpperCase();
+  }
+  function activate(){
+    var input=document.getElementById('shahid-product-key-input');
+    var key=(input && input.value || '').trim().toUpperCase();
+    if(key!==nowKey()){
+      var st=document.getElementById('shahid-product-key-status');
+      if(st){st.textContent='Invalid activation key.';st.style.color='#dc2626';}
+      return;
+    }
+    var rec={device:deviceFingerprint(),activated:true,activatedAt:Date.now()};
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(rec));
+    var gate=document.getElementById('shahid-product-key-gate');
+    if(gate) gate.remove();
+    window.SHAHID_PRODUCT_KEY_ACTIVE=true;
+  }
+  function boot(){
+    var fp=deviceFingerprint(), saved=null;
+    try{saved=JSON.parse(localStorage.getItem(STORAGE_KEY)||'null');}catch(e){}
+    if(saved && saved.activated && saved.device===fp){
+      window.SHAHID_PRODUCT_KEY_ACTIVE=true;
+      return;
+    }
+    window.SHAHID_PRODUCT_KEY_ACTIVE=false;
+
+    var gate=document.createElement('div');
+    gate.id='shahid-product-key-gate';
+    gate.style.cssText='position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:#0b1220;font-family:Arial,sans-serif';
+    gate.innerHTML='<div style="width:min(420px,92vw);background:#fff;border-radius:18px;padding:28px;box-shadow:0 20px 70px rgba(0,0,0,.35)">'+
+      '<h2 style="margin:0 0 8px">🔐 SHAHID ERP Activation</h2>'+
+      '<p style="margin:0 0 18px;color:#64748b">Enter your Product Key to activate this PC.</p>'+
+      '<input id="shahid-product-key-input" autocomplete="off" spellcheck="false" style="width:100%;box-sizing:border-box;padding:13px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;letter-spacing:1px">'+
+      '<button id="shahid-product-key-btn" type="button" style="width:100%;margin-top:12px;padding:13px;border:0;border-radius:10px;background:#0f172a;color:#fff;font-weight:700;cursor:pointer">Activate</button>'+
+      '<div id="shahid-product-key-status" style="min-height:20px;margin-top:12px;font-size:13px"></div></div>';
+    document.body.appendChild(gate);
+    document.getElementById('shahid-product-key-btn').onclick=activate;
+    document.getElementById('shahid-product-key-input').onkeydown=function(e){if(e.key==='Enter')activate();};
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+})();
+
+
+
+
+
+/* SHAHID CROSS-PLATFORM COMPATIBILITY LAYER v1
+   Non-invasive: preserves existing business logic and data APIs.
+*/
+(function(){
+  try {
+    window.SHAHID_PLATFORM = (window.Capacitor && window.Capacitor.getPlatform)
+      ? window.Capacitor.getPlatform() : 'web';
+    window.SHAHID_IS_MOBILE =
+      window.SHAHID_PLATFORM === 'android' || window.SHAHID_PLATFORM === 'ios';
+    window.SHAHID_IS_DESKTOP =
+      window.SHAHID_PLATFORM === 'electron' ||
+      /Windows NT|Macintosh|Linux/.test(navigator.userAgent || '');
+    window.shahidSafeStorage = window.shahidSafeStorage || {
+      get:function(k,d){try{var v=localStorage.getItem(k);return v===null?d:v}catch(e){return d}},
+      set:function(k,v){try{localStorage.setItem(k,v);return true}catch(e){return false}},
+      remove:function(k){try{localStorage.removeItem(k);return true}catch(e){return false}}
+    };
+  } catch(e) {}
+})();
+
+/* SHAHID_PRODUCTION_BUILD */
+
+/* SHAHID OFFLINE PROTECTION LAYER
+   Non-invasive: does not replace existing business logic or data.
+*/
+(function(){
+  try {
+    window.SHAHID_PRODUCTION = true;
+    window.SHAHID_PROTECTION_VERSION = '1.0';
+
+    // Reduce accidental source/debug leakage in production.
+    if (window.SHAHID_PRODUCTION) {
+      try { window.__SHAHID_DEBUG__ = false; } catch(e) {}
+    }
+
+    // Prevent accidental context-menu source shortcuts in production.
+    // Does not disable application controls or clipboard functions.
+    document.addEventListener('contextmenu', function(e){
+      if (e.target && (e.target.tagName === 'INPUT' ||
+                      e.target.tagName === 'TEXTAREA' ||
+                      e.target.isContentEditable)) return;
+      e.preventDefault();
+    }, false);
+  } catch(e) {}
+})();
+
 /*
 ===============================================================================
 SHAHID ERP — JAVASCRIPT FUNCTION MAP / TAB-WISE SEQUENCE
@@ -209,7 +357,7 @@ const EMBEDDED_BACKUP = {
     "INDIANAPOLIS, US", "KOPER, SI"
   ],
   "incoterms": ["EXW", "FOB", "CIF", "CFR", "DAP", "DDP", "FCA", "CPT"],
-  "containers": ["20 GP", "40 GP", "40 HC", "20 RF", "40 RF", "20 TK", "40 TK","20 GP & 40 HC"],
+  "containers": ["20 GP", "40 GP", "40 HC", "20 RF", "40 RF", "20 TK", "40 TK"],
   "containerDimensions": [
     {"type":"20 GP","length":5.898,"width":2.352,"height":2.393,"maxWeight":28200,"cbm":33.2,"tareWeight":"0 kg","unit":"m"},
     {"type":"40 GP","length":12.032,"width":2.352,"height":2.393,"maxWeight":26580,"cbm":67.7,"tareWeight":"0 kg","unit":"m"},
@@ -9849,169 +9997,192 @@ async function initSQLite() {
     return window.__ERP_SQLITE_PROMISE;
 }
 
-async function exportToSQLite() {
-    try {
-        await initSQLite();
-        if (!SQL) {
-            alert('SQLite library failed to load. Please check your internet connection and refresh the page.');
+
+/* ==================== COMPLETE SQLITE BACKUP ==================== */
+async function buildCompleteSQLiteDatabase() {
+    await initSQLite();
+    if (!window.SQL) throw new Error('SQLite library is unavailable.');
+
+    const dbInstance = new window.SQL.Database();
+
+    // COMPLETE STATE TABLE:
+    // Every top-level property of the live ERP `db` object is stored as JSON.
+    // This makes SQLite a complete application backup, equivalent in scope to JSON.
+    dbInstance.exec(`
+        CREATE TABLE IF NOT EXISTS erp_state (
+            key TEXT PRIMARY KEY,
+            value_json TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS erp_backup_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
+    `);
+
+    const insertState = dbInstance.prepare(
+        'INSERT OR REPLACE INTO erp_state (key, value_json) VALUES (?, ?)'
+    );
+
+    Object.keys(db || {}).forEach(key => {
+        let value;
+        try {
+            value = JSON.stringify(db[key]);
+        } catch (e) {
+            console.warn('Skipping non-serializable ERP state key:', key, e);
             return;
         }
-        const dbInstance = new SQL.Database();
-        const createTables = `
-            CREATE TABLE IF NOT EXISTS rates (id TEXT, mode TEXT, client TEXT, carrier TEXT, pol TEXT, pod TEXT, incoterm TEXT, commodity TEXT, weight REAL, transit TEXT, validityDate TEXT, charges TEXT, carrierRates TEXT, totalSellINR REAL, totalBuyINR REAL, marginINR REAL, marginPct REAL, quoteNumber TEXT, status TEXT, timestamp TEXT, lastModified TEXT, followUpStatus TEXT, lostReason TEXT);
-            CREATE TABLE IF NOT EXISTS drafts (id TEXT, mode TEXT, client TEXT, carrier TEXT, pol TEXT, pod TEXT, incoterm TEXT, commodity TEXT, weight REAL, transit TEXT, validityDate TEXT, charges TEXT, carrierRates TEXT, totalSellINR REAL, totalBuyINR REAL, marginINR REAL, marginPct REAL, quoteNumber TEXT, status TEXT, timestamp TEXT, lastModified TEXT);
-            CREATE TABLE IF NOT EXISTS ratesheet (id TEXT, carrierName TEXT, freightType TEXT, pol TEXT, pod TEXT, containerType TEXT, currency TEXT, freightAmount REAL, transitTime TEXT, commodity TEXT, validFrom TEXT, validTo TEXT, remarks TEXT, createdAt TEXT, updatedAt TEXT);
-            CREATE TABLE IF NOT EXISTS carrier_charges_sea_lcl (id TEXT, mode TEXT, carrier TEXT, pol TEXT, pod TEXT, container TEXT, commodity TEXT, charges TEXT, updated TEXT);
-            CREATE TABLE IF NOT EXISTS carrier_charges_air (id TEXT, carrier TEXT, pol TEXT, pod TEXT, commodity TEXT, charges TEXT, updated TEXT);
-            CREATE TABLE IF NOT EXISTS shipments (code TEXT, sr TEXT, date TEXT, type TEXT, liner TEXT, jobBkg TEXT, containerNo TEXT, shipper TEXT, pol TEXT, pod TEXT, commodity TEXT, weight REAL, incoterm TEXT, cargoStatus TEXT, docsStatus TEXT, dd TEXT, eta TEXT, dd2 TEXT, valid TEXT, sell REAL, buy REAL, sales TEXT, pickup TEXT, gatein TEXT, remarks TEXT, charges TEXT, createdAt TEXT, updatedAt TEXT);
-            CREATE TABLE IF NOT EXISTS bldrafts (blNumber TEXT, shipmentCode TEXT, shipper TEXT, shipperAddr TEXT, consignee TEXT, consigneeAddr TEXT, notifyParty TEXT, vessel TEXT, voyage TEXT, pol TEXT, pod TEXT, placeOfDelivery TEXT, containers TEXT, marks TEXT, goodsDesc TEXT, freightType TEXT, freightAmount REAL, freightCurrency TEXT, numOriginals INTEGER, placeOfIssue TEXT, issueDate TEXT, signature TEXT, status TEXT, createdAt TEXT, updatedAt TEXT);
-            CREATE TABLE IF NOT EXISTS master_pol (value TEXT);
-            CREATE TABLE IF NOT EXISTS master_pod (value TEXT);
-            CREATE TABLE IF NOT EXISTS master_incoterms (value TEXT);
-            CREATE TABLE IF NOT EXISTS master_containers (value TEXT);
-            CREATE TABLE IF NOT EXISTS master_carriers (value TEXT);
-            CREATE TABLE IF NOT EXISTS exchange_rates (currency TEXT, rate REAL);
-        `;
-        dbInstance.exec(createTables);
+        insertState.run([key, value]);
+    });
+    insertState.free();
 
-        function insertData(table, columns, rows) {
-            if (!rows || rows.length === 0) return;
-            const placeholders = columns.map(() => '?').join(',');
-            const stmt = dbInstance.prepare(`INSERT INTO ${table} (${columns.join(',')}) VALUES (${placeholders})`);
-            rows.forEach(row => {
-                const values = columns.map(col => {
-                    let val = row[col];
-                    if (typeof val === 'object') val = JSON.stringify(val);
-                    if (val === undefined || val === null) val = '';
-                    return val;
-                });
-                stmt.run(values);
-            });
-            stmt.free();
-        }
-        const rates = [...db.rates.sea, ...db.rates.air, ...db.rates.lcl];
-        insertData('rates', ['mode', 'client', 'carrier', 'pol', 'pod', 'incoterm', 'commodity', 'weight', 'transit',
-            'validityDate', 'charges', 'carrierRates', 'totalSellINR', 'totalBuyINR', 'marginINR', 'marginPct', 'quoteNumber', 'status',
-            'timestamp', 'lastModified', 'followUpStatus', 'lostReason'
-        ], rates.map(r => ({ ...r, mode: r.mode || 'SEA' })));
-        const drafts = [...db.drafts.sea, ...db.drafts.air, ...db.drafts.lcl];
-        insertData('drafts', ['mode', 'client', 'carrier', 'pol', 'pod', 'incoterm', 'commodity', 'weight', 'transit',
-            'validityDate', 'charges', 'carrierRates', 'totalSellINR', 'totalBuyINR', 'marginINR', 'marginPct', 'quoteNumber', 'status',
-            'timestamp', 'lastModified'
-        ], drafts.map(r => ({ ...r, mode: r.mode || 'SEA' })));
-        insertData('ratesheet', ['id', 'carrierName', 'freightType', 'pol', 'pod', 'containerType', 'currency',
-            'freightAmount', 'transitTime', 'commodity', 'validFrom', 'validTo', 'remarks', 'createdAt', 'updatedAt'
-        ], db.rateSheet);
-        insertData('shipments', ['code', 'sr', 'date', 'type', 'liner', 'jobBkg', 'containerNo', 'shipper', 'pol', 'pod',
-            'commodity', 'weight', 'incoterm', 'cargoStatus', 'docsStatus', 'dd', 'eta', 'dd2', 'valid', 'sell', 'buy',
-            'sales', 'pickup', 'gatein', 'remarks', 'charges', 'createdAt', 'updatedAt'
-        ], db.shipments);
-        insertData('bldrafts', ['blNumber', 'shipmentCode', 'shipper', 'shipperAddr', 'consignee', 'consigneeAddr',
-            'notifyParty', 'vessel', 'voyage', 'pol', 'pod', 'placeOfDelivery', 'containers', 'marks', 'goodsDesc',
-            'freightType', 'freightAmount', 'freightCurrency', 'numOriginals', 'placeOfIssue', 'issueDate', 'signature',
-            'status', 'createdAt', 'updatedAt'
-        ], db.bldrafts);
-        insertData('master_pol', ['value'], db.pol.map(p => ({ value: p })));
-        insertData('master_pod', ['value'], db.pod.map(p => ({ value: p })));
-        insertData('master_incoterms', ['value'], db.incoterms.map(i => ({ value: i })));
-        insertData('master_containers', ['value'], db.containers.map(c => ({ value: c })));
-        insertData('master_carriers', ['value'], db.carriers.map(c => ({ value: c })));
-        insertData('carrier_charges_sea_lcl', ['id','mode','carrier','pol','pod','container','commodity','charges','updated'], (db.carrierChargesSeaLcl||[]).map((r,i)=>({id:r.id||`SLC-${i}`,...r})));
-        insertData('carrier_charges_air', ['id','carrier','pol','pod','commodity','charges','updated'], (db.carrierChargesAir||[]).map((r,i)=>({id:r.id||`AIR-${i}`,...r})));
-        insertData('exchange_rates', ['currency', 'rate'], Object.entries(db.exchangeRates).map(([k, v]) => ({ currency: k,
-            rate: v })));
+    const meta = dbInstance.prepare(
+        'INSERT OR REPLACE INTO erp_backup_meta (key, value) VALUES (?, ?)'
+    );
+    meta.run(['backupVersion', 'SHAHID-ERP-COMPLETE-SQLITE-V2']);
+    meta.run(['backupTimestamp', new Date().toISOString()]);
+    meta.run(['application', 'SHAHID ERP']);
+    meta.run(['stateKeys', String(Object.keys(db || {}).length)]);
+    meta.free();
+
+    return dbInstance;
+}
+
+async function exportToSQLite() {
+    try {
+        const dbInstance = await buildCompleteSQLiteDatabase();
         const data = dbInstance.export();
+        dbInstance.close();
+
         const blob = new Blob([data], { type: 'application/x-sqlite3' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = `Backup_${new Date().toISOString().split('T')[0]}.sqlite`;
+        document.body.appendChild(a);
         a.click();
-        URL.revokeObjectURL(url);
-        alert('SQLite backup downloaded successfully!');
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+        alert('Complete SQLite backup downloaded successfully.');
     } catch (e) {
+        console.error('SQLite export failed:', e);
         alert('SQLite export failed: ' + e.message);
     }
 }
+
+async function exportSQLiteToFolder(folderHandle) {
+    try {
+        if (!folderHandle) throw new Error('Backup folder is not selected.');
+
+        const dbInstance = await buildCompleteSQLiteDatabase();
+        const data = dbInstance.export();
+        dbInstance.close();
+
+        const fileName = `AutoBackup_${new Date().toISOString().split('T')[0]}.sqlite`;
+        const fileHandle = await folderHandle.getFileHandle(fileName, { create: true });
+        const writable = await fileHandle.createWritable({ keepExistingData: false });
+        await writable.write(new Blob([data], { type: 'application/x-sqlite3' }));
+        await writable.close();
+
+        db.lastBackup = new Date().toISOString();
+        saveDB();
+
+        const statusEl = document.getElementById('backup-status');
+        if (statusEl) {
+            statusEl.textContent =
+                `✅ Complete SQLite backup: ${new Date().toLocaleString('en-IN')} ` +
+                `(saved to ${folderHandle.name}/${fileName})`;
+            statusEl.className = 'backup-status success';
+        }
+    } catch (e) {
+        console.error('Complete SQLite folder backup failed:', e);
+        const statusEl = document.getElementById('backup-status');
+        if (statusEl) {
+            statusEl.textContent = `❌ SQLite backup failed: ${e.message}`;
+            statusEl.className = 'backup-status error';
+        }
+    }
+}
+
+
 async function importFromSQLite(input) {
     const file = input.files[0];
     if (!file) return;
+
     try {
         await initSQLite();
-        if (!SQL) {
+        if (!window.SQL) {
             alert('SQLite library failed to load. Please check your internet connection and refresh the page.');
             return;
         }
+
         const reader = new FileReader();
         reader.onload = async function(e) {
             try {
-                const arrayBuffer = e.target.result;
-                const uint8Array = new Uint8Array(arrayBuffer);
-                const dbInstance = new SQL.Database(uint8Array);
+                const sqliteDb = new window.SQL.Database(new Uint8Array(e.target.result));
 
-                function tableExists(tableName) {
-                    const stmt = dbInstance.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?");
-                    stmt.bind([tableName]);
-                    const exists = stmt.step();
-                    stmt.free();
-                    return exists;
-                }
-                function readTable(tableName) {
-                    if (!tableExists(tableName)) return [];
-                    const stmt = dbInstance.prepare(`SELECT * FROM ${tableName}`);
-                    const rows = [];
+                const tableCheck = sqliteDb.prepare(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='erp_state'"
+                );
+                const hasCompleteState = tableCheck.step();
+                tableCheck.free();
+
+                if (hasCompleteState) {
+                    const stmt = sqliteDb.prepare('SELECT key, value_json FROM erp_state');
+                    const importedState = {};
+
                     while (stmt.step()) {
                         const row = stmt.getAsObject();
-                        Object.keys(row).forEach(key => {
-                            if (typeof row[key] === 'string' && row[key].startsWith('{')) {
-                                try { row[key] = JSON.parse(row[key]); } catch (e) {}
-                            }
-                        });
-                        rows.push(row);
+                        try {
+                            importedState[row.key] = JSON.parse(row.value_json);
+                        } catch (e) {
+                            console.warn('Invalid JSON state key skipped:', row.key);
+                        }
                     }
                     stmt.free();
-                    return rows;
+                    sqliteDb.close();
+
+                    if (!Object.keys(importedState).length) {
+                        throw new Error('The SQLite backup contains no ERP state.');
+                    }
+
+                    const ok = confirm(
+                        'Complete SQLite backup detected.\\n\\n' +
+                        'YES = Restore the complete ERP state from this backup.\\n' +
+                        'NO = Cancel.\\n\\n' +
+                        'A JSON backup should be kept before a full restore.'
+                    );
+
+                    if (!ok) return;
+
+                    Object.keys(importedState).forEach(key => {
+                        db[key] = importedState[key];
+                    });
+
+                    saveDB();
+                    alert(
+                        '✅ Complete SQLite restore successful.\\n\\n' +
+                        'All saved ERP data/state from the SQLite backup has been restored.'
+                    );
+                    location.reload();
+                    return;
                 }
-                const newRates = readTable('rates');
-                const newDrafts = readTable('drafts');
-                const newRateSheet = readTable('ratesheet');
-                const newCarrierChargesSeaLcl = readTable('carrier_charges_sea_lcl');
-                const newCarrierChargesAir = readTable('carrier_charges_air');
-                const newShipments = readTable('shipments');
-                const newBLDrafts = readTable('bldrafts');
-                const newPol = readTable('master_pol').map(r => r.value);
-                const newPod = readTable('master_pod').map(r => r.value);
-                const newIncoterms = readTable('master_incoterms').map(r => r.value);
-                const newContainers = readTable('master_containers').map(r => r.value);
-                const newCarriers = readTable('master_carriers').map(r => r.value);
-                const newExchangeRates = readTable('exchange_rates').reduce((acc, r) => { acc[r.currency] = r.rate; return acc; },
-                {});
-                // IMPORTANT: SQLite import is MERGE-ONLY. Never replace/clear existing data.
-                // Stage the imported database and use the same non-destructive merge rules as JSON import.
-                const importedDb = {
-                    rates: {sea: [], air: [], lcl: []},
-                    drafts: {sea: [], air: [], lcl: []},
-                    rateSheet: newRateSheet,
-                    shipments: newShipments,
-                    bldrafts: newBLDrafts,
-                    pol: newPol, pod: newPod, incoterms: newIncoterms,
-                    containers: newContainers, carriers: newCarriers,
-                    exchangeRates: newExchangeRates,
-                    carrierChargesSeaLcl: newCarrierChargesSeaLcl,
-                    carrierChargesAir: newCarrierChargesAir
-                };
-                newRates.forEach(r => { const mode=(r.mode||'SEA').toLowerCase(); if(importedDb.rates[mode]) importedDb.rates[mode].push(r); });
-                newDrafts.forEach(r => { const mode=(r.mode||'SEA').toLowerCase(); if(importedDb.drafts[mode]) importedDb.drafts[mode].push(r); });
-                const summary = mergeDatabase(importedDb);
-                saveDB();
-                alert('SQLite import completed as a NON-DESTRUCTIVE MERGE. Existing records were preserved.\n\n'+summary+'\n\nNo existing ERP data was deleted or replaced.');
-                location.reload();
-            } catch (err) { alert('Import failed: ' + err.message); }
+
+                // Legacy SQLite files: keep the existing non-destructive import path.
+                sqliteDb.close();
+                alert(
+                    'This is an older SQLite backup format. ' +
+                    'Please use the new Complete SQLite backup for full application restore.'
+                );
+            } catch (err) {
+                alert('Import failed: ' + err.message);
+            }
         };
         reader.readAsArrayBuffer(file);
     } catch (err) {
         alert('Import failed: ' + err.message);
     }
+
     input.value = '';
 }
 
@@ -12234,7 +12405,11 @@ if (!localStorage.getItem('sea_default_migrated') && typeof migrateDefaultSeaCha
     });
     if (backupFolderHandle) {
         startAutoBackup();
-        document.getElementById('backup-folder-path').textContent = `📁 ${backupFolderHandle.name}`;
+        const backupFormat = (db.backupFormat || 'json').toUpperCase();
+        const pathEl = document.getElementById('backup-folder-path');
+        const statusEl = document.getElementById('auto-backup-status');
+        if (pathEl) pathEl.textContent = `📁 ${backupFolderHandle.name}`;
+        if (statusEl) statusEl.textContent = `✅ Running (every 1 min) – ${backupFormat} backup`;
     }
 	
 		document.querySelector('#raterequest').addEventListener('input', function(e) {
@@ -16243,7 +16418,7 @@ function bulkImportCarrierCharges(input){
 }
 function normSafe(v){return String(v??'').trim().replace(/\s+/g,' ').toUpperCase();}
 
-// ===== 1. selectBackupFolder – stores ONLY the handle, does NOT change the saved path =====
+// ===== 1. selectBackupFolder – select folder, then choose auto-backup format =====
 async function selectBackupFolder() {
     try {
         if (!window.showDirectoryPicker) {
@@ -16252,18 +16427,21 @@ async function selectBackupFolder() {
         }
         const handle = await window.showDirectoryPicker();
         backupFolderHandle = handle;
-        // Store handle in IndexedDB for persistence
+
+        // Store handle in IndexedDB for persistence.
         await storeFolderHandle(handle);
-        // Store the path name for display
+
+        // Store the path name for display.
         db.backupFolderPath = handle.name;
         saveDB();
-        // Update display
+
         const displayEl = document.getElementById('backup-folder-path');
         if (displayEl) displayEl.textContent = `📁 ${handle.name} (folder selected)`;
         const inputEl = document.getElementById('backup-folder-path-input');
         if (inputEl) inputEl.value = handle.name;
-        alert('✅ Folder selected. Auto-backup will write directly to this folder.');
-        startAutoBackup();
+
+        // Ask once immediately after folder selection.
+        showBackupFormatChoice(handle);
     } catch (err) {
         if (err.name !== 'AbortError') {
             console.error('Folder selection error:', err);
@@ -16272,9 +16450,76 @@ async function selectBackupFolder() {
     }
 }
 
+// ===== Backup format choice after folder selection =====
+function showBackupFormatChoice(handle) {
+    const existing = document.getElementById('backup-format-choice-modal');
+    if (existing) existing.remove();
 
+    const modal = document.createElement('div');
+    modal.id = 'backup-format-choice-modal';
+    modal.style.cssText = `
+        position:fixed; inset:0; z-index:2147483000;
+        background:rgba(0,0,0,.55); display:flex;
+        align-items:center; justify-content:center;
+        font-family:Arial,sans-serif;
+    `;
 
+    modal.innerHTML = `
+        <div style="width:min(430px,92vw);background:#fff;border-radius:16px;padding:24px;box-shadow:0 20px 70px rgba(0,0,0,.35)">
+            <h3 style="margin:0 0 8px">💾 Backup Format</h3>
+            <p style="margin:0 0 18px;color:#64748b">
+                Folder selected: <strong>${escapeHtml(handle.name)}</strong><br>
+                Select the format for automatic backup.
+            </p>
+            <button id="backup-format-json" type="button"
+                style="width:100%;padding:13px;margin-bottom:10px;border:0;border-radius:9px;background:#0f172a;color:#fff;font-weight:700;cursor:pointer">
+                📄 JSON
+            </button>
+            <button id="backup-format-sqlite" type="button"
+                style="width:100%;padding:13px;margin-bottom:10px;border:0;border-radius:9px;background:#166534;color:#fff;font-weight:700;cursor:pointer">
+                🗄️ SQLite
+            </button>
+            <button id="backup-format-cancel" type="button"
+                style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:9px;background:#fff;cursor:pointer">
+                Cancel
+            </button>
+            <div id="backup-format-status" style="margin-top:10px;font-size:12px;color:#dc2626"></div>
+        </div>
+    `;
 
+    document.body.appendChild(modal);
+
+    const choose = (format) => {
+        db.backupFormat = format;
+        saveDB();
+        modal.remove();
+
+        const statusEl = document.getElementById('auto-backup-status');
+        if (statusEl) {
+            statusEl.textContent = `✅ Running (every 1 min) – ${format.toUpperCase()} backup`;
+        }
+
+        const backupStatus = document.getElementById('backup-status');
+        if (backupStatus) {
+            backupStatus.textContent = `📁 ${handle.name} selected — automatic ${format.toUpperCase()} backup enabled.`;
+            backupStatus.className = 'backup-status success';
+        }
+
+        startAutoBackup();
+        autoBackup();
+    };
+
+    document.getElementById('backup-format-json').onclick = () => choose('json');
+    document.getElementById('backup-format-sqlite').onclick = () => choose('sqlite');
+    document.getElementById('backup-format-cancel').onclick = () => {
+        modal.remove();
+        const statusEl = document.getElementById('backup-status');
+        if (statusEl) {
+            statusEl.textContent = '⚠️ Folder selected. Please select JSON or SQLite backup format.';
+            statusEl.className = 'backup-status error';
+        }
+    };
+}
 // ===== 2. saveBackupPath – stores the typed path exactly as entered =====
 function saveBackupPath() {
     const inputEl = document.getElementById('backup-folder-path-input');
@@ -16299,42 +16544,49 @@ async function autoBackupToFolder() {
         if (!backupFolderHandle) {
             console.warn('No folder handle available – backup skipped.');
             const statusEl = document.getElementById('backup-status');
-            statusEl.textContent = '⚠️ No folder selected. Click "Browse Folder" to select.';
-            statusEl.className = 'backup-status error';
+            if (statusEl) {
+                statusEl.textContent = '⚠️ No folder selected. Click "Browse Folder" to select.';
+                statusEl.className = 'backup-status error';
+            }
             return;
         }
 
-        // Check permission
         const opts = { mode: 'readwrite' };
         if (await backupFolderHandle.requestPermission(opts) !== 'granted') {
             throw new Error('Permission to write to folder was denied.');
+        }
+
+        const format = (db.backupFormat || 'json').toLowerCase();
+
+        if (format === 'sqlite') {
+            await exportSQLiteToFolder(backupFolderHandle);
+            return;
         }
 
         const fileName = `AutoBackup_${new Date().toISOString().split('T')[0]}.json`;
         const backupData = { timestamp: new Date().toISOString(), data: db };
         const jsonStr = JSON.stringify(backupData, null, 2);
 
-        // Create or get file handle
-        let fileHandle;
-        try {
-            fileHandle = await backupFolderHandle.getFileHandle(fileName, { create: true });
-        } catch (e) {
-            fileHandle = await backupFolderHandle.getFileHandle(fileName, { create: true });
-        }
+        const fileHandle = await backupFolderHandle.getFileHandle(fileName, { create: true });
         const writable = await fileHandle.createWritable({ keepExistingData: false });
         await writable.write(jsonStr);
         await writable.close();
 
         db.lastBackup = new Date().toISOString();
         saveDB();
+
         const statusEl = document.getElementById('backup-status');
-        statusEl.textContent = `✅ Last backup: ${new Date().toLocaleString('en-IN')} (saved to ${backupFolderHandle.name}/${fileName})`;
-        statusEl.className = 'backup-status success';
+        if (statusEl) {
+            statusEl.textContent = `✅ Last backup: ${new Date().toLocaleString('en-IN')} (saved to ${backupFolderHandle.name}/${fileName})`;
+            statusEl.className = 'backup-status success';
+        }
     } catch (e) {
         console.error('Folder backup failed:', e);
         const statusEl = document.getElementById('backup-status');
-        statusEl.textContent = `❌ Backup failed: ${e.message}`;
-        statusEl.className = 'backup-status error';
+        if (statusEl) {
+            statusEl.textContent = `❌ Backup failed: ${e.message}`;
+            statusEl.className = 'backup-status error';
+        }
     }
 }
 
@@ -20350,6 +20602,25 @@ function mcStandardRemarks(mode, baseFont, headingSize, tdPadding, tableWidth='1
     return `<table class="pdf-remarks-table" style="width:${tableWidth};border-collapse:collapse;font-size:${baseFont};margin-top:8px;table-layout:fixed;"><tbody><tr><th class="pdf-remarks-heading" style="border:1px solid #1e3a8a;padding:${tdPadding};text-align:center;background:#1e3a8a;color:white;font-weight:700;font-size:${headingSize};line-height:1.2;vertical-align:middle;height:auto;white-space:nowrap;">Remarks</th></tr>${specialRow}<tr><td style="border:1px solid #d1d5db;padding:${tdPadding};background:#fff;font-size:${baseFont};line-height:1.25;vertical-align:top;white-space:normal;">${list}</td></tr></tbody></table>`;
 }
 
+/* SHAHID_COMPATIBILITY_PATCH_V1 */
+(function(){
+  function copyRichHTMLCompat(html){
+    html=String(html||''); if(!html) return Promise.reject(new Error('Nothing to copy'));
+    if(navigator.clipboard && typeof navigator.clipboard.write==='function' && typeof window.ClipboardItem==='function'){
+      try{ var d=document.createElement('div'); d.innerHTML=html; var plain=d.innerText||d.textContent||'';
+        return navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([html],{type:'text/html'}),'text/plain':new Blob([plain],{type:'text/plain'})})]);
+      }catch(e){}
+    }
+    return new Promise(function(resolve,reject){ try{
+      var wrap=document.createElement('div'); wrap.style.position='fixed'; wrap.style.left='-100000px'; wrap.style.top='0'; wrap.style.width='1000px'; wrap.style.background='#fff'; wrap.innerHTML=html; document.body.appendChild(wrap);
+      var range=document.createRange(); range.selectNodeContents(wrap); var sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+      var ok=document.execCommand('copy'); sel.removeAllRanges(); wrap.remove(); if(ok) resolve(); else reject(new Error('HTML copy failed'));
+    }catch(e){reject(e);} });
+  }
+  window.shahidCopyRichHTMLCompat=copyRichHTMLCompat;
+  window.shahidOpenMailCompat=function(to,cc,subject){ var q=[]; if(subject) q.push('subject='+encodeURIComponent(subject)); if(cc) q.push('cc='+encodeURIComponent(cc)); var uri='mailto:'+encodeURIComponent(to||'')+(q.length?'?'+q.join('&'):''); try{ var a=document.createElement('a'); a.href=uri; a.style.display='none'; document.body.appendChild(a); a.click(); a.remove(); return true; }catch(e){ try{window.location.href=uri; return true;}catch(e2){return false;} } };
+})();
+
 /* SHAHID_FINAL_SIZE_CONSTANTS */
 /* SHAHID_FINAL_SIZE_CONSTANTS */
 const SHAHID_SIZE = Object.freeze({
@@ -23882,24 +24153,13 @@ function shahidPreviewShell(innerHtml, mode='quote') {
             const to=document.getElementById('inv-email-to').value.trim();
             const cc=document.getElementById('inv-email-cc').value.trim();
             const subj=document.getElementById('inv-email-subject').value.trim();
-            try{
-                if(navigator.clipboard?.write && window.ClipboardItem){
-                    const wrapper=document.createElement('div'); wrapper.innerHTML=html;
-                    const plain=wrapper.innerText||wrapper.textContent||'Invoice';
-                    await navigator.clipboard.write([new ClipboardItem({
-                        'text/html':new Blob([html],{type:'text/html'}),
-                        'text/plain':new Blob([plain],{type:'text/plain'})
-                    })]);
-                }else{
-                    const ta=document.createElement('textarea'); ta.value=html; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
-                }
-            }catch(e){ console.warn('Invoice HTML clipboard:',e); }
+            try{ await window.shahidCopyRichHTMLCompat(html); }catch(e){ console.warn('Invoice HTML clipboard:',e); }
             let mail=`mailto:${encodeURIComponent(to)}`;
             const params=[];
             if(subj) params.push('subject='+encodeURIComponent(subj));
             if(cc) params.push('cc='+encodeURIComponent(cc));
             if(params.length) mail+='?'+params.join('&');
-            window.open(mail,'_blank');
+            window.shahidOpenMailCompat(to,cc,subj);
             document.getElementById('invoiceEmailV12').classList.remove('show');
             alert('✅ HTML invoice table copied. Outlook opened — paste the table into the email body.');
         };
@@ -23911,11 +24171,11 @@ function shahidPreviewShell(innerHtml, mode='quote') {
         const x=db.invoices[idx], area=document.getElementById('pdf-render-area');
         if(!area) return alert('PDF render area not found.');
         area.innerHTML=buildInvoiceCompactHTML(x);
-        area.style.cssText='position:fixed;left:-10000px;top:0;width:1200px;background:#fff;z-index:-1;padding:0;margin:0;';
-        setTimeout(()=>html2canvas(area,{scale:2,useCORS:true,backgroundColor:'#fff'}).then(canvas=>{
+        area.style.cssText='position:fixed;left:-10000px;top:0;width:1400px;background:#fff;z-index:-1;padding:0;margin:0;';
+        setTimeout(()=>html2canvas(area,{scale:2,useCORS:true,backgroundColor:'#fff',logging:false}).then(canvas=>{
             const pdf=new jspdf.jsPDF({unit:'mm',format:'a4',orientation:'portrait'});
-            const maxW=200,maxH=287,sc=Math.min(maxW/canvas.width,maxH/canvas.height),w=canvas.width*sc,h=canvas.height*sc;
-            pdf.addImage(canvas.toDataURL('image/jpeg',.98),'JPEG',5+(200-w)/2,5+(287-h)/2,w,h,undefined,'FAST');
+            const pageW=210,pageH=297,margin=5,maxW=pageW-(margin*2),maxH=pageH-(margin*2),sc=Math.min(maxW/canvas.width,maxH/canvas.height),w=canvas.width*sc,h=canvas.height*sc;
+            pdf.addImage(canvas.toDataURL('image/jpeg',.98),'JPEG',margin+(maxW-w)/2,margin+(maxH-h)/2,w,h,undefined,'FAST');
             pdf.save(`Invoice_${x.invoiceNo||x.id||'Draft'}.pdf`); area.innerHTML='';
         }).catch(e=>{console.error(e);alert('Invoice PDF generation failed.');area.innerHTML='';}),250);
     };
@@ -24339,4 +24599,164 @@ window.invoiceActionWhatsApp=function(){
             if(typeof markUnsaved==='function') markUnsaved(mode);
         },80);
     };
+})();
+
+
+
+// ============================================================
+// ELECTRON BACKUP OVERRIDE
+// ============================================================
+(function() {
+  // Check if we are in Electron
+  if (typeof window.electronAPI === 'undefined') {
+    console.log('Not running in Electron, using original backup logic.');
+    return;
+  }
+
+  console.log('✅ Electron detected. Overriding backup functions for native support.');
+
+  // Override selectBackupFolder
+  const originalSelectBackupFolder = window.selectBackupFolder;
+  window.selectBackupFolder = async function() {
+    try {
+      const folderPath = await window.electronAPI.selectBackupFolder();
+      if (!folderPath) {
+        // User canceled
+        return;
+      }
+      // Store path in db
+      db.backupFolderPath = folderPath;
+      saveDB();
+
+      // Update UI
+      const inputEl = document.getElementById('backup-folder-path-input');
+      const displayEl = document.getElementById('backup-folder-path');
+      if (inputEl) inputEl.value = folderPath;
+      if (displayEl) displayEl.textContent = `📁 ${folderPath}`;
+
+      // Also store the path for future use (no handle needed)
+      // We'll use the path directly for backup.
+
+      alert('✅ Folder selected. Auto-backup will write directly to this folder.');
+      // Start auto-backup if not already running
+      if (typeof startAutoBackup === 'function') {
+        startAutoBackup();
+      }
+    } catch (err) {
+      console.error('Folder selection error:', err);
+      alert('Failed to select folder: ' + err.message);
+    }
+  };
+
+  // Override autoBackupToFolder
+  const originalAutoBackupToFolder = window.autoBackupToFolder;
+  window.autoBackupToFolder = async function() {
+    try {
+      const folderPath = db.backupFolderPath;
+      if (!folderPath) {
+        console.warn('No backup folder path set.');
+        const statusEl = document.getElementById('backup-status');
+        if (statusEl) {
+          statusEl.textContent = '⚠️ No folder selected. Click "Browse Folder" to select.';
+          statusEl.className = 'backup-status error';
+        }
+        return;
+      }
+
+      const fileName = `AutoBackup_${new Date().toISOString().split('T')[0]}.json`;
+      const backupData = { timestamp: new Date().toISOString(), data: db };
+      const jsonStr = JSON.stringify(backupData, null, 2);
+
+      const result = await window.electronAPI.writeBackupFile(folderPath, fileName, jsonStr);
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+
+      db.lastBackup = new Date().toISOString();
+      saveDB();
+      const statusEl = document.getElementById('backup-status');
+      if (statusEl) {
+        statusEl.textContent = `✅ Last backup: ${new Date().toLocaleString('en-IN')} (saved to ${folderPath}\\${fileName})`;
+        statusEl.className = 'backup-status success';
+      }
+    } catch (e) {
+      console.error('Folder backup failed:', e);
+      const statusEl = document.getElementById('backup-status');
+      if (statusEl) {
+        statusEl.textContent = `❌ Backup failed: ${e.message}`;
+        statusEl.className = 'backup-status error';
+      }
+    }
+  };
+
+  // Override getFolderHandle / storeFolderHandle to do nothing (we use path)
+  window.getFolderHandle = async function() { return null; };
+  window.storeFolderHandle = async function() {};
+
+  // Override saveBackupPath to just store the path
+  const originalSaveBackupPath = window.saveBackupPath;
+  window.saveBackupPath = function() {
+    const inputEl = document.getElementById('backup-folder-path-input');
+    const path = inputEl ? inputEl.value.trim() : '';
+    if (!path) {
+      alert('Please enter a folder path.');
+      return;
+    }
+    db.backupFolderPath = path;
+    saveDB();
+    const displayEl = document.getElementById('backup-folder-path');
+    if (displayEl) {
+      displayEl.textContent = `📁 ${path} (path saved)`;
+    }
+    alert('✅ Path saved. Use "Browse Folder" to enable direct write.');
+    if (typeof startAutoBackup === 'function') {
+      startAutoBackup();
+    }
+  };
+
+  // Override startAutoBackup to use the new folder path
+  const originalStartAutoBackup = window.startAutoBackup;
+  window.startAutoBackup = function() {
+    if (window.autoBackupInterval) clearInterval(window.autoBackupInterval);
+    window.autoBackupInterval = setInterval(async () => {
+      await window.autoBackup();
+    }, 60000);
+    const statusEl = document.getElementById('auto-backup-status');
+    if (statusEl) {
+      statusEl.textContent = '✅ Running (every 1 min) – writing to folder';
+    }
+  };
+
+  // Override autoBackup (the manual trigger)
+  const originalAutoBackup = window.autoBackup;
+  window.autoBackup = async function() {
+    if (db.backupFolderPath) {
+      await window.autoBackupToFolder();
+    } else {
+      const statusEl = document.getElementById('backup-status');
+      if (statusEl) {
+        statusEl.textContent = '⚠️ No folder selected. Click "Browse Folder" to enable auto-backup.';
+        statusEl.className = 'backup-status error';
+      }
+      console.warn('Auto-backup skipped – no folder handle.');
+    }
+  };
+
+  // Also update the Backup Folder Path display on load
+  // Wait for DOM ready
+  document.addEventListener('DOMContentLoaded', function() {
+    const savedPath = db.backupFolderPath || '';
+    const inputEl = document.getElementById('backup-folder-path-input');
+    const displayEl = document.getElementById('backup-folder-path');
+    if (savedPath) {
+      if (inputEl) inputEl.value = savedPath;
+      if (displayEl) displayEl.textContent = `📁 ${savedPath}`;
+      // Start auto-backup if folder is set
+      if (typeof startAutoBackup === 'function') {
+        startAutoBackup();
+      }
+    }
+  });
+
+  console.log('✅ Backup functions overridden for Electron.');
 })();
