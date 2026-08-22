@@ -1,0 +1,6 @@
+{
+  "appId": "com.shahid.erp",
+  "appName": "SHAHID ERP",
+  "webDir": ".",
+  "bundledWebRuntime": false
+}
