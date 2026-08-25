@@ -42,3 +42,76 @@ input[type="number"]:focus-visible {
 input[type="number"]:focus {
     overscroll-behavior: contain;
 }
+
+
+/* SHAHID ERP — OUTPUT PRINT SAFETY */
+@media print {
+    .quotation-preview,
+    .quotation-preview table,
+    .quotation-preview tr,
+    .quotation-preview td,
+    .quotation-preview th {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    .quotation-preview {
+        overflow: visible !important;
+    }
+
+    .quotation-preview td,
+    .quotation-preview th {
+        white-space: normal !important;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
+}
+
+
+.bl-cont-duplicate{min-width:38px;padding:8px 10px!important;font-weight:800;cursor:pointer;}
+
+
+.bldraft-enhanced-table th,.bldraft-enhanced-table td{font-size:.7rem;}
+.bldraft-enhanced-table td:nth-child(5),.bldraft-enhanced-table td:nth-child(6),.bldraft-enhanced-table td:nth-child(7),.bldraft-enhanced-table td:nth-child(8),.bldraft-enhanced-table td:nth-child(9){white-space:normal;}
+.bldraft-enhanced-table .bldraft-type-badge{display:inline-block;padding:2px 7px;border-radius:12px;background:#ffdf00;color:#111;font-size:.62rem;font-weight:900;border:1px solid #c7a900;}
+.bldraft-enhanced-table tbody tr:hover{background:rgba(59,130,246,.06)!important;}
+.bldraft-enhanced-table th:first-child,.bldraft-enhanced-table td:first-child{width:30px;min-width:30px;max-width:30px;padding:4px;}
+
+
+.bldraft-column-selector{margin:8px 0 10px;padding:10px 12px;background:#f7f9fc;border:1px solid #d8e0ea;border-radius:6px;}
+.bldraft-column-selector-title{font-weight:800;color:var(--bl-navy,#173b7a);margin-bottom:8px;}
+.bldraft-column-selector-grid{display:flex;flex-wrap:wrap;gap:7px 12px;}
+.bldraft-column-option{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;background:#fff;border:1px solid #d9e1ec;border-radius:5px;font-size:.75rem;cursor:pointer;}
+.bldraft-column-option input{margin:0;}
+.bldraft-column-selector-footer{display:flex;justify-content:space-between;align-items:center;margin-top:9px;font-size:.7rem;color:var(--text-light);}
+.bldraft-enhanced-table th,.bldraft-enhanced-table td{white-space:nowrap;}
+
+.bldraft-filter-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 10px;padding:9px 10px;background:#f7f9fc;border:1px solid #d8e0ea;border-radius:6px;}
+.bldraft-filter-bar label{display:flex;align-items:center;gap:5px;font-size:.75rem;font-weight:700;color:var(--text-light);}
+.bldraft-filter-bar input,.bldraft-filter-bar select{height:32px;padding:4px 8px;border:1px solid #cbd5e1;border-radius:5px;background:#fff;}
+.bldraft-filter-bar input[type="search"]{min-width:280px;}
+.bldraft-filter-empty{padding:18px;text-align:center;color:var(--text-light);background:#fff;border:1px solid #d8e0ea;border-radius:6px;margin-top:8px;}
+.bldraft-enhanced-table tbody tr{cursor:pointer;}
+
+/* GLOBAL INPUT / OUTPUT FONT STANDARD — requested 10px */
+input,
+select,
+textarea,
+output,
+table td,
+table th,
+.data-field,
+.output-field,
+.form-control,
+.form-input,
+.result-value,
+.result-field {
+  font-size: 10px !important;
+}
+
+/* SHAHID: Customer & Shipment Details +30% font-size amendment */
+.customer-shipment-details h3{font-size:1.105rem !important;}
+.customer-shipment-details .form-group label{font-size:0.91rem !important;}
+.customer-shipment-details .form-group input,.customer-shipment-details .form-group select,.customer-shipment-details .form-group textarea{font-size:1.079rem !important;}
+.customer-shipment-details .form-group input::placeholder,.customer-shipment-details .form-group textarea::placeholder{font-size:1.079rem !important;}
+.customer-shipment-details option{font-size:1.079rem !important;}
