@@ -1,4 +1,1077 @@
 
+/* SHAHID ERP — SECURITY DIAGNOSTICS */
+(function(){
+    'use strict';
+
+    window.SHAHID_SECURITY_STATUS = function(){
+        return {
+            developerMode: !!window.SHAHID_DEVELOPER_MODE,
+            integrity: window.SHAHID_INTEGRITY_STATUS || null,
+            database: 'SHAHID_ERP.sqlite',
+            note: 'Production security controls requiring native packaging/encryption must be enforced outside browser JavaScript.'
+        };
+    };
+})();
+
+
+/* SHAHID ERP — INTEGRITY MANIFEST HOOK
+   Runtime/package integrity must be enforced by the EXE/native layer.
+   This JS hook provides status reporting without pretending that JS can
+   cryptographically protect itself from a hostile runtime.
+*/
+(function(){
+    'use strict';
+
+    window.SHAHID_INTEGRITY_STATUS = {
+        checked: false,
+        valid: null,
+        source: 'native-package-layer-required'
+    };
+
+    window.SHAHID_SET_INTEGRITY_STATUS = function(valid){
+        window.SHAHID_INTEGRITY_STATUS = {
+            checked: true,
+            valid: valid === true,
+            source: 'native-package-layer'
+        };
+        return window.SHAHID_INTEGRITY_STATUS;
+    };
+})();
+
+
+/* SHAHID ERP — AUTHORIZED DEVELOPER MODE
+   Production default: OFF.
+   Does not bypass license, database encryption, or application integrity.
+*/
+(function(){
+    'use strict';
+
+    const KEY = 'shahidERP_developer_mode';
+
+    function setDeveloperMode(enabled){
+        const value = enabled === true;
+        try { localStorage.setItem(KEY, value ? '1' : '0'); } catch(e){}
+        window.SHAHID_DEVELOPER_MODE = value;
+        document.documentElement.setAttribute('data-developer-mode', value ? 'on' : 'off');
+        return value;
+    }
+
+    function isDeveloperMode(){
+        try {
+            return localStorage.getItem(KEY) === '1';
+        } catch(e) {
+            return false;
+        }
+    }
+
+    window.SHAHID_DEVELOPER_MODE = isDeveloperMode();
+    window.SHAHID_SET_DEVELOPER_MODE = setDeveloperMode;
+    window.SHAHID_IS_DEVELOPER_MODE = isDeveloperMode;
+
+    // Production builds should start with Developer Mode OFF.
+    if(!window.SHAHID_DEVELOPER_MODE){
+        document.documentElement.setAttribute('data-developer-mode', 'off');
+    }
+})();
+
+
+/* SHAHID ERP — SINGLE SQLITE DATABASE SYNC CONTROLLER V3
+   One complete SQLite database per device.
+   Sync order: IMPORT -> VALIDATE -> MERGE -> COMMIT -> EXPORT.
+   This controller never creates SEA/LCL/AIR/user/version-specific databases.
+*/
+(function(){
+    'use strict';
+
+    const SYNC_INTERVAL = 60 * 1000;
+    const META_KEY = 'shahidERP_single_sqlite_sync_v3';
+
+    function meta(){
+        try { return JSON.parse(localStorage.getItem(META_KEY) || '{}'); }
+        catch(e){ return {}; }
+    }
+
+    function saveMeta(m){
+        try { localStorage.setItem(META_KEY, JSON.stringify(m)); } catch(e){}
+    }
+
+    function deviceId(){
+        let id = localStorage.getItem('shahidERP_device_id');
+        if(!id){
+            id = 'DEVICE-' + Math.random().toString(36).slice(2,8).toUpperCase() +
+                 '-' + Date.now().toString(36).toUpperCase();
+            localStorage.setItem('shahidERP_device_id', id);
+        }
+        return id;
+    }
+
+    function version(){
+        const m = meta();
+        return Number(m.databaseVersion || 0);
+    }
+
+    function nextVersion(){
+        const m = meta();
+        m.databaseVersion = Number(m.databaseVersion || 0) + 1;
+        m.deviceId = deviceId();
+        m.updatedAt = new Date().toISOString();
+        saveMeta(m);
+        return m.databaseVersion;
+    }
+
+    function isObject(x){
+        return x && typeof x === 'object';
+    }
+
+    function idOf(record){
+        if(!isObject(record)) return '';
+        return String(
+            record.id ?? record.uuid ?? record._id ??
+            record.quoteId ?? record.quoteNumber ?? record.quoteNo ??
+            record.invoiceId ?? record.invoiceNo ??
+            record.blNo ?? record.blNumber ?? ''
+        ).trim();
+    }
+
+    function timeOf(record){
+        if(!isObject(record)) return 0;
+        for(const key of [
+            'updatedAt','updated_at','modifiedAt','modified_at',
+            'lastUpdated','last_updated','timestamp'
+        ]){
+            const t = Date.parse(String(record[key] || ''));
+            if(!Number.isNaN(t)) return t;
+        }
+        return 0;
+    }
+
+    function deletedOf(record){
+        return !!(
+            record &&
+            (
+                record.deleted === true ||
+                record.isDeleted === true ||
+                record.deletedAt
+            )
+        );
+    }
+
+    function mergeRecordArrays(current, incoming){
+        const map = new Map();
+
+        const putUnkeyed = (prefix, record, index) => {
+            map.set(prefix + index, record);
+        };
+
+        (Array.isArray(current) ? current : []).forEach((r, i) => {
+            const key = idOf(r);
+            if(key){
+                map.set(key, r);
+            }else{
+                putUnkeyed('__UNKEYED_CURRENT__', r, i);
+            }
+        });
+
+        (Array.isArray(incoming) ? incoming : []).forEach((r, i) => {
+            const key = idOf(r);
+
+            if(!key){
+                // No reliable identifier: preserve both records rather than
+                // overwriting or dropping either copy.
+                putUnkeyed('__UNKEYED_INCOMING__', r, i);
+                return;
+            }
+
+            const old = map.get(key);
+            if(!old){
+                map.set(key, r);
+                return;
+            }
+
+            const oldDeleted = deletedOf(old);
+            const newDeleted = deletedOf(r);
+            const oldTime = timeOf(old);
+            const newTime = timeOf(r);
+
+            if(newDeleted && (!oldDeleted || newTime >= oldTime)){
+                map.set(key, r);
+                return;
+            }
+
+            if(oldDeleted && !newDeleted){
+                // Keep a live incoming record when the current copy is deleted.
+                map.set(key, r);
+                return;
+            }
+
+            // Merge the two versions field-by-field. This is important for
+            // Planner Tasks, Planner Notes and other complete ERP records:
+            // fields that exist only on either side are never lost.
+            const mergedRecord = mergeRecordValues(old, r, newTime >= oldTime);
+            map.set(key, mergedRecord);
+        });
+
+        return Array.from(map.values());
+    }
+
+    function mergeRecordValues(current, incoming, incomingPreferred){
+        if(Array.isArray(current) && Array.isArray(incoming)){
+            return mergeRecordArrays(current, incoming);
+        }
+
+        if(
+            current && incoming &&
+            typeof current === 'object' &&
+            typeof incoming === 'object' &&
+            !Array.isArray(current) &&
+            !Array.isArray(incoming)
+        ){
+            const result = {...current};
+
+            Object.keys(incoming).forEach(key => {
+                if(!(key in result)){
+                    result[key] = incoming[key];
+                    return;
+                }
+
+                const a = result[key];
+                const b = incoming[key];
+
+                if(
+                    a && b &&
+                    typeof a === 'object' &&
+                    typeof b === 'object'
+                ){
+                    result[key] = mergeRecordValues(a, b, incomingPreferred);
+                    return;
+                }
+
+                // Incoming wins only when it is the newer/equal version.
+                // Otherwise the current value remains intact.
+                if(incomingPreferred){
+                    result[key] = b;
+                }
+            });
+
+            return result;
+        }
+
+        return incomingPreferred ? incoming : current;
+    }
+
+
+    // ===== MASTER DATA MERGE ENGINE =====
+    // Single canonical merge path for manual SQLite import and automatic
+    // local SQLite sync. It never mutates the live DB while building a result.
+    function shahidMasterMergeDatabase(current, incoming){
+        if(!current || typeof current !== 'object' ||
+           !incoming || typeof incoming !== 'object'){
+            throw new Error(
+                `MASTER_MERGE_INVALID_INPUT: current=${typeof current}, incoming=${typeof incoming}`
+            );
+        }
+
+        const mergeValue = (a, b, path) => {
+            if(Array.isArray(a) && Array.isArray(b)){
+                return mergeArrayRecords(a, b, path);
+            }
+
+            if(
+                a && b &&
+                typeof a === 'object' &&
+                typeof b === 'object' &&
+                !Array.isArray(a) &&
+                !Array.isArray(b)
+            ){
+                const out = {...a};
+
+                Object.keys(b).forEach(key => {
+                    const childPath = path ? `${path}.${key}` : key;
+
+                    if(!(key in out)){
+                        out[key] = b[key];
+                        return;
+                    }
+
+                    out[key] = mergeValue(out[key], b[key], childPath);
+                });
+
+                return out;
+            }
+
+            // For top-level/scalar configuration, preserve the live ERP value.
+            // Record fields are resolved by mergeRecordVersion below.
+            return a;
+        };
+
+        const mergeRecordVersion = (a, b) => {
+            const aTime = timeOf(a);
+            const bTime = timeOf(b);
+            const incomingPreferred = bTime >= aTime;
+
+            const out = {...a};
+
+            Object.keys(b).forEach(key => {
+                if(!(key in out)){
+                    out[key] = b[key];
+                    return;
+                }
+
+                const av = out[key];
+                const bv = b[key];
+
+                if(Array.isArray(av) && Array.isArray(bv)){
+                    out[key] = mergeArrayRecords(av, bv, key);
+                    return;
+                }
+
+                if(
+                    av && bv &&
+                    typeof av === 'object' &&
+                    typeof bv === 'object' &&
+                    !Array.isArray(av) &&
+                    !Array.isArray(bv)
+                ){
+                    out[key] = mergeRecordVersion(av, bv);
+                    return;
+                }
+
+                if(incomingPreferred){
+                    out[key] = bv;
+                }
+            });
+
+            return out;
+        };
+
+        const recordKey = (record, index, prefix) => {
+            if(!record || typeof record !== 'object'){
+                return `${prefix}:primitive:${index}`;
+            }
+
+            const direct = idOf(record);
+            if(direct) return `id:${direct}`;
+
+            // Planner data normally has id, but preserve records even if an
+            // older backup lacks it. These fingerprints avoid accidental loss.
+            if(prefix === 'plannerTasks'){
+                const fingerprint = [
+                    record.title, record.dueDate, record.description,
+                    record.autoSourceKey
+                ].map(v => String(v ?? '').trim()).join('|');
+                if(fingerprint.replace(/\|/g,'') !== ''){
+                    return `plannerTask:${fingerprint}`;
+                }
+            }
+
+            if(prefix === 'plannerNotes'){
+                const fingerprint = [
+                    record.note, record.date, record.recurrence,
+                    record.title
+                ].map(v => String(v ?? '').trim()).join('|');
+                if(fingerprint.replace(/\|/g,'') !== ''){
+                    return `plannerNote:${fingerprint}`;
+                }
+            }
+
+            return `${prefix}:unkeyed:${index}`;
+        };
+
+        const mergeArrayRecords = (a, b, path) => {
+            const prefix = String(path || 'records');
+            const result = [];
+            const positions = new Map();
+
+            (Array.isArray(a) ? a : []).forEach((item, i) => {
+                const key = recordKey(item, i, prefix);
+                positions.set(key, result.length);
+                result.push(item);
+            });
+
+            (Array.isArray(b) ? b : []).forEach((item, i) => {
+                const key = recordKey(item, i, prefix);
+                const pos = positions.get(key);
+
+                if(pos === undefined){
+                    positions.set(key, result.length);
+                    result.push(item);
+                    return;
+                }
+
+                const existing = result[pos];
+
+                if(
+                    existing &&
+                    item &&
+                    typeof existing === 'object' &&
+                    typeof item === 'object' &&
+                    !Array.isArray(existing) &&
+                    !Array.isArray(item)
+                ){
+                    result[pos] = mergeRecordVersion(existing, item);
+                }else{
+                    // Do not overwrite an existing record when the records
+                    // cannot be safely merged.
+                    result[pos] = existing;
+                }
+            });
+
+            return result;
+        };
+
+        const result = mergeValue(current, incoming, '');
+
+        if(!result || typeof result !== 'object' || Array.isArray(result)){
+            throw new Error('MASTER_MERGE_INVALID_RESULT');
+        }
+
+        // Explicit safety checks for critical ERP collections.
+        ['plannerTasks','plannerNotes'].forEach(key => {
+            if(
+                Array.isArray(current[key]) &&
+                Array.isArray(incoming[key]) &&
+                !Array.isArray(result[key])
+            ){
+                throw new Error(`MASTER_MERGE_INVALID_${key}`);
+            }
+        });
+
+        return result;
+    }
+
+    // The master merge engine is declared inside the sync IIFE. Expose the
+    // same function explicitly so the manual SQLite importer and local
+    // SQLite adapter use the exact same canonical merge implementation.
+    window.shahidMasterMergeDatabase = shahidMasterMergeDatabase;
+
+    function mergeDatabase(current, incoming){
+        if(!isObject(current) || !isObject(incoming)){
+            return current;
+        }
+
+        const result = Array.isArray(current) ? current.slice() : {...current};
+
+        Object.keys(incoming).forEach(key => {
+            if(!(key in result)){
+                result[key] = incoming[key];
+                return;
+            }
+
+            if(Array.isArray(result[key]) && Array.isArray(incoming[key])){
+                result[key] = mergeRecordArrays(result[key], incoming[key]);
+                return;
+            }
+
+            if(isObject(result[key]) && isObject(incoming[key]) &&
+               !Array.isArray(result[key]) && !Array.isArray(incoming[key])){
+                result[key] = mergeDatabase(result[key], incoming[key]);
+            }
+            // Scalar values remain with the current working database.
+            // Record-level timestamps are used inside identifiable arrays.
+        });
+
+        return result;
+    }
+
+    async function importCompleteSQLite(){
+        if(typeof window.shahidMasterMergeDatabase !== 'function'){
+            throw new Error('SQLite master merge engine is not available.');
+        }
+
+        // Auto sync must use the configured SQLite-folder adapter.
+        // The manual <input type="file"> importer requires a FileList and
+        // must never be called with no argument.
+        if(typeof window.SHAHID_LOCAL_SQLITE_IMPORT === 'function'){
+            return await window.SHAHID_LOCAL_SQLITE_IMPORT();
+        }
+
+        return null;
+    }
+
+    async function exportCompleteSQLite(metadata){
+        if(typeof window.exportSQLiteToFolder === 'function'){
+            return await window.exportSQLiteToFolder(metadata);
+        }
+
+        if(typeof window.exportToSQLite === 'function'){
+            return await window.exportToSQLite(metadata);
+        }
+
+        if(typeof window.SHAHID_LOCAL_SQLITE_EXPORT === 'function'){
+            return await window.SHAHID_LOCAL_SQLITE_EXPORT(metadata);
+        }
+
+        return false;
+    }
+
+    async function persistMergedDatabase(){
+        if(typeof window.saveDB === 'function'){
+            return await window.saveDB();
+        }
+        return true;
+    }
+
+    async function syncOneCompleteDatabase(){
+        const m = meta();
+        const startedAt = new Date().toISOString();
+
+        try{
+            const incoming = await importCompleteSQLite();
+
+            // No incoming file: do not overwrite current data.
+            if(!incoming){
+                m.lastCycleAt = startedAt;
+                m.lastImport = 'NO_FILE';
+                saveMeta(m);
+                return false;
+            }
+
+            if(!isObject(incoming)){
+                throw new Error('Imported SQLite data is invalid.');
+            }
+
+            const current = (typeof db === 'object' && db !== null) ? db : {};
+            const merged = window.shahidMasterMergeDatabase(current, incoming);
+
+            if(!isObject(merged) || Array.isArray(merged)){
+                throw new Error('SQLite master merge returned an invalid database object.');
+            }
+
+            // Commit only after successful merge construction.
+            if(typeof db === 'object' && db !== null){
+                Object.keys(db).forEach(k => delete db[k]);
+                Object.assign(db, merged);
+            }
+
+            await persistMergedDatabase();
+
+            const dbVersion = nextVersion();
+
+            const metadata = {
+                database: 'SHAHID_ERP.sqlite',
+                deviceId: deviceId(),
+                databaseVersion: dbVersion,
+                updatedAt: new Date().toISOString(),
+                syncType: 'IMPORT_MERGE_EXPORT'
+            };
+
+            const exported = await exportCompleteSQLite(metadata);
+
+            m.lastCycleAt = new Date().toISOString();
+            m.lastImport = 'MERGED';
+            m.lastExport = exported === false ? 'FAILED_OR_UNAVAILABLE' : 'COMPLETED';
+            m.lastVersion = dbVersion;
+            saveMeta(m);
+
+            return exported !== false;
+        }catch(error){
+            console.error('Single SQLite sync failed. Current database preserved:', error);
+            m.lastCycleAt = new Date().toISOString();
+            m.lastError = String(error && error.message ? error.message : error);
+            saveMeta(m);
+            return false;
+        }
+    }
+
+    window.SHAHID_SINGLE_SQLITE_SYNC_NOW = syncOneCompleteDatabase;
+
+    window.SHAHID_SINGLE_SQLITE_SYNC_STATUS = function(){
+        const m = meta();
+        return {
+            database: 'SHAHID_ERP.sqlite',
+            deviceId: deviceId(),
+            databaseVersion: Number(m.databaseVersion || 0),
+            lastCycleAt: m.lastCycleAt || null,
+            lastImport: m.lastImport || null,
+            lastExport: m.lastExport || null,
+            lastError: m.lastError || null,
+            intervalMs: SYNC_INTERVAL
+        };
+    };
+
+    // Disabled: the legacy timer called the manual file-picker importer.
+    // Canonical local SQLite sync is started only after a backup folder is
+    // selected/restored and uses the folder handle directly.
+
+})();
+
+
+/* SHAHID ERP — CANONICAL OUTPUT SNAPSHOT
+   Provides one normalized snapshot for PDF/HTML/Email/WhatsApp callers.
+   It does not replace existing renderers.
+*/
+(function(){
+    'use strict';
+
+    window.SHAHID_CREATE_OUTPUT_SNAPSHOT = function(data, mode){
+        const source = (data && typeof data === 'object') ? data : {};
+        let snapshot;
+
+        try {
+            snapshot = JSON.parse(JSON.stringify(source));
+        } catch(e) {
+            snapshot = {...source};
+        }
+
+        snapshot.__outputSnapshot = true;
+        snapshot.__outputMode = String(mode || source.mode || '').toUpperCase();
+        snapshot.__outputGeneratedAt = new Date().toISOString();
+
+        return Object.freeze(snapshot);
+    };
+
+    window.SHAHID_VALIDATE_OUTPUT_SNAPSHOT = function(snapshot){
+        if(!snapshot || typeof snapshot !== 'object') return false;
+        return !!snapshot.__outputSnapshot;
+    };
+})();
+
+
+/* SHAHID ERP — DSR PLANNER ACTION STATUS ENGINE
+   Adds derived operational status helpers without changing stored records.
+*/
+(function(){
+    'use strict';
+
+    window.SHAHID_ACTION_STATUS = function(item, now){
+        if(!item || typeof item !== 'object') return 'PENDING';
+
+        const current = now instanceof Date ? now : new Date();
+        if(item.completed === true || item.status === 'COMPLETED' ||
+           String(item.status || '').toUpperCase() === 'COMPLETED'){
+            return 'COMPLETED';
+        }
+
+        const raw = item.followUpDate || item.followupDate || item.nextActionDate ||
+                    item.dueDate || item.plannerDate || item.date || '';
+
+        if(!raw) return 'PENDING';
+
+        const due = new Date(raw);
+        if(Number.isNaN(due.getTime())) return 'PENDING';
+
+        const c = new Date(current.getFullYear(), current.getMonth(), current.getDate());
+        const d = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+
+        if(d < c) return 'OVERDUE';
+        if(d.getTime() === c.getTime()) return 'DUE TODAY';
+        return 'UPCOMING';
+    };
+
+    window.SHAHID_ACTION_PRIORITY = function(item){
+        const p = String(item?.priority || '').toUpperCase();
+        if(p === 'CRITICAL') return 0;
+        if(p === 'HIGH') return 1;
+        if(p === 'MEDIUM') return 2;
+        return 3;
+    };
+
+    window.SHAHID_SORT_ACTION_ITEMS = function(items){
+        if(!Array.isArray(items)) return [];
+        return items.slice().sort((a,b)=>{
+            const sa = window.SHAHID_ACTION_STATUS(a);
+            const sb = window.SHAHID_ACTION_STATUS(b);
+            const order = {'OVERDUE':0,'DUE TODAY':1,'PENDING':2,'UPCOMING':3,'COMPLETED':4};
+            const byStatus = (order[sa] ?? 2) - (order[sb] ?? 2);
+            if(byStatus) return byStatus;
+            return window.SHAHID_ACTION_PRIORITY(a) - window.SHAHID_ACTION_PRIORITY(b);
+        });
+    };
+
+    window.SHAHID_ACTION_SUMMARY = function(items){
+        const summary = {OVERDUE:0,'DUE TODAY':0,PENDING:0,UPCOMING:0,COMPLETED:0};
+        if(Array.isArray(items)){
+            items.forEach(item=>{
+                const status = window.SHAHID_ACTION_STATUS(item);
+                if(status in summary) summary[status]++;
+            });
+        }
+        return summary;
+    };
+})();
+
+
+/* SHAHID ERP — RECORD SYNC METADATA */
+(function(){
+    'use strict';
+
+    window.SHAHID_SYNC_STAMP = function(record){
+        if(!record || typeof record !== 'object') return record;
+        if(!record.updatedAt) record.updatedAt = new Date().toISOString();
+        return record;
+    };
+
+    window.SHAHID_SYNC_COMPARE_TIME = function(record){
+        if(!record || typeof record !== 'object') return 0;
+        const fields = ['updatedAt','updated_at','modifiedAt','modified_at','lastUpdated'];
+        for(const f of fields){
+            const t = Date.parse(String(record[f] || ''));
+            if(!Number.isNaN(t)) return t;
+        }
+        return 0;
+    };
+})();
+
+
+/* SHAHID ERP — SQLITE EXISTING FUNCTION ADAPTERS */
+(function(){
+    'use strict';
+
+    if(typeof window.SHAHID_LOCAL_SQLITE_IMPORT !== 'function'){
+        window.SHAHID_LOCAL_SQLITE_IMPORT = async function(){
+            if(typeof window.importFromSQLite === 'function'){
+                return await window.importFromSQLite();
+            }
+            return null;
+        };
+    }
+
+    if(typeof window.SHAHID_LOCAL_SQLITE_EXPORT !== 'function'){
+        window.SHAHID_LOCAL_SQLITE_EXPORT = async function(meta){
+            if(typeof window.exportSQLiteToFolder === 'function'){
+                return await window.exportSQLiteToFolder(meta);
+            }
+            if(typeof window.exportToSQLite === 'function'){
+                return await window.exportToSQLite(meta);
+            }
+            return false;
+        };
+    }
+})();
+
+
+/* SHAHID ERP — SQLITE MERGE IMPORT THEN EXPORT
+   Safe local-drive cycle:
+   1) Read/compare local SQLite backup
+   2) Merge records without blindly replacing current ERP data
+   3) Update ERP data
+   4) Export merged SQLite backup
+*/
+(function(){
+    'use strict';
+
+    const MERGE_INTERVAL = 60 * 1000;
+    const META_KEY = 'shahidERP_merge_sync_meta_v2';
+
+    function readMeta(){
+        try { return JSON.parse(localStorage.getItem(META_KEY) || '{}'); }
+        catch(e){ return {}; }
+    }
+
+    function writeMeta(m){
+        try { localStorage.setItem(META_KEY, JSON.stringify(m)); } catch(e){}
+    }
+
+    function getDeviceId(){
+        let id = localStorage.getItem('shahidERP_device_id');
+        if(!id){
+            id = 'DEVICE-' + Math.random().toString(36).slice(2,8).toUpperCase() +
+                 '-' + Date.now().toString(36).toUpperCase();
+            localStorage.setItem('shahidERP_device_id', id);
+        }
+        return id;
+    }
+
+    function recordKey(record){
+        if(!record || typeof record !== 'object') return null;
+        return String(
+            record.id ??
+            record.uuid ??
+            record._id ??
+            record.quoteNumber ??
+            record.quoteNo ??
+            record.invoiceNo ??
+            record.blNo ??
+            ''
+        ).trim() || null;
+    }
+
+    function recordTime(record){
+        if(!record || typeof record !== 'object') return 0;
+        const candidates = [
+            record.updatedAt, record.updated_at, record.modifiedAt,
+            record.modified_at, record.updatedOn, record.lastUpdated,
+            record.createdAt, record.created_at
+        ];
+        for(const value of candidates){
+            const t = Date.parse(String(value || ''));
+            if(!Number.isNaN(t)) return t;
+        }
+        return 0;
+    }
+
+    // Compatibility aliases used by the legacy merge path below.
+    // Keep the canonical implementations above; these aliases prevent the
+    // old adapter from calling missing helpers.
+    function getRecordKey(record){ return recordKey(record); }
+    function recordUpdatedAt(record){ return recordTime(record); }
+
+    function mergeArray(current, incoming){
+        const map = new Map();
+
+        (Array.isArray(current) ? current : []).forEach((item, index) => {
+            const key = getRecordKey(item);
+            map.set(
+                key || '__CURRENT_UNKEYED__' + index,
+                item
+            );
+        });
+
+        (Array.isArray(incoming) ? incoming : []).forEach((item, index) => {
+            const key = getRecordKey(item);
+
+            if(!key){
+                map.set('__INCOMING_UNKEYED__' + index, item);
+                return;
+            }
+
+            const currentItem = map.get(key);
+
+            if(!currentItem){
+                map.set(key, item);
+                return;
+            }
+
+            const currentTime = recordUpdatedAt(currentItem);
+            const backupTime = recordUpdatedAt(item);
+
+            const preferredIncoming =
+                backupTime > currentTime ||
+                (backupTime === currentTime && backupTime > 0);
+
+            if(
+                currentItem &&
+                item &&
+                typeof currentItem === 'object' &&
+                typeof item === 'object' &&
+                !Array.isArray(currentItem) &&
+                !Array.isArray(item)
+            ){
+                const mergedItem = {...currentItem};
+
+                Object.keys(item).forEach(field => {
+                    if(!(field in mergedItem)){
+                        mergedItem[field] = item[field];
+                        return;
+                    }
+
+                    const a = mergedItem[field];
+                    const b = item[field];
+
+                    if(
+                        a && b &&
+                        typeof a === 'object' &&
+                        typeof b === 'object' &&
+                        !Array.isArray(a) &&
+                        !Array.isArray(b)
+                    ){
+                        mergedItem[field] = mergeObjects(a, b);
+                    }else if(
+                        Array.isArray(a) &&
+                        Array.isArray(b)
+                    ){
+                        mergedItem[field] = mergeArray(a, b);
+                    }else if(preferredIncoming){
+                        mergedItem[field] = b;
+                    }
+                });
+
+                map.set(key, mergedItem);
+                return;
+            }
+
+            if(preferredIncoming){
+                map.set(key, item);
+            }
+        });
+
+        return Array.from(map.values());
+    }
+
+    function mergeObjects(current, incoming){
+        if(!current || typeof current !== 'object' ||
+           !incoming || typeof incoming !== 'object'){
+            return current;
+        }
+
+        const result = Array.isArray(current) ? current.slice() : {...current};
+
+        Object.keys(incoming).forEach(key => {
+            if(!(key in result)){
+                result[key] = incoming[key];
+                return;
+            }
+
+            if(Array.isArray(result[key]) && Array.isArray(incoming[key])){
+                result[key] = mergeArray(result[key], incoming[key]);
+                return;
+            }
+
+            if(result[key] && incoming[key] &&
+               typeof result[key] === 'object' &&
+               typeof incoming[key] === 'object' &&
+               !Array.isArray(result[key]) &&
+               !Array.isArray(incoming[key])){
+                result[key] = mergeObjects(result[key], incoming[key]);
+            }
+            // Scalar conflicts: preserve current ERP value unless the incoming
+            // record itself is handled by an array-record timestamp.
+        });
+
+        return result;
+    }
+
+    window.SHAHID_MERGE_LOCAL_SQLITE = async function(localData){
+        if(!localData || typeof localData !== 'object'){
+            throw new Error('MASTER_MERGE_INVALID_INPUT: local SQLite data is not an object.');
+        }
+
+        if(typeof db !== 'object' || db === null){
+            throw new Error('MASTER_MERGE_INVALID_INPUT: current ERP database is unavailable.');
+        }
+
+        let merged;
+        try{
+            merged = window.shahidMasterMergeDatabase(db, localData);
+        }catch(error){
+            console.error('MASTER SQLite merge failed:', error);
+            throw error;
+        }
+
+        if(!merged || typeof merged !== 'object' || Array.isArray(merged)){
+            throw new Error('MASTER_MERGE_INVALID_RESULT');
+        }
+
+        Object.keys(db).forEach(key => delete db[key]);
+        Object.assign(db, merged);
+
+        return true;
+    };
+
+    async function importThenMerge(){
+        try{
+            // Adapter must return parsed SQLite data. No file is blindly
+            // assigned to window.db.
+            if(typeof window.SHAHID_LOCAL_SQLITE_IMPORT !== 'function'){
+                console.info('Local SQLite import skipped: adapter not configured.');
+                return false;
+            }
+
+            const incoming = await window.SHAHID_LOCAL_SQLITE_IMPORT();
+            if(!incoming) return false;
+
+            const merged = await window.SHAHID_MERGE_LOCAL_SQLITE(incoming);
+            if(!merged) return false;
+
+            // Persist the merged result using the application's existing save.
+            if(typeof window.saveDB === 'function'){
+                await Promise.resolve(window.saveDB());
+            }
+
+            return true;
+        }catch(e){
+            console.error('SQLite import/merge failed:', e);
+            return false;
+        }
+    }
+
+    async function exportMerged(){
+        try{
+            if(typeof window.SHAHID_LOCAL_SQLITE_EXPORT === 'function'){
+                return await window.SHAHID_LOCAL_SQLITE_EXPORT({
+                    reason:'AUTO_IMPORT_MERGE_EXPORT',
+                    deviceId:getDeviceId(),
+                    timestamp:new Date().toISOString()
+                });
+            }
+
+            if(typeof window.exportSQLiteBackup === 'function'){
+                return await window.exportSQLiteBackup('AUTO_IMPORT_MERGE_EXPORT');
+            }
+
+            if(typeof window.exportDatabaseSQLite === 'function'){
+                return await window.exportDatabaseSQLite('AUTO_IMPORT_MERGE_EXPORT');
+            }
+
+            console.info('SQLite export skipped: adapter not configured.');
+            return false;
+        }catch(e){
+            console.error('Merged SQLite export failed:', e);
+            return false;
+        }
+    }
+
+    async function syncCycle(){
+        const imported = await importThenMerge();
+
+        // Export only after the import/merge step has completed.
+        // This prevents a blind old-backup overwrite.
+        const exported = await exportMerged();
+
+        const meta = readMeta();
+        meta.deviceId = getDeviceId();
+        meta.lastCycleAt = new Date().toISOString();
+        meta.lastImportMerged = !!imported;
+        meta.lastExportCompleted = !!exported;
+        meta.cycle = Number(meta.cycle || 0) + 1;
+        writeMeta(meta);
+    }
+
+    window.SHAHID_RUN_IMPORT_MERGE_EXPORT_NOW = syncCycle;
+
+    window.SHAHID_MERGE_SYNC_STATUS = function(){
+        return readMeta();
+    };
+
+    // Disabled: canonical local SQLite sync is managed by startAutoBackup().
+
+})();
+
+/* SHAHID ERP — SQLITE BACKUP SYNC FRAMEWORK */
+(function(){
+'use strict';
+const LOCAL_INTERVAL=60000;
+const DRIVE_INTERVAL = 15 * 60 * 1000;
+const KEY='shahidERP_sync_meta_v1';
+
+function meta(){try{return JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){return {}}}
+function saveMeta(x){try{localStorage.setItem(KEY,JSON.stringify(x))}catch(e){}}
+function deviceId(){
+ let id=localStorage.getItem('shahidERP_device_id');
+ if(!id){id='DEVICE-'+Math.random().toString(36).slice(2,8).toUpperCase()+'-'+Date.now().toString(36).toUpperCase();localStorage.setItem('shahidERP_device_id',id)}
+ return id;
+}
+function nextVersion(){
+ const m=meta();m.version=Number(m.version||0)+1;m.deviceId=deviceId();m.lastVersionAt=new Date().toISOString();saveMeta(m);return m.version;
+}
+function backupMeta(){const m=meta();return {schema:'SHAHID-ERP-BACKUP-V1',deviceId:deviceId(),version:Number(m.version||0),createdAt:new Date().toISOString(),lastGoogleDriveExportAt:m.lastGoogleDriveExportAt||null};}
+
+async function localBackup(){
+ const v=nextVersion();
+ try{
+  if(typeof window.exportSQLiteBackup==='function') return await window.exportSQLiteBackup('AUTO_1_MIN_V'+v);
+  if(typeof window.exportDatabaseSQLite==='function') return await window.exportDatabaseSQLite('AUTO_1_MIN_V'+v);
+  if(typeof window.exportSQLite==='function') return await window.exportSQLite('AUTO_1_MIN_V'+v);
+  localStorage.setItem('shahidERP_lastLocalBackupMeta',JSON.stringify(backupMeta()));
+ }catch(e){console.error('Local SQLite backup failed:',e)}
+}
+
+async function driveCheck(){
+ const m=meta(),last=m.lastGoogleDriveExportAt?Date.parse(m.lastGoogleDriveExportAt):0;
+ if(last && Date.now()-last<DRIVE_INTERVAL)return;
+ if(typeof window.SHAHID_GDRIVE_EXPORT!=='function'){console.info('Google Drive export skipped: Drive adapter not configured.');return}
+ try{const ok=await window.SHAHID_GDRIVE_EXPORT(backupMeta());if(ok!==false){m.lastGoogleDriveExportAt=new Date().toISOString();saveMeta(m)}}catch(e){console.error('Google Drive export failed:',e)}
+}
+
+window.SHAHID_SYNC_STATUS=function(){const m=meta();return {deviceId:deviceId(),version:Number(m.version||0),lastVersionAt:m.lastVersionAt||null,lastGoogleDriveExportAt:m.lastGoogleDriveExportAt||null,googleDriveConfigured:typeof window.SHAHID_GDRIVE_EXPORT==='function'}};
+window.SHAHID_RUN_LOCAL_BACKUP_NOW=localBackup;
+window.SHAHID_RUN_GDRIVE_EXPORT_CHECK_NOW=driveCheck;
+
+// Disabled: canonical startAutoBackup() owns the local SQLite timer.
+// Google Drive scheduling is handled by the dedicated Drive adapter.
+})();
+
+
 /* SHAHID ERP — BLOCK NUMBER INPUT WHEEL CHANGES
    Scrolling over a focused numeric field must never modify its value.
 */
@@ -753,6 +1826,7 @@ function plannerUpsertAutoTask(sourceKey, title, dueDate, details, openAction) {
     const existing = db.plannerTasks.find(t => t.autoSourceKey === sourceKey);
     const payload = {
         id: existing?.id || ('auto_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,7)),
+        srNo: existing?.srNo || '',
         title, dueDate, priority: existing?.priority || 'Medium', status: existing?.status || 'Pending',
         description: details || '', autoGenerated: true, autoSourceKey: sourceKey,
         openAction: openAction || '', updatedAt: new Date().toISOString(), createdAt: existing?.createdAt || new Date().toISOString()
@@ -798,7 +1872,39 @@ function syncPlannerAutoTasks() {
     syncPlannerAutoTasksFromInvoices();
 }
 
+function plannerEnsureSrNumbers() {
+    db.plannerTasks = Array.isArray(db.plannerTasks) ? db.plannerTasks : [];
+
+    // Preserve all existing valid SR numbers. Only missing SR numbers receive
+    // a new number, so existing records are never renumbered.
+    const used = new Set();
+    let max = 0;
+
+    db.plannerTasks.forEach(task => {
+        const n = Number(String(task?.srNo || '').match(/\d+/)?.[0] || 0);
+        if (n > 0 && !used.has(n)) {
+            used.add(n);
+            max = Math.max(max, n);
+            task.srNo = String(n);
+        }
+    });
+
+    let changed = false;
+    db.plannerTasks.forEach(task => {
+        if (!task.srNo) {
+            do { max += 1; } while (used.has(max));
+            task.srNo = String(max);
+            used.add(max);
+            changed = true;
+        }
+    });
+
+    if (changed) saveDB();
+    return changed;
+}
+
 function getTasksForDate(dateKey) {
+    plannerEnsureSrNumbers();
     return (db.plannerTasks || []).filter(t => t.dueDate === dateKey);
 }
 
@@ -1074,7 +2180,7 @@ function loadPlannerDay(dateKey) {
             const statusClass = t.status === 'Done' ? 'task-status-done' :
                               t.status === 'In Progress' ? 'task-status-progress' : 'task-status-pending';
             return `<div class="planner-task-item">
-                <span class="task-title">${escapeHtml(t.title)} ${t.priority === 'High' ? '🔴' : t.priority === 'Low' ? '🟢' : '🟡'}</span>
+                <span class="task-title"><strong style="display:inline-block; min-width:28px; margin-right:8px;">${escapeHtml(t.srNo || '-')}.</strong>${escapeHtml(t.title)} ${t.priority === 'High' ? '🔴' : t.priority === 'Low' ? '🟢' : '🟡'}</span>
                 <span class="task-status ${statusClass}">${t.status || 'Pending'}</span>
                 <div>
                     <button class="btn btn-sm btn-preview" onclick="plannerToggleTaskStatus('${t.id}')">🔄</button>
@@ -1198,22 +2304,7 @@ function plannerSaveNote() {
 }
 
 function legacy_plannerAddTaskQuick() {
-    const dateKey = formatDateKey(plannerSelectedDate);
-    const title = prompt('Enter task:');
-    if (!title) return;
-    db.plannerTasks.push({
-        id: 'task_' + Date.now(),
-        title: title,
-        dueDate: dateKey,
-        priority: 'Medium',
-        status: 'Pending',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-    });
-    saveDB();
-    loadPlannerDay(dateKey);
-    renderPlannerCalendar();
-    autoBackup();
+    plannerAddTaskQuick();
 }
 
 function plannerEditNote(id) {
@@ -1245,43 +2336,67 @@ function plannerDeleteNote(id) {
 // ---------- Tasks CRUD ----------
 function plannerAddTaskModal() {
     const dateKey = formatDateKey(plannerSelectedDate);
-    const title = prompt('Enter task title:');
-    if (!title) return;
-    const priority = prompt('Priority (High/Medium/Low):', 'Medium');
-    db.plannerTasks.push({
-        id: 'task_' + Date.now(),
-        title: title,
-        dueDate: dateKey,
-        priority: priority || 'Medium',
-        status: 'Pending',
-        description: '',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+    const srNo = plannerNextSrNumber();
+
+    appPrompt('Enter task title:', '', (title) => {
+        if (!title || !title.trim()) return;
+
+        appPrompt('Select task priority:', 'Medium', (priority) => {
+            db.plannerTasks.push({
+                id: 'task_' + Date.now() + '_' + srNo,
+                srNo: String(srNo),
+                title: title.trim(),
+                dueDate: dateKey,
+                priority: priority || 'Medium',
+                status: 'Pending',
+                description: '',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
+            saveDB();
+            loadPlannerDay(dateKey);
+            renderPlannerCalendar();
+            autoBackup();
+        }, ['High', 'Medium', 'Low']);
     });
-    saveDB();
-    loadPlannerDay(dateKey);
-    renderPlannerCalendar();
-    autoBackup();
+}
+
+function plannerNextSrNumber() {
+    plannerEnsureSrNumbers();
+    const tasks = Array.isArray(db.plannerTasks) ? db.plannerTasks : [];
+    let max = 0;
+    tasks.forEach(task => {
+        const match = String(task?.srNo || '').match(/^(?:TASK-)?(\d+)$/i);
+        if (match) max = Math.max(max, Number(match[1]));
+    });
+    return max + 1;
 }
 
 function plannerAddTaskQuick() {
     const dateKey = formatDateKey(plannerSelectedDate);
-    const title = prompt('Enter task title:');
-    if (!title) return;
-    db.plannerTasks.push({
-        id: 'task_' + Date.now(),
-        title: title,
-        dueDate: dateKey,
-        priority: 'Medium',
-        status: 'Pending',
-        description: '',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+    const srNo = plannerNextSrNumber();
+
+    appPrompt('Enter task title:', '', (title) => {
+        if (!title || !title.trim()) return;
+
+        appPrompt('Select task priority:', 'Medium', (priority) => {
+            db.plannerTasks.push({
+                id: 'task_' + Date.now() + '_' + srNo,
+                srNo: String(srNo),
+                title: title.trim(),
+                dueDate: dateKey,
+                priority: priority || 'Medium',
+                status: 'Pending',
+                description: '',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
+            saveDB();
+            loadPlannerDay(dateKey);
+            renderPlannerCalendar();
+            autoBackup();
+        }, ['High', 'Medium', 'Low']);
     });
-    saveDB();
-    loadPlannerDay(dateKey);
-    renderPlannerCalendar();
-    autoBackup();
 }
 
 function plannerToggleTaskStatus(id) {
@@ -1460,7 +2575,7 @@ function initPlanner() {
     syncPlannerAutoTasks();
     saveDB();
     plannerGoToday();
-    updateExpiringToday
+    updateExpiringToday();
 	// If planner tab is active on load (unlikely, but safe)
 	// No need to call initPlanner here; it will be called when tab is switched.
 
@@ -1760,6 +2875,78 @@ function switchToTab(targetTab) {
 function openModal(id) { document.getElementById(id).classList.add('active'); }
 function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
+// ===== ELECTRON-SAFE INPUT PROMPT =====
+// Browser/Electron builds may not support native browser dialogs. Use the existing
+// application modal system instead so the same UI works in EXE and browser.
+function appPrompt(message, defaultValue = '', onSubmit, options = null) {
+    const modal = document.getElementById('appPromptModal');
+    const body = document.getElementById('appPromptBody');
+    const input = document.getElementById('appPromptInput');
+    const select = document.getElementById('appPromptSelect');
+    const title = document.getElementById('appPromptTitle');
+    if (!modal || !body || !input || !select) {
+        console.error('Application prompt modal is unavailable.');
+        return;
+    }
+
+    title.textContent = 'Input Required';
+    body.textContent = message;
+    const isSelect = Array.isArray(options) && options.length > 0;
+
+    if (isSelect) {
+        input.style.display = 'none';
+        select.style.display = 'block';
+        select.innerHTML = options.map(v => {
+            const value = String(v);
+            return `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`;
+        }).join('');
+        select.value = String(defaultValue || options[0]);
+    } else {
+        select.style.display = 'none';
+        input.style.display = 'block';
+        input.value = defaultValue == null ? '' : String(defaultValue);
+    }
+
+    openModal('appPromptModal');
+
+    setTimeout(() => {
+        const active = isSelect ? select : input;
+        active.focus();
+        if (!isSelect) active.select();
+    }, 30);
+
+    const submit = () => {
+        const value = isSelect ? select.value : input.value;
+        closeModal('appPromptModal');
+        window.__appPromptSubmit = null;
+        if (typeof onSubmit === 'function') onSubmit(value);
+    };
+
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); submit(); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancelAppPrompt(); }
+    };
+    select.onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); submit(); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancelAppPrompt(); }
+    };
+
+    window.__appPromptSubmit = submit;
+}
+
+function submitAppPrompt() {
+    if (typeof window.__appPromptSubmit === 'function') {
+        const fn = window.__appPromptSubmit;
+        window.__appPromptSubmit = null;
+        fn();
+    }
+}
+
+function cancelAppPrompt() {
+    window.__appPromptSubmit = null;
+    closeModal('appPromptModal');
+}
+
 document.getElementById('tabSwitchSaveBtn').addEventListener('click', function() {
     if (pendingTabSwitch) {
         const currentTab = document.querySelector('.tab-panel.active')?.id;
@@ -2003,7 +3190,7 @@ function legacy_buildChargesGrid(mode, savedCharges = {}, customOrder = null) {
             let basisVal = 'Normal';
 			if (mode === 'air') {
 				if (charge === 'AIR FREIGHT') {
-					basisVal = 'Per KGS';
+					basisVal = 'Normal';
 				} else if (['CARTAGE', 'MCC', 'XRAY'].includes(charge)) {
 					basisVal = 'Per KGS';
 					placeholder = 'Rate per KGS (min ' + AIR_MIN_THRESHOLDS[charge] + ')';
@@ -2925,6 +4112,45 @@ function legacy_getFormData(mode) {
 }
 
 // ==================== SAVE / QUOTE ====================
+/* SHAHID ERP — QUOTATION RATE LOCK (V1)
+   Locks the exact quotation data snapshot when a saved quote is marked SENT.
+   Existing quotation calculations and master rates remain untouched.
+   Older quotes without a snapshot continue using their existing data.
+*/
+function shahidCloneQuoteData(data){
+    try { return JSON.parse(JSON.stringify(data)); }
+    catch(e){ return {...data}; }
+}
+
+function lockQuotationRate(data){
+    if(!data || typeof data !== 'object') return data;
+    const snapshot = shahidCloneQuoteData(data);
+    delete snapshot.rateLockSnapshot;
+    data.rateLockSnapshot = snapshot;
+    data.rateLocked = true;
+    data.rateLockedAt = new Date().toISOString();
+    data.rateLockVersion = Number(data.rateLockVersion || 0) + 1;
+    return data;
+}
+
+function getQuotationOutputData(data){
+    if(data && data.rateLocked && data.rateLockSnapshot && typeof data.rateLockSnapshot === 'object'){
+        const snapshot = shahidCloneQuoteData(data.rateLockSnapshot);
+        // Keep current non-commercial record metadata available to existing output logic.
+        snapshot.quoteNumber = data.quoteNumber || snapshot.quoteNumber;
+        snapshot.status = data.status || snapshot.status;
+        snapshot.followUpStatus = data.followUpStatus || snapshot.followUpStatus;
+        snapshot.rateLocked = true;
+        snapshot.rateLockedAt = data.rateLockedAt || snapshot.rateLockedAt;
+        snapshot.rateLockVersion = data.rateLockVersion || snapshot.rateLockVersion;
+        return snapshot;
+    }
+    return data;
+}
+
+window.SHAHID_LOCK_QUOTATION_RATE = lockQuotationRate;
+window.SHAHID_GET_QUOTATION_OUTPUT_DATA = getQuotationOutputData;
+
 function saveRecord(mode, target, status = 'DRAFT') {
     const data = (window.__multiGetFormData || getFormData)(mode);
     // Required shipment measurements: AIR requires Gross Weight only; LCL requires both Gross Weight and CBM.
@@ -2963,6 +4189,11 @@ function saveRecord(mode, target, status = 'DRAFT') {
     }
     if (target === 'drafts' && data.carrier && data.pol && typeof window.upsertCarrierCharges === 'function') window.upsertCarrierCharges(mode, data);
     if (typeof window.updateRateSheetFromQuote === 'function') window.updateRateSheetFromQuote(data, mode);
+    // Rate Lock is applied only when the quotation is explicitly marked SENT.
+    // Drafts and editable quote preparation remain unchanged.
+    if (target === 'rates' && String(status || '').toUpperCase() === 'SENT') {
+        lockQuotationRate(data);
+    }
     if (!saveDB()) return;
     document.getElementById(`${mode}-qn-value`).textContent = data.quoteNumber;
     document.getElementById(`${mode}-qn-box`).classList.add('show');
@@ -3217,6 +4448,11 @@ function duplicateQuote(target, mode, idx) {
     newRec.followUpStatus = 'PENDING';
     delete newRec.followUpUpdated;
     delete newRec.lostReason;
+    // A duplicate is a new editable draft; never carry the source quote's lock.
+    delete newRec.rateLockSnapshot;
+    delete newRec.rateLocked;
+    delete newRec.rateLockedAt;
+    delete newRec.rateLockVersion;
     db.drafts[mode].push(newRec);
     saveDB();
     renderRecords('drafts');
@@ -3437,13 +4673,18 @@ function setFollowUpStatus(target, mode, idx, status) {
         renderFollowups();
         renderRecords(target);
         setTimeout(() => {
-            const reason = prompt('Please enter reason for losing this quote:\n\nOptions:\n- High Rates\n- Slow Response\n- No Service\n- Client Not Interested\n- Competitor Won\n- Budget Constraints\n- Other');
-            if (reason) {
-                db[target][mode][idx].lostReason = reason;
-                saveDB();
-                renderFollowups();
-                renderRecords(target);
-            }
+            appPrompt(
+                'Please enter reason for losing this quote:\n\nOptions:\n- High Rates\n- Slow Response\n- No Service\n- Client Not Interested\n- Competitor Won\n- Budget Constraints\n- Other',
+                '',
+                (reason) => {
+                    if (reason && reason.trim()) {
+                        db[target][mode][idx].lostReason = reason.trim();
+                        saveDB();
+                        renderFollowups();
+                        renderRecords(target);
+                    }
+                }
+            );
         }, 100);
     } else {
         saveDB();
@@ -4484,7 +5725,10 @@ function startAutoBackup() {
         await autoBackup();
     }, 60000);
     const statusEl = document.getElementById('auto-backup-status');
-    if (statusEl) statusEl.textContent = '✅ Running (every 1 min) – writing to folder';
+    if (statusEl) {
+        const format = String(db?.backupFormat || 'json').toUpperCase();
+        statusEl.textContent = `✅ Running (every 1 min) – ${format} backup`;
+    }
 }
 
 
@@ -5057,7 +6301,7 @@ function copyQuoteData(mode) {
         const catEntries = charges.filter(ch => data.charges[ch]).map(ch => [ch, data.charges[ch]]);
         if (catEntries.length === 0) return;
         text += `\n[${category.toUpperCase()}]\n`;
-        text += `  #  Charge Type              ${mode==='lcl'?'Rate':'Amount'}   Currency   INR Equivalent   Basis\n`;
+        text += `  #  Charge Type              ${mode==='lcl'?'Rate':'Amount'}   Currency   INR Amount   Basis\n`;
         text += '  ----------------------------------------------------------------\n';
         let catTotal = 0;
         catEntries.forEach(([type, c], i) => {
@@ -5215,7 +6459,7 @@ function buildEmailHTML(data, mode) {
                         <th style="padding:5px;text-align:left;border-right:1px solid #d1d5db;">Charge Type</th>
                         <th style="padding:5px;text-align:right;border-right:1px solid #d1d5db;">${mode==='lcl'?'Rate':'Sell Amt'}</th>
                         <th style="padding:5px;text-align:left;border-right:1px solid #d1d5db;">Currency</th>
-                        <th style="padding:5px;text-align:right;border-right:1px solid #d1d5db;">INR Equivalent</th>
+                        <th style="padding:5px;text-align:right;border-right:1px solid #d1d5db;">INR Amount</th>
                         <th style="padding:5px;text-align:left;">Basis</th>
                     </tr>
                 </thead>
@@ -5233,12 +6477,10 @@ function buildEmailHTML(data, mode) {
                 if (mode === 'air' && AIR_MIN_THRESHOLDS && AIR_MIN_THRESHOLDS[ch]) {
                     if (c.minApplied) {
                         basisDisplay = 'Minimum';
+                    } else if (ch === 'GATE PASS') {
+                        basisDisplay = 'AT Actual';
                     } else {
-                        if (ch === 'GATE PASS') {
-                            basisDisplay = 'AT Actual';
-                        } else {
-                            basisDisplay = 'Per KGS';
-                        }
+                        basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
                     }
                 }
 
@@ -5369,8 +6611,9 @@ function emailSavedQuote(target, mode, idx) {
         return;
     }
 
-    const htmlContent = buildCompactEmailHTML(rec, mode);
-    currentEmailData = { data: rec, mode, htmlContent };
+    const outputData = getQuotationOutputData(rec);
+    const htmlContent = buildCompactEmailHTML(outputData, mode);
+    currentEmailData = { data: outputData, mode, htmlContent };
 
     // Determine default CC based on mode
     let defaultCC = '';
@@ -5444,7 +6687,10 @@ function sendEmail() {
         // Build mailto link with recipient, subject, and NO body (so default signature appears)
         let mailtoLink = `mailto:${to}?subject=${encodeURIComponent(subject)}`;
         if (cc) mailtoLink += `&cc=${encodeURIComponent(cc)}`;
-        window.open(mailtoLink, '_blank');
+        window.shahidOpenMailCompat(to, cc, subject).catch(err => {
+            console.error('Outlook open failed:', err);
+            alert('❌ Outlook could not be opened.\n\n' + err.message);
+        });
 
         // Auto-save draft if Rate Request
         if (currentEmailData.mode === 'raterequest') {
@@ -5573,6 +6819,9 @@ function buildPDFDefinition(data, mode) {
     const groups=mcOutputChargeGroups(data,mode);
     const content=[];
     const toUpper=v=>v?String(v).toUpperCase():'-';
+    const summaryFontSize=10;
+    const summaryLineHeight=1.35;
+    const summaryMargin=[4,8];
     content.push({text:db.companyName||'GATEWAY EXIM',style:'companyName'},{text:db.companyAddress||'',style:'companyAddress'},{canvas:[{type:'line',x1:0,y1:0,x2:515,y2:0,lineWidth:2,lineColor:'#1e3a8a'}]},{text:' '},{columns:[{text:modeLabel+' QUOTATION',style:'title'},{text:'Quote No: '+(data.quoteNumber||'DRAFT'),style:'quoteNum',alignment:'right'}]});
     const validity=data.validityDate?new Date(data.validityDate).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):'-';
     const carrierText=carriers.map(c=>toUpper(c.carrier)).join(' | ')||toUpper(data.carrier);
@@ -5593,7 +6842,7 @@ function buildPDFDefinition(data, mode) {
             content.push({text:section.label.toUpperCase(),style:'categoryHeader'});
             const multi=carriers.length>1; const body=[];
             if(!multi){
-                body.push([{text:'Sr. No',style:'Aptos',alignment:'center'},{text:'Charge Type',style:'Aptos',alignment:'center'},{text:'Currency',style:'Aptos',alignment:'center'},{text:mode==='lcl'?'Rate':'Amount',style:'Aptos',alignment:'center'},{text:'Basis',style:'Aptos',alignment:'center'},{text:'INR Equivalent',style:'Aptos',alignment:'center'}]);
+                body.push([{text:'Sr. No',style:'Aptos',alignment:'center'},{text:'Charge Type',style:'Aptos',alignment:'center'},{text:'Currency',style:'Aptos',alignment:'center'},{text:mode==='lcl'?'Rate':'Amount',style:'Aptos',alignment:'center'},{text:'Basis',style:'Aptos',alignment:'center'},{text:'INR Amount',style:'Aptos',alignment:'center'}]);
                 let subtotal=0;
                 list.forEach(ch=>{const d=mcOutputRowData(data,mode,carriers[0],ch);subtotal+=d.sellINR;overall[0]+=d.sellINR;body.push([{text:String(sr++),alignment:'center'},{text:ch.toUpperCase()},{text:d.sellCur,alignment:'right'},{text:d.x.sell?mcMoney(d.x.sell,d.sellCur):'—',alignment:'right'},{text:mcBasisDisplay(mode,ch,d.raw.basis||'Normal',data,d.raw),alignment:'center'},{text:formatINR(d.sellINR),alignment:'right'}]);});
                 body.push([{text:'TOTAL',colSpan:5,alignment:'right',bold:true},{text:formatINR(subtotal),alignment:'right',bold:true}]);
@@ -5609,7 +6858,7 @@ function buildPDFDefinition(data, mode) {
                     ]);
                     body.push([{}, {}, {}, ...carriers.flatMap(()=>[
                         {text:'Amount',style:'Aptos',alignment:'center'},
-                        {text:'INR Equivalent',style:'Aptos',alignment:'center'}
+                        {text:'INR Amount',style:'Aptos',alignment:'center'}
                     ])]);
                     list.forEach(ch=>{
                         const row=[{text:String(sr++),alignment:'center'},{text:ch.toUpperCase()},{text:airCompactDisplayLogic(ch, carriers[0]?.charges?.[ch]||{}, data).basis,alignment:'center'}];
@@ -5637,7 +6886,7 @@ function buildPDFDefinition(data, mode) {
                     ]);
                     body.push([{}, {}, {}, ...carriers.flatMap(()=>[
                         {text:'Rate',style:'Aptos',alignment:'center'},
-                        {text:'INR Equivalent',style:'Aptos',alignment:'center'}
+                        {text:'INR Amount',style:'Aptos',alignment:'center'}
                     ])]);
                     list.forEach(ch=>{
                         const row=[{text:String(sr++),alignment:'center'},{text:ch.toUpperCase()},{text:mcBasisForCarriers(data,mode,ch,carriers),alignment:'center'}];
@@ -5664,15 +6913,15 @@ function buildPDFDefinition(data, mode) {
             }
         });
         if(carriers.length===1){
-            content.push({table:{widths:['*','auto'],body:[[{text:'Grand Total (INR) + GST additional',bold:true,color:'white',alignment:'right'},{text:formatINR(overall[0]),bold:true,color:'white',alignment:'right'}]]},layout:{fillColor:'#05964b'},margin:[0,0,0,10]});
+            content.push({table:{widths:['*','auto'],body:[[{text:'Grand Total (INR) + GST additional',bold:true,color:'white',fontSize:summaryFontSize,lineHeight:summaryLineHeight,alignment:'right',margin:summaryMargin},{text:formatINR(overall[0]),bold:true,color:'white',fontSize:summaryFontSize,lineHeight:summaryLineHeight,alignment:'right',margin:summaryMargin}]]},layout:{fillColor:'#05964b'},margin:[0,0,0,10]});
         }else{
             content.push({text:'GRAND TOTAL (INR) + GST ADDITIONAL',style:'categoryHeader'});
-            content.push({table:{widths:['*',...carriers.map(()=>'*')],body:[[{text:'Grand Total',style:'Aptos',alignment:'left'},...carriers.map(c=>({text:c.carrier,style:'Aptos',alignment:'center'}))],[{text:'INR Total',bold:true},...overall.map(v=>({text:formatINR(v),bold:true,alignment:'right'}))]]},layout:{hLineWidth:()=>1,vLineWidth:()=>1,hLineColor:'#d1d5db',fillColor:i=>(i===0?'#05964b':i===1?'#ecfdf5':null)},margin:[0,0,0,10]});
+            content.push({table:{widths:['*',...carriers.map(()=>'*')],body:[[{text:'Grand Total',style:'AptosGrandTotal',alignment:'left',fontSize:summaryFontSize},...carriers.map(c=>({text:c.carrier,style:'AptosGrandTotal',alignment:'center',fontSize:summaryFontSize}))],[{text:'INR Total',bold:true,fontSize:summaryFontSize,lineHeight:summaryLineHeight,margin:summaryMargin},...overall.map(v=>({text:formatINR(v),bold:true,fontSize:summaryFontSize,lineHeight:summaryLineHeight,alignment:'right',margin:summaryMargin}))]]},layout:{hLineWidth:()=>1,vLineWidth:()=>1,hLineColor:'#d1d5db',fillColor:i=>(i===0?'#05964b':i===1?'#ecfdf5':null)},margin:[0,0,0,10]});
         }
     }
     if(data.remarks)content.push({table:{widths:['*'],body:[[{text:'Remarks',style:'categoryHeader'}],[{text:String(data.remarks).toUpperCase().split(/\\r\\n|\\r|\\n/),margin:[5,5]}]]},layout:'noBorders',margin:[0,5,0,10]});
     content.push({canvas:[{type:'line',x1:0,y1:0,x2:515,y2:0,lineWidth:1,lineColor:'#e2e8f0'}]},{text:'This quotation is system-generated. Rates are subject to change based on validity date.',alignment:'center',fontSize:8,color:'#64748b',margin:[0,8,0,2]},{text:'Generated on '+new Date().toLocaleString('en-IN'),alignment:'center',fontSize:8,color:'#64748b'},{text:'Prepared By: '+userName,alignment:'center',fontSize:8,color:'#64748b',margin:[0,2,0,0]});
-    return {content,styles:{companyName:{fontSize:14,bold:true,color:'#1e3a8a'},companyAddress:{fontSize:9,color:'#64748b',margin:[0,2,0,4]},title:{fontSize:18,bold:true,color:'#1e3a8a'},quoteNum:{fontSize:12,bold:true,color:'#d97706'},detailLabel:{fontSize:10,bold:true,color:'#334155'},categoryHeader:{fontSize:11,bold:true,color:'#1e3a8a',margin:[0,8,0,4]},Aptos:{fontSize:10,bold:true,color:'white'}},defaultStyle:{fontSize:10,font:'Roboto'}};
+    return {content,styles:{companyName:{fontSize:14,bold:true,color:'#1e3a8a'},companyAddress:{fontSize:9,color:'#64748b',margin:[0,2,0,4]},title:{fontSize:18,bold:true,color:'#1e3a8a'},quoteNum:{fontSize:12,bold:true,color:'#d97706'},detailLabel:{fontSize:10,bold:true,color:'#334155'},categoryHeader:{fontSize:11,bold:true,color:'#1e3a8a',margin:[0,8,0,4]},Aptos:{fontSize:10,bold:true,color:'white'},AptosGrandTotal:{fontSize:12,bold:true,color:'white'}},defaultStyle:{fontSize:10,font:'Roboto'}};
 }
 
 function generatePDF(data, mode) {
@@ -5708,10 +6957,11 @@ function downloadSavedPDF(target, mode, idx) {
         alert('Record not found.');
         return;
     }
-    if (!rec.chargesOrder || Object.keys(rec.chargesOrder).length === 0) {
-        rec.chargesOrder = getCurrentChargesOrder(mode);
+    const outputData = getQuotationOutputData(rec);
+    if (!outputData.chargesOrder || Object.keys(outputData.chargesOrder).length === 0) {
+        outputData.chargesOrder = getCurrentChargesOrder(mode);
     }
-    generatePDFFromHTML(rec, mode);
+    generatePDFFromHTML(outputData, mode);
 }
 
 
@@ -5737,16 +6987,19 @@ function generatePDFFromHTML(data, mode) {
             #preview-content-container .shahid-master-quote-table{width:100%!important;max-width:100%!important;}
             #preview-content-container th,#preview-content-container td{white-space:nowrap!important;overflow:hidden!important;text-overflow:clip!important;overflow-wrap:normal!important;word-break:normal!important;line-height:1.4!important;}
             #preview-content-container .pdf-remarks-table .special-remark-inline{white-space:pre-line!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;word-break:normal!important;line-height:1.4!important;}
-            #preview-content-container .shahid-master-quote-table th,#preview-content-container .shahid-master-quote-table td{padding:4px 8px!important;font-size:15px!important;height:auto!important;}
+            #preview-content-container .shahid-master-quote-table th,#preview-content-container .shahid-master-quote-table td{padding:4px 8px!important;height:auto!important;}
             #preview-content-container .shahid-master-quote-table thead th{font-size:15px!important;height:auto!important;}
-            #preview-content-container .shahid-master-quote-table tbody td{height:auto!important;}
-            #preview-content-container .shahid-master-quote-table tfoot td{padding:4px 8px!important;font-size:15px!important;}
+            #preview-content-container .shahid-master-quote-table tbody td{font-size:12px!important;height:auto!important;}
+            #preview-content-container .shahid-master-quote-table tfoot td{padding:4px 8px!important;font-size:12px!important;}
             #preview-content-container .shahid-master-quote-table th:first-child,#preview-content-container .shahid-master-quote-table td:first-child{white-space:nowrap!important;}
             #preview-content-container p{margin:2px 0!important;line-height:1.4!important;font-size:15px!important;}
             #preview-content-container .special-remark-inline{white-space:pre-line!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere!important;}
             #preview-content-container .pdf-section-heading{height:auto!important;padding:4px 8px!important;font-size:17px!important;line-height:1.4!important;white-space:nowrap!important;overflow:hidden!important;}
-            #preview-content-container .pdf-detail-table th,#preview-content-container .pdf-detail-table td{padding:4px 8px!important;font-size:15px!important;line-height:1.4!important;white-space:nowrap!important;}
-            #preview-content-container .pdf-grand-total{padding:4px 8px!important;font-size:17px!important;line-height:1.4!important;white-space:nowrap!important;}
+            #preview-content-container .pdf-detail-table th,#preview-content-container .pdf-detail-table td{padding:4px 8px!important;line-height:1.4!important;white-space:nowrap!important;}
+            #preview-content-container .pdf-detail-table thead th{font-size:17px!important;}
+            #preview-content-container .pdf-detail-table tbody td{font-size:12px!important;}
+            #preview-content-container .pdf-subtotal-row,#preview-content-container .pdf-grand-total{height:29px!important;min-height:29px!important;max-height:29px!important;padding:4px 8px!important;font-size:12px!important;font-weight:700!important;line-height:1.35!important;white-space:nowrap!important;box-sizing:border-box!important;}
+            #preview-content-container .pdf-subtotal-row td,#preview-content-container .pdf-grand-total td{height:29px!important;min-height:29px!important;max-height:29px!important;padding:4px 8px!important;font-size:12px!important;font-weight:700!important;line-height:1.35!important;box-sizing:border-box!important;vertical-align:middle!important;}
             #preview-content-container .pdf-remarks-heading{height:auto!important;padding:4px 8px!important;font-size:17px!important;line-height:1.4!important;white-space:nowrap!important;}
         </style>
         ${html}`;
@@ -5944,7 +7197,7 @@ function legacy_buildPreviewHTML(data, mode, maxWidth = '100%', compact = false)
                     <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:10%;">Currency</th>
                     <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:15%;">Rate</th>
                     <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:10%;">Basis</th>
-                    <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:29%;">INR Equivalent</th>
+                    <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:29%;">INR Amount</th>
                 </tr>
             </thead>
             <tbody>`;
@@ -5961,12 +7214,10 @@ function legacy_buildPreviewHTML(data, mode, maxWidth = '100%', compact = false)
             if (mode === 'air' && AIR_MIN_THRESHOLDS && AIR_MIN_THRESHOLDS[charge]) {
                 if (c.minApplied) {
                     basisDisplay = 'Minimum';
+                } else if (charge === 'GATE PASS') {
+                    basisDisplay = 'AT Actual';
                 } else {
-                    if (charge === 'GATE PASS') {
-                        basisDisplay = 'AT Actual';
-                    } else {
-                        basisDisplay = 'Per KGS';
-                    }
+                    basisDisplay = c.basis === 'Normal' ? '1' : c.basis;
                 }
             }
 
@@ -6169,7 +7420,34 @@ window.addEventListener('resize',()=>{
     if(document.getElementById('preview-content-container')) scheduleQuotationPreviewFit();
 });
 
+function downloadCurrentPreviewPDF() {
+    // BL Draft Preview uses the existing BL-specific PDF generator.
+    if (Number.isInteger(window.currentBLPreviewIndex) && window.currentBLPreviewIndex >= 0) {
+        downloadBLPDF(window.currentBLPreviewIndex);
+        return;
+    }
+
+    // Quotation Preview uses the exact record currently displayed in the modal.
+    if (_previewData && _previewData.data && _previewData.mode) {
+        const data = _previewData.data;
+        const mode = _previewData.mode;
+
+        if (!data.quoteNumber) {
+            data.quoteNumber = 'DRAFT-' + Date.now();
+        }
+        if (!data.chargesOrder || Object.keys(data.chargesOrder).length === 0) {
+            data.chargesOrder = getCurrentChargesOrder(mode);
+        }
+
+        generatePDFFromHTML(data, mode);
+        return;
+    }
+
+    alert('No current preview record is available for PDF download.');
+}
+
 function previewQuote(mode) {
+    window.currentBLPreviewIndex = null;
     const data = (window.__multiGetFormData || getFormData)(mode);
     if (!data.client && Object.keys(data.charges).length === 0) {
         alert('Please fill the form with at least a Client Name and charges before previewing.');
@@ -6192,13 +7470,15 @@ function previewQuote(mode) {
 }
 
 function previewSavedRecord(target, mode, idx) {
+    window.currentBLPreviewIndex = null;
     const rec = db[target][mode][idx];
     if (!rec) {
         alert('Record not found.');
         return;
     }
-    _previewData = { data: rec, mode };
-    const html = buildPreviewHTML(rec, mode, '100%', false);
+    const outputData = getQuotationOutputData(rec);
+    _previewData = { data: outputData, mode };
+    const html = buildPreviewHTML(outputData, mode, '100%', false);
     document.getElementById('modal-title').textContent = 'Quotation Preview';
     document.getElementById('previewBody').innerHTML = `
         <div class="quotation-preview-actions" style="margin-bottom:10px; display:flex; gap:8px; flex-wrap:wrap;">
@@ -6295,7 +7575,7 @@ function copyPreviewText() {
 
     // Calculate each carrier total from the exact same charge rows used for
     // the Preview. This prevents the old WhatsApp-only total from diverging
-    // from the quotation's Grand Total when USD + INR charges are mixed.
+    // from the quotation's ━━━━━━━━━━━━━━━━━━\nGrand Total when USD + INR charges are mixed.
     const previewTotalForCarrier = (carrier) => {
         let total = 0;
         chargesForTotal: {
@@ -6344,7 +7624,7 @@ function copyPreviewText() {
     // LCL: both Gross Weight and CBM are shown.
     let text = '';
     if (m === 'air' || m === 'lcl') {
-        const carrierName = data?.carrier || carriers[0]?.carrier || '-';
+        const carrierName = carriers.map(c => String(c?.carrier || '').trim()).filter(Boolean).join(', ') || data?.carrier || '-';
         text += `${m === 'air' ? '✈️ AIR FREIGHT QUOTATION' : '📦 LCL FREIGHT QUOTATION'}\n\n`;
         text += `📌 SHIPMENT DETAILS\n`;
         text += `━━━━━━━━━━━━━━━━━━\n`;
@@ -6364,7 +7644,7 @@ function copyPreviewText() {
     } else {
         // SEA keeps its own compact professional WhatsApp format.
         // AIR/LCL output above remains unchanged.
-        const seaCarrier = data?.carrier || carriers[0]?.carrier || '-';
+        const seaCarrier = carriers.map(c => String(c?.carrier || '').trim()).filter(Boolean).join(', ') || data?.carrier || '-';
         text += `🚢 SEA FREIGHT QUOTATION\n\n`;
         text += `📌 SHIPMENT DETAILS\n`;
         text += `━━━━━━━━━━━━━━━━━━\n`;
@@ -6430,7 +7710,7 @@ function copyPreviewText() {
             const basis = String(d.raw?.basis || '').toUpperCase();
             let unitSuffix = '';
             if (m === 'air') {
-                if (basis === 'PER KGS × 4') unitSuffix = ' / KG × 4';
+                if (basis === 'PER KGS × 4' && String(charge).toUpperCase() !== 'GATE PASS') unitSuffix = ' / KG × 4';
                 else if (basis === 'PER KGS') unitSuffix = ' / KG';
             } else if (m === 'lcl' && basis === 'PER CBM') {
                 unitSuffix = ' / CBM';
@@ -6444,7 +7724,10 @@ function copyPreviewText() {
 
         // Use the exact Preview total as the final authority.
         grandTotal = previewTotalForCarrier(carrier);
-        text += `Grand Total : ₹ ${Number(grandTotal).toLocaleString('en-IN', { minimumFractionDigits:0, maximumFractionDigits:2 })}\n`;
+        const carrierTotalLabel = String(carrier?.carrier || data?.carrier || 'CARRIER').trim() || 'CARRIER';
+        text += `━━━━━━━━━━━━━━━━━━\n`;
+        text += `${carrierTotalLabel.toUpperCase()} TOTAL : ₹ ${Number(grandTotal).toLocaleString('en-IN', { minimumFractionDigits:0, maximumFractionDigits:2 })}\n`;
+        text += `━━━━━━━━━━━━━━━━━━\n`;
     } else {
         // Multi-carrier: keep every carrier separate so no carrier's charges are
         // lost. Each carrier gets its own complete charge list and Grand Total.
@@ -6464,7 +7747,7 @@ function copyPreviewText() {
                     const basis = String(d.raw?.basis || '').toUpperCase();
                     let unitSuffix = '';
                     if (m === 'air') {
-                        if (basis === 'PER KGS × 4') unitSuffix = ' / KG × 4';
+                        if (basis === 'PER KGS × 4' && String(charge).toUpperCase() !== 'GATE PASS') unitSuffix = ' / KG × 4';
                         else if (basis === 'PER KGS') unitSuffix = ' / KG';
                     } else if (m === 'lcl' && basis === 'PER CBM') {
                         unitSuffix = ' / CBM';
@@ -6479,7 +7762,9 @@ function copyPreviewText() {
 
             // Exact same total as the Preview for this carrier.
             carrierTotal = previewTotalForCarrier(carrier);
-            text += `Grand Total : ₹ ${Number(carrierTotal).toLocaleString('en-IN', { minimumFractionDigits:0, maximumFractionDigits:2 })}\n`;
+            text += `━━━━━━━━━━━━━━━━━━\n`;
+            text += `${String(label).toUpperCase()} TOTAL : ₹ ${Number(carrierTotal).toLocaleString('en-IN', { minimumFractionDigits:0, maximumFractionDigits:2 })}\n`;
+            text += `━━━━━━━━━━━━━━━━━━\n`;
         });
     }
 
@@ -7635,6 +8920,20 @@ function editDsrShipment(idx) {
 function convertQuoteToShipmentByIndex(target, mode, idx) {
     addShipmentFromQuote(target, mode, idx);
 }
+
+// Legacy DSR entry points retained for older action links/templates.
+// The unified DSR modal is now the canonical implementation.
+window.openSeaDsrModal = window.openSeaDsrModal || function(idx = null, prefill = null) {
+    return openDsrModal('SEA', idx, prefill);
+};
+window.openAirDsrModal = window.openAirDsrModal || function(idx = null, prefill = null) {
+    return openDsrModal('AIR', idx, prefill);
+};
+window.openShipmentModal = window.openShipmentModal || function(idx = null, prefill = null) {
+    const mode = String(prefill?.mode || prefill?.type || db.shipments?.[idx]?.mode || db.shipments?.[idx]?.type || 'SEA').toUpperCase();
+    return openDsrModal(mode, idx, prefill);
+};
+
 // Override renderRecords for enhanced views
 const originalRenderRecords = renderRecords;
 renderRecords = function(target) {
@@ -7720,8 +9019,12 @@ function autoFillBLFromReference(reference, options = {}) {
     setIfBlank('bl-job-no', s.jobNo || s.code || q.jobNo || q.shipmentCode || '');
     setIfBlank('bl-quote-ref', q.quoteNumber || q.quoteNo || q.id || '');
     setIfBlank('bl-booking-no', s.bookingNo || q.bookingNo || '');
-    setIfBlank('bl-shipper-name', s.shipper || q.client || q.customer || '');
-    setIfBlank('bl-consignee-name', q.consignee || '');
+    setIfBlank('bl-shipper-name', s.shipper || s.shipperName || q.shipper || q.shipperName || q.client || q.customer || '');
+    setIfBlank('bl-shipper-addr', s.shipperAddr || s.shipperAddress || q.shipperAddr || q.shipperAddress || '');
+    setIfBlank('bl-consignee-name', s.consignee || s.consigneeName || q.consignee || q.consigneeName || '');
+    setIfBlank('bl-consignee-addr', s.consigneeAddr || s.consigneeAddress || q.consigneeAddr || q.consigneeAddress || '');
+    setIfBlank('bl-notify-name', s.notifyParty || s.notifyName || q.notifyParty || q.notifyName || '');
+    setIfBlank('bl-notify-addr', s.notifyAddr || s.notifyAddress || q.notifyAddr || q.notifyAddress || '');
     setIfBlank('bl-vessel', s.vessel || s.vesselAtd || s.liner || q.carrier || '');
     setIfBlank('bl-voyage', s.voyage || q.voyage || '');
     setIfBlank('bl-pol', s.pol || q.pol || '');
@@ -7816,9 +9119,13 @@ function openBLModal(editIdx = null, shipmentIdx = null, mode = 'SEA') {
             if (shipmentIdx !== null && db.shipments[shipmentIdx]) {
                 const s = db.shipments[shipmentIdx];
                 b.shipmentCode = s.code || '';
-                b.shipperName = s.shipper || '';
-                b.consigneeName = s.shipper || '';
-                b.vessel = s.liner || '';
+                b.shipperName = s.shipper || s.shipperName || s.client || s.customer || '';
+                b.shipperAddr = s.shipperAddr || s.shipperAddress || '';
+                b.consigneeName = s.consignee || s.consigneeName || '';
+                b.consigneeAddr = s.consigneeAddr || s.consigneeAddress || '';
+                b.notifyName = s.notifyParty || s.notifyName || '';
+                b.notifyAddr = s.notifyAddr || s.notifyAddress || '';
+                b.vessel = s.liner || s.vessel || '';
                 b.pol = s.pol || '';
                 b.pod = s.pod || '';
                 b.placeOfIssue = s.pol || '';
@@ -7848,7 +9155,8 @@ function openBLModal(editIdx = null, shipmentIdx = null, mode = 'SEA') {
                     <input type="number" class="bl-cont-net-weight" value="${c.netWeight||''}" placeholder="Net Wt (KGS)" step="0.01" oninput="updateBLTotals()" />
                     <input type="number" class="bl-cont-volume" value="${c.volume||''}" placeholder="Volume (CBM)" step="0.01" oninput="updateBLTotals()" />
                     <input type="text" class="bl-cont-packages" value="${c.packages||''}" placeholder="Packages" />
-                    <button class="btn btn-sm btn-clear" onclick="this.closest('.bl-container-row').remove(); updateBLTotals();">×</button>
+                    <button type="button" class="btn btn-sm btn-preview bl-cont-duplicate" title="Duplicate container with all data" onclick="duplicateBLContainerRow(this)">⧉</button>
+                    <button type="button" class="btn btn-sm btn-clear" title="Remove container" onclick="this.closest('.bl-container-row').remove(); updateBLTotals();">×</button>
                 </div>`;
             });
         }
@@ -7979,7 +9287,8 @@ function openBLModal(editIdx = null, shipmentIdx = null, mode = 'SEA') {
                 </div>
                 <div>
                     <h4 style="color:var(--primary); margin-bottom:6px;">Issuance Details</h4>
-                    <div class="form-group"><label>No. of Original B/L</label><select id="bl-originals"><option value="1" ${b.numOriginals===1?'selected':''}>1</option><option value="2" ${b.numOriginals===2?'selected':''}>2</option><option value="3" ${b.numOriginals===3?'selected':''}>3</option></select></div>
+                    <div class="form-group"><label>BL TYPE</label><select id="bl-type"><option value="ORIGINAL" ${b.blType==='ORIGINAL' || !b.blType?'selected':''}>ORIGINAL</option><option value="SEAWAY" ${b.blType==='SEAWAY'?'selected':''}>SEAWAY</option><option value="SURRENDER" ${b.blType==='SURRENDER'?'selected':''}>SURRENDER</option></select></div>
+                     <div class="form-group"><label>No. of Original B/L</label><select id="bl-originals"><option value="1" ${b.numOriginals===1?'selected':''}>1</option><option value="2" ${b.numOriginals===2?'selected':''}>2</option><option value="3" ${b.numOriginals===3?'selected':''}>3</option></select></div>
                     <div class="form-group"><label>Place of Issue</label><input type="text" id="bl-place" value="${b.placeOfIssue||''}" /></div>
                     <div class="form-group"><label>Issue Date</label><input type="date" id="bl-issue-date" value="${b.issueDate||today}" /></div>
                     <div class="form-group"><label>Signature (Agent)</label><input type="text" id="bl-signature" value="${b.signature||companyName}" style="width:100%;" /></div>
@@ -8210,14 +9519,15 @@ function editMasterItem(tab, originalIdx) {
     const data = db[listKey];
     const item = data[originalIdx];
     if (!item) return alert('Item not found');
-    const newVal = prompt('Edit item:', item);
-    if (newVal && newVal.trim() !== item) {
-        data[originalIdx] = newVal.trim();
-        saveDB();
-        renderMasterData();
-        populateDropdowns();
-        autoBackup();
-    }
+    appPrompt('Edit item:', item, (newVal) => {
+        if (newVal && newVal.trim() !== item) {
+            data[originalIdx] = newVal.trim();
+            saveDB();
+            renderMasterData();
+            populateDropdowns();
+            autoBackup();
+        }
+    });
 }
 function toggleHiddenMasterItem(tab, originalIdx) {
     const listKey = tab === 'carriers' ? 'carriers' :
@@ -8446,7 +9756,28 @@ function refreshOperationalDropdowns() {
 
     ['rr-pol-list-sea1','rr-pol-list-sea2','rr-pol-list-air'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=visiblePol.map(v=>`<option value="${escapeHtml(v)}">`).join(''); });
     ['rr-pod-list-sea1','rr-pod-list-sea2','rr-pod-list-air'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=visiblePod.map(v=>`<option value="${escapeHtml(v)}">`).join(''); });
-    ['rr-inventory-sea1','rr-inventory-sea2'].forEach(id=>{ const el=document.getElementById(id); if(el) { const old=el.value; el.innerHTML=visibleContainers.map(v=>`<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join(''); if([...el.options].some(o=>o.value===old)) el.value=old; } });
+    ['rr-inventory-sea1','rr-inventory-sea2'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        const old = el.value;
+        const required = ['20 GP & 40 HC', '20 GP', '40 HC'];
+        const inventoryValues = required.concat(
+            visibleContainers.filter(v => !required.includes(v))
+        );
+
+        el.innerHTML = [...new Set(inventoryValues)]
+            .map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`)
+            .join('');
+
+        // Preserve an existing user/record selection when it is valid.
+        // On a new Rate Request, force the business default.
+        if (old && [...el.options].some(o => o.value === old)) {
+            el.value = old;
+        } else {
+            el.value = '20 GP & 40 HC';
+        }
+    });
 
     // Any currently rendered DSR form.
     if(document.getElementById('dsr-pol')) populateSelect('dsr-pol', visiblePol, document.getElementById('dsr-pol').value);
@@ -9717,7 +11048,7 @@ function previewDefaultCharge(mode, idx) {
                                 <th style="padding: 8px 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">Sell Amt</th>
                                 <th style="padding: 8px 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">Buy Amt</th>
                                 <th style="padding: 8px 12px; text-align: center; border-bottom: 1px solid #e2e8f0;">Currency</th>
-                                <th style="padding: 8px 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">INR Equivalent</th>
+                                <th style="padding: 8px 12px; text-align: right; border-bottom: 1px solid #e2e8f0;">INR Amount</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -9844,6 +11175,36 @@ function duplicateCarrierCharge(type, idx) {
 function getDefaultChargeTypes(mode) {
     return defaultCharges[mode] || [];
 }
+
+// Return the horizontal carrier-charge columns used by AIR/LCL Local Charges.
+// Freight itself is handled by the quote/freight layer, while custom carrier
+// charge names already stored in the database are preserved and included.
+function getHorizontalChargeColumns(mode) {
+    const m = String(mode || '').toLowerCase();
+    const freightName = m === 'air' ? 'AIR FREIGHT' : m === 'lcl' ? 'FREIGHT' : '';
+    const columns = [];
+
+    (getDefaultChargeTypes(m) || []).forEach(name => {
+        const key = String(name || '').trim().toUpperCase();
+        if (!key || key === freightName || /^THC(?:_|$)/i.test(key)) return;
+        if (!columns.includes(key)) columns.push(key);
+    });
+
+    const existing = m === 'air'
+        ? (Array.isArray(db.carrierChargesAir) ? db.carrierChargesAir : [])
+        : (Array.isArray(db.carrierChargesSeaLcl) ? db.carrierChargesSeaLcl : []).filter(r => String(r.mode || '').toLowerCase() === m);
+
+    existing.forEach(rec => {
+        Object.keys(rec && rec.charges || {}).forEach(name => {
+            const key = String(name || '').trim().toUpperCase();
+            if (!key || key === freightName || /^THC(?:_|$)/i.test(key)) return;
+            if (!columns.includes(key)) columns.push(key);
+        });
+    });
+
+    return columns;
+}
+
 function findDefaultChargeDuplicate(mode, record, excludeIndex) {
     let arr;
     if (mode === 'sea') arr = db.defaultSeaCharges;
@@ -10250,6 +11611,25 @@ function clearAllAlerts(){
 document.addEventListener('click',e=>{const wrap=document.querySelector('.alert-center-wrap'); if(alertCenterOpen&&wrap&&!wrap.contains(e.target)){document.getElementById('alert-center-panel')?.classList.remove('open');alertCenterOpen=false;}});
 function startAlertEngine(){ renderAlertCenter(); setInterval(renderAlertCenter,60000); }
 
+// Compatibility helpers for older action/quote update hooks. Current UI is
+// already updated by renderAlertCenter/renderEnhancedRates, so these helpers
+// simply route legacy calls into the canonical renderers.
+function updateActionCenterBadge(){
+    const count = typeof collectERPAlerts === 'function' ? collectERPAlerts().length : 0;
+    document.querySelectorAll('#action-center-nav-badge,#action-center-header-badge').forEach(el => {
+        el.textContent = count > 99 ? '99+' : String(count);
+        el.style.display = count ? 'inline-flex' : 'none';
+    });
+}
+function updateAlertBadge(){
+    const count = typeof collectERPAlerts === 'function' ? collectERPAlerts().length : 0;
+    const el = document.getElementById('alert-count-badge');
+    if(el){ el.textContent = count > 99 ? '99+' : String(count); el.style.display = count ? 'inline-flex' : 'none'; }
+}
+function updateQuoteActionButtons(tabId){
+    if(String(tabId || '') === 'rates' && typeof renderEnhancedRates === 'function') renderEnhancedRates();
+}
+
 // ==================== SQLITE BACKUP ====================
 async function initSQLite() {
     if (window.__ERP_SQLITE_READY && window.SQL) return window.SQL;
@@ -10358,7 +11738,7 @@ async function exportSQLiteToFolder(folderHandle) {
         const data = dbInstance.export();
         dbInstance.close();
 
-        const fileName = `AutoBackup_${new Date().toISOString().split('T')[0]}.sqlite`;
+        const fileName = 'SHAHID_ERP.sqlite';
         const fileHandle = await folderHandle.getFileHandle(fileName, { create: true });
         const writable = await fileHandle.createWritable({ keepExistingData: false });
         await writable.write(new Blob([data], { type: 'application/x-sqlite3' }));
@@ -10386,85 +11766,161 @@ async function exportSQLiteToFolder(folderHandle) {
 
 
 async function importFromSQLite(input) {
+    if(!input || !input.files || !input.files[0]){
+        return null;
+    }
+
     const file = input.files[0];
-    if (!file) return;
 
     try {
         await initSQLite();
-        if (!window.SQL) {
-            alert('SQLite library failed to load. Please check your internet connection and refresh the page.');
-            return;
+        if(!window.SQL){
+            throw new Error(
+                'SQLite library failed to load. Please check your internet connection and refresh the page.'
+            );
         }
 
-        const reader = new FileReader();
-        reader.onload = async function(e) {
-            try {
-                const sqliteDb = new window.SQL.Database(new Uint8Array(e.target.result));
+        const buffer = await file.arrayBuffer();
+        const sqliteDb = new window.SQL.Database(new Uint8Array(buffer));
 
-                const tableCheck = sqliteDb.prepare(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name='erp_state'"
+        try {
+            const tableCheck = sqliteDb.prepare(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='erp_state'"
+            );
+            const hasCompleteState = tableCheck.step();
+            tableCheck.free();
+
+            if(!hasCompleteState){
+                throw new Error(
+                    'This SQLite file is not a Complete SHAHID ERP backup.'
                 );
-                const hasCompleteState = tableCheck.step();
-                tableCheck.free();
-
-                if (hasCompleteState) {
-                    const stmt = sqliteDb.prepare('SELECT key, value_json FROM erp_state');
-                    const importedState = {};
-
-                    while (stmt.step()) {
-                        const row = stmt.getAsObject();
-                        try {
-                            importedState[row.key] = JSON.parse(row.value_json);
-                        } catch (e) {
-                            console.warn('Invalid JSON state key skipped:', row.key);
-                        }
-                    }
-                    stmt.free();
-                    sqliteDb.close();
-
-                    if (!Object.keys(importedState).length) {
-                        throw new Error('The SQLite backup contains no ERP state.');
-                    }
-
-                    const ok = confirm(
-                        'Complete SQLite backup detected.\\n\\n' +
-                        'YES = Restore the complete ERP state from this backup.\\n' +
-                        'NO = Cancel.\\n\\n' +
-                        'A JSON backup should be kept before a full restore.'
-                    );
-
-                    if (!ok) return;
-
-                    Object.keys(importedState).forEach(key => {
-                        db[key] = importedState[key];
-                    });
-
-                    saveDB();
-                    alert(
-                        '✅ Complete SQLite restore successful.\\n\\n' +
-                        'All saved ERP data/state from the SQLite backup has been restored.'
-                    );
-                    location.reload();
-                    return;
-                }
-
-                // Legacy SQLite files: keep the existing non-destructive import path.
-                sqliteDb.close();
-                alert(
-                    'This is an older SQLite backup format. ' +
-                    'Please use the new Complete SQLite backup for full application restore.'
-                );
-            } catch (err) {
-                alert('Import failed: ' + err.message);
             }
-        };
-        reader.readAsArrayBuffer(file);
-    } catch (err) {
-        alert('Import failed: ' + err.message);
-    }
 
-    input.value = '';
+            const stmt = sqliteDb.prepare(
+                'SELECT key, value_json FROM erp_state'
+            );
+            const importedState = {};
+
+            while(stmt.step()){
+                const row = stmt.getAsObject();
+
+                try{
+                    importedState[row.key] = JSON.parse(row.value_json);
+                }catch(parseError){
+                    console.warn(
+                        'Invalid JSON state key skipped:',
+                        row.key,
+                        parseError
+                    );
+                }
+            }
+
+            stmt.free();
+
+            if(!Object.keys(importedState).length){
+                throw new Error(
+                    'The SQLite backup contains no ERP state.'
+                );
+            }
+
+            // IMPORTANT:
+            // Do NOT replace db with importedState. Merge the complete
+            // database so current ERP data + imported ERP data coexist.
+            const current = (typeof db === 'object' && db !== null)
+                ? db
+                : {};
+
+            let merged;
+            try{
+                merged = window.shahidMasterMergeDatabase(current, importedState);
+            }catch(mergeError){
+                throw new Error(
+                    `SQLite master merge failed: ${mergeError.message}`
+                );
+            }
+
+            if(
+                !merged ||
+                typeof merged !== 'object' ||
+                Array.isArray(merged)
+            ){
+                throw new Error(
+                    'SQLite master merge returned an invalid database object.'
+                );
+            }
+
+            // Commit ONLY after the complete merge has passed validation.
+            Object.keys(db).forEach(key => delete db[key]);
+            Object.assign(db, merged);
+
+            if(typeof saveDB === 'function'){
+                await Promise.resolve(saveDB());
+            }
+
+            // Make sure Planner Tasks and Planner Notes are immediately
+            // available after import without losing their records.
+            if(Array.isArray(db.plannerTasks)){
+                try{
+                    if(typeof plannerEnsureSrNumbers === 'function'){
+                        plannerEnsureSrNumbers();
+                    }
+                }catch(e){
+                    console.warn('Planner SR normalization after import skipped:', e);
+                }
+            }
+
+            const importedTaskCount = Array.isArray(importedState.plannerTasks)
+                ? importedState.plannerTasks.length
+                : 0;
+            const importedNoteCount = Array.isArray(importedState.plannerNotes)
+                ? importedState.plannerNotes.length
+                : 0;
+
+            const totalTaskCount = Array.isArray(db.plannerTasks)
+                ? db.plannerTasks.length
+                : 0;
+            const totalNoteCount = Array.isArray(db.plannerNotes)
+                ? db.plannerNotes.length
+                : 0;
+
+            alert(
+                '✅ SQLite Import + Merge successful.\\n\\n' +
+                'Current ERP data was preserved and the backup data was merged.\\n\\n' +
+                `Imported Tasks: ${importedTaskCount}\\n` +
+                `Imported Notes: ${importedNoteCount}\\n` +
+                `Total Tasks after merge: ${totalTaskCount}\\n` +
+                `Total Notes after merge: ${totalNoteCount}`
+            );
+
+            // Refresh the UI so imported Planner Tasks/Notes and all other
+            // merged ERP data are visible immediately.
+            try{
+                if(typeof populateDropdowns === 'function') populateDropdowns();
+                if(typeof loadPlannerDay === 'function'){
+                    loadPlannerDay(formatDateKey(plannerSelectedDate));
+                }
+                if(typeof renderPlannerCalendar === 'function'){
+                    renderPlannerCalendar();
+                }
+            }catch(refreshError){
+                console.warn('Post-import UI refresh warning:', refreshError);
+            }
+
+            return merged;
+
+        }finally{
+            sqliteDb.close();
+        }
+
+    }catch(err){
+        console.error('SQLite import/merge failed:', err);
+        alert('SQLite Import/Merge failed: ' + (err?.message || String(err)));
+        return null;
+    }finally{
+        input.value = '';
+    }
 }
+
 
 // ==================== DSR DESIGN MODE ====================
 function toggleDsrDesignMode() {
@@ -11082,7 +12538,7 @@ function renderInvoiceDraftEditor(){
           <button type="button" class="btn btn-sm btn-info" onclick="invoiceDraftAddLine()">＋ Add Charge</button>
         </div>
         <div class="v11-inv-table-wrap"><table class="v11-inv-table">
-          <thead><tr><th>Charge</th><th>Basis</th><th>Qty</th><th>Rate</th><th>Currency</th><th>INR Equivalent</th><th>Action</th></tr></thead>
+          <thead><tr><th>Charge</th><th>Basis</th><th>Qty</th><th>Rate</th><th>Currency</th><th>INR Amount</th><th>Action</th></tr></thead>
           <tbody id="v91-invoice-draft-lines">${rows}</tbody>
           <tfoot><tr><td colspan="5">GRAND TOTAL</td><td id="v91-draft-grand-foot"><strong>${formatINR(total)}</strong></td><td></td></tr></tfoot>
         </table></div>
@@ -11356,7 +12812,7 @@ function buildInvoicePreviewHTML(data, compact = false) {
                     <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:10%;">Currency</th>
                     <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:15%;">Sell Amount</th>
                     <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:10%;">Basis</th>
-                    <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:29%;">INR Equivalent</th>
+                    <th style="border:1px solid #d1d5db;padding:${tdPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${baseFont};width:29%;">INR Amount</th>
                 </tr>
             </thead>
             <tbody>
@@ -11548,7 +13004,11 @@ function emailInvoiceV11(no) {
     if (!x) return alert('Invoice not found.');
     const subject = `Invoice ${x.invoiceNo || x.id} — ${x.quoteRef || ''}`;
     const body = `Dear Customer,%0D%0A%0D%0APlease find invoice ${x.invoiceNo || x.id} against Quote ${x.quoteRef || '-'}.%0D%0AAmount: ${x.amount || x.total || 0}%0D%0A%0D%0ARegards,%0D%0AGATEWAY EXIM`;
-    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${body}`;
+    const bodyText = `Dear Customer,\n\nPlease find invoice ${x.invoiceNo || x.id} against Quote ${x.quoteRef || '-'}.\nAmount: ${x.amount || x.total || 0}\n\nRegards,\nGATEWAY EXIM`;
+    window.shahidOpenMailCompat('', '', subject, bodyText).catch(err => {
+        console.error('Invoice Outlook open failed:', err);
+        alert('❌ Outlook could not be opened.\n\n' + err.message);
+    });
 }
 
 // ---------- Delete Invoice ----------
@@ -11823,6 +13283,38 @@ function exportContainerTrackerExcel() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(out), 'Containers');
     XLSX.writeFile(wb, `Container_Tracker_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+// ---------- REPORTING BAR RENDERER ----------
+// Shared renderer for the Sales / Operations / Profitability report cards.
+// The report functions already fall back to plain lists, but defining this
+// renderer restores the intended visual chart behavior without changing data.
+function renderBars(containerId, values, formatter) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+
+    const entries = Object.entries(values || {})
+        .filter(([, value]) => Number.isFinite(Number(value)))
+        .sort((a, b) => Number(b[1]) - Number(a[1]))
+        .slice(0, 12);
+
+    if (!entries.length) {
+        el.innerHTML = '<div class=\"report-empty\">No data</div>';
+        return;
+    }
+
+    const max = Math.max(...entries.map(([, value]) => Math.abs(Number(value))), 1);
+    const fmt = typeof formatter === 'function' ? formatter : (v => String(v));
+
+    el.innerHTML = entries.map(([label, value]) => {
+        const numeric = Number(value) || 0;
+        const width = Math.max(2, Math.min(100, Math.abs(numeric) / max * 100));
+        return `<div class=\"report-bar-row\">` +
+            `<div class=\"report-bar-label\" title=\"${escapeHtml(label)}\">${escapeHtml(label)}</div>` +
+            `<div class=\"report-bar-track\"><div class=\"report-bar-fill\" style=\"width:${width.toFixed(1)}%;\"></div></div>` +
+            `<div class=\"report-bar-value\">${escapeHtml(fmt(numeric))}</div>` +
+            `</div>`;
+    }).join('');
 }
 
 // ---------- SALES REPORT ----------
@@ -12616,6 +14108,7 @@ function loadBackupPath() {
             getFolderHandle().then(handle => {
                 if (!handle) return;
                 backupFolderHandle = handle;
+                window.backupFolderHandle = handle;
                 if (displayEl) displayEl.textContent = `📁 ${handle.name}`;
                 if (inputEl) inputEl.value = handle.name;
                 try { startAutoBackup(); } catch (e) { console.warn('Auto-backup start:', e); }
@@ -14611,6 +16104,68 @@ function saveFreightRecord() {
     autoBackup();
 }
 
+function getFreightFormData() {
+    const read = id => document.getElementById(id)?.value ?? '';
+    const rows = Array.from(document.querySelectorAll('#fr-charges-tbody tr'));
+    const charges = rows.map(row => ({
+        name: row.querySelector('.fr-charge-name')?.value || '',
+        unit: row.querySelector('.fr-charge-unit')?.value || 'CNT',
+        currency: row.querySelector('.fr-charge-currency')?.value || 'USD',
+        rate20: parseFloat(row.querySelector('.fr-rate20')?.value) || 0,
+        qty20: parseFloat(row.querySelector('.fr-qty20')?.value) || 0,
+        rate40: parseFloat(row.querySelector('.fr-rate40')?.value) || 0,
+        qty40: parseFloat(row.querySelector('.fr-qty40')?.value) || 0
+    }));
+
+    const total20 = parseFloat(document.getElementById('fr-summary-area')?.dataset.total20) || 0;
+    const total40 = parseFloat(document.getElementById('fr-summary-area')?.dataset.total40) || 0;
+    const marginPct = parseFloat(read('fr-margin-pct')) || 0;
+    const sell20 = total20 * (1 + marginPct / 100);
+    const sell40 = total40 * (1 + marginPct / 100);
+
+    return {
+        id: 'FR-' + Date.now().toString(36).toUpperCase(),
+        carrier: String(read('fr-carrier')).trim().toUpperCase(),
+        pol: String(read('fr-pol')).trim().toUpperCase(),
+        origin: String(read('fr-pol')).trim().toUpperCase(),
+        pod: String(read('fr-pod')).trim().toUpperCase(),
+        commodity: String(read('fr-commodity') || 'NON HAZ').trim().toUpperCase(),
+        validFrom: read('fr-valid-from'),
+        validTill: read('fr-valid-till'),
+        baseCurrency: read('fr-currency') || 'USD',
+        marginPct,
+        charges,
+        total20USD: total20,
+        total40USD: total40,
+        sell20USD: sell20,
+        sell40USD: sell40,
+        totalUSD: sell20 + sell40,
+        totalINR: (sell20 + sell40) * (db.exchangeRates?.USD || 1),
+        timestamp: new Date().toISOString(),
+        createdAt: new Date().toISOString()
+    };
+}
+
+function loadFreightForm(record) {
+    if (!record || typeof record !== 'object') return;
+    const set = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value ?? '';
+    };
+
+    set('fr-carrier', record.carrier || '');
+    set('fr-pol', record.pol || record.origin || '');
+    set('fr-pod', record.pod || '');
+    set('fr-commodity', record.commodity || 'NON HAZ');
+    set('fr-valid-from', record.validFrom || '');
+    set('fr-valid-till', record.validTill || record.validTo || '');
+    set('fr-currency', record.baseCurrency || 'USD');
+    set('fr-margin-pct', record.marginPct ?? 5);
+
+    renderFreightChargeRows(Array.isArray(record.charges) && record.charges.length ? record.charges : defaultFreightCharges);
+    calcFreight();
+}
+
 function renderFreightRecords() {
     // Safely get elements – if they don't exist, use defaults
     const searchInput = document.getElementById('fr-search');
@@ -14991,7 +16546,7 @@ function legacy_buildCompactEmailHTML(data, mode) {
                     <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};width:10%;">Currency</th>
                     <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};width:15%;">Sell Amount</th>
                     <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:center;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};width:10%;">Basis</th>
-                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};width:29%;">INR Equivalent</th>
+                    <th style="border:1px solid #d1d5db;padding:${thPadding};text-align:right;background:#3896d9;color:white;font-weight:700;font-size:${dataSize};width:29%;">INR Amount</th>
                 </tr>
             </thead>
             <tbody>`;
@@ -15062,7 +16617,7 @@ function legacy_buildCompactEmailHTML(data, mode) {
     if (chargeHtml) {
         chargeHtml += `<table style="width:${tableWidth};min-width:${tableWidth};max-width:100%;border-collapse:collapse;margin-top:0;font-size:${dataSize};">
             <tbody>
-                <tr style="background:#05964b;color:#edeef0;font-weight:800;font-size:17px;line-height:1;vertical-align:middle;">
+                <tr style="background:#05964b;color:#edeef0;font-weight:800;font-size:15px;line-height:1;vertical-align:middle;">
                     <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:right;width:71%;">Grand Total (INR) + GST additional</td>
                     <td style="border:1px solid #d1d5db;padding:4px 8px;text-align:left;width:29%;">${formatINR(grandTotal)}</td>
                 </tr>
@@ -15354,39 +16909,280 @@ function downloadDsrPDF(idx) {
 }
 // ==================== BL DRAFT FUNCTIONS ====================
 
+function getSelectedBLDraftIndices() {
+    return Array.from(document.querySelectorAll('.bldraft-row-checkbox:checked'))
+        .map(el => parseInt(el.dataset.index, 10))
+        .filter(Number.isInteger)
+        .filter(idx => idx >= 0 && idx < (db.bldrafts || []).length);
+}
+
+function updateBLDraftSelectedCount() {
+    const count = document.querySelectorAll('.bldraft-row-checkbox:checked').length;
+    const el = document.getElementById('bldraft-selected-count');
+    if (el) el.textContent = `${count} selected`;
+}
+
+function toggleAllBLDraftCheckboxes() {
+    const master = document.getElementById('bldraft-select-all');
+    document.querySelectorAll('.bldraft-row-checkbox').forEach(cb => {
+        cb.checked = !!master?.checked;
+    });
+    updateBLDraftSelectedCount();
+}
+
+function bldraftBulkAction(action) {
+    const indices = getSelectedBLDraftIndices();
+
+    if (action === 'new') {
+        toggleBLModeChooser();
+        return;
+    }
+
+    if (!indices.length) {
+        alert('Please select at least one BL Draft.');
+        return;
+    }
+
+    if (['preview', 'pdf', 'edit'].includes(action) && indices.length !== 1) {
+        alert('Please select exactly one BL Draft for this action.');
+        return;
+    }
+
+    if (action === 'preview') {
+        previewBLDraft(indices[0]);
+        return;
+    }
+
+    if (action === 'pdf') {
+        downloadBLPDF(indices[0]);
+        return;
+    }
+
+    if (action === 'edit') {
+        openBLModal(indices[0]);
+        return;
+    }
+
+    if (action === 'duplicate') {
+        indices.slice().sort((a,b) => a-b).forEach(idx => duplicateBLDraft(idx));
+        return;
+    }
+
+    if (action === 'finalize') {
+        const draftIndices = indices.filter(idx => db.bldrafts[idx] && db.bldrafts[idx].status !== 'Finalized');
+        if (!draftIndices.length) {
+            alert('All selected BL Drafts are already finalized.');
+            return;
+        }
+        if (!confirm(`Finalize ${draftIndices.length} selected BL Draft(s)?`)) return;
+        draftIndices.forEach(idx => {
+            if (db.bldrafts[idx]) {
+                db.bldrafts[idx].status = 'Finalized';
+                db.bldrafts[idx].lastModified = new Date().toISOString();
+            }
+        });
+        saveDB();
+        renderBLDrafts();
+        autoBackup();
+        alert(`${draftIndices.length} BL Draft(s) finalized.`);
+        return;
+    }
+
+    if (action === 'delete') {
+        if (!confirm(`Delete ${indices.length} selected BL Draft(s)?`)) return;
+        indices.slice().sort((a,b) => b-a).forEach(idx => {
+            if (db.bldrafts[idx]) db.bldrafts.splice(idx, 1);
+        });
+        saveDB();
+        renderBLDrafts();
+        autoBackup();
+        return;
+    }
+}
+
+
+const BL_DRAFT_COLUMNS = [
+ {key:'select',label:'SELECT',always:true},{key:'blNo',label:'BL NO.'},{key:'date',label:'DATE'},
+ {key:'blType',label:'BL TYPE'},{key:'shipper',label:'SHIPPER'},{key:'consignee',label:'CONSIGNEE'},
+ {key:'pol',label:'POL'},{key:'pod',label:'POD'},{key:'vessel',label:'VESSEL / FLIGHT'},
+ {key:'containers',label:'CONTAINERS'},{key:'gross',label:'GROSS WT'},{key:'volume',label:'VOLUME'},
+ {key:'status',label:'STATUS'},{key:'created',label:'CREATED ON'}
+];
+
+function getBLDraftVisibleColumns() {
+    const defaults=BL_DRAFT_COLUMNS.filter(c=>!c.always).map(c=>c.key);
+    try {
+        const saved=JSON.parse(localStorage.getItem('SHAHID_ERP_BL_DRAFT_VISIBLE_COLUMNS')||'null');
+        if(Array.isArray(saved)) {
+            const valid=defaults.filter(k=>saved.includes(k));
+            if(valid.length) return valid;
+        }
+    } catch(e) {}
+    return defaults;
+}
+function toggleBLDraftColumnSelector() {
+    const panel=document.getElementById('bldraft-column-selector');
+    if(!panel) return;
+    const opening=panel.style.display==='none'||!panel.style.display;
+    if(opening) renderBLDraftColumnSelector();
+    panel.style.display=opening?'block':'none';
+}
+function saveBLDraftVisibleColumns() {
+    const selected=Array.from(document.querySelectorAll('.bldraft-column-checkbox:checked')).map(x=>x.value);
+    localStorage.setItem('SHAHID_ERP_BL_DRAFT_VISIBLE_COLUMNS',JSON.stringify(selected));
+    renderBLDrafts();
+    const panel=document.getElementById('bldraft-column-selector');
+    if(panel) renderBLDraftColumnSelector();
+}
+function resetBLDraftVisibleColumns() {
+    localStorage.removeItem('SHAHID_ERP_BL_DRAFT_VISIBLE_COLUMNS');
+    renderBLDrafts();
+    renderBLDraftColumnSelector();
+}
+function renderBLDraftColumnSelector() {
+    const panel=document.getElementById('bldraft-column-selector');
+    if(!panel) return;
+    const visible=getBLDraftVisibleColumns();
+    panel.innerHTML='<div class="bldraft-column-selector-title">Select Table Columns</div>'+
+      '<div class="bldraft-column-selector-grid">'+
+      BL_DRAFT_COLUMNS.filter(c=>!c.always).map(c=>`<label class="bldraft-column-option"><input type="checkbox" class="bldraft-column-checkbox" value="${c.key}" ${visible.includes(c.key)?'checked':''} onchange="saveBLDraftVisibleColumns()"><span>${c.label}</span></label>`).join('')+
+      '</div><div class="bldraft-column-selector-footer"><span>SELECT is always visible.</span><button type="button" class="btn btn-sm btn-preview" onclick="resetBLDraftVisibleColumns()">↺ Reset Columns</button></div>';
+}
+
+function filterBLDraftTable() {
+    const search = String(document.getElementById('bldraft-filter-search')?.value || '').trim().toLowerCase();
+    const type = String(document.getElementById('bldraft-filter-type')?.value || '');
+    const status = String(document.getElementById('bldraft-filter-status')?.value || '');
+    document.querySelectorAll('#bldraft-table tbody tr').forEach(row => {
+        const idx = parseInt(row.dataset.blIndex, 10);
+        const b = Number.isInteger(idx) && db.bldrafts ? db.bldrafts[idx] : null;
+        if (!b) { row.style.display='none'; return; }
+        const text = [
+            b.blNumber,b.shipperName,b.shipper,b.consigneeName,b.consignee,
+            b.pol,b.pod,b.vessel,b.flight,b.blType,b.status
+        ].map(v=>String(v||'').toLowerCase()).join(' ');
+        const okSearch = !search || text.includes(search);
+        const okType = !type || String(b.blType || 'ORIGINAL').toUpperCase() === type;
+        const okStatus = !status || String(b.status || 'Draft') === status;
+        row.style.display = (okSearch && okType && okStatus) ? '' : 'none';
+    });
+    const visibleRows = Array.from(document.querySelectorAll('#bldraft-table tbody tr')).filter(r=>r.style.display!=='none').length;
+    const noMatch = document.getElementById('bldraft-no-filter-match');
+    if (noMatch) noMatch.style.display = visibleRows ? 'none' : 'block';
+}
+
+function clearBLDraftTableFilter() {
+    ['bldraft-filter-search','bldraft-filter-type','bldraft-filter-status'].forEach(id => {
+        const el=document.getElementById(id);
+        if (el) el.value='';
+    });
+    filterBLDraftTable();
+}
+
 function renderBLDrafts() {
     const list = document.getElementById('bldraft-list');
     if (!list) return;
+
     if (!db.bldrafts || db.bldrafts.length === 0) {
         list.innerHTML = '<p style="color:var(--text-light);padding:20px;text-align:center;">No BL drafts found. Click "New BL Draft" to create one.</p>';
+        updateBLDraftSelectedCount();
         return;
     }
-    list.innerHTML = db.bldrafts.map((b, idx) => {
-        const statusClass = b.status === 'Finalized' ? 'badge-green' : 'badge-yellow';
-        const totalContainers = (b.containers || []).length;
-        const shipperDisplay = b.shipperName ? b.shipperName.substring(0, 50) : '-';
-        const consigneeDisplay = b.consigneeName ? b.consigneeName.substring(0, 50) : '-';
-        const modeIcon = b.mode === 'AIR' ? '✈️' : '🚢';
-        const blDateDisplay = b.blDate ? new Date(b.blDate).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '-';
-        return `<div class="record-card">
-            <div class="record-info">
-                <h4>${modeIcon} ${b.blNumber || 'BL-Draft'}</h4>
-                <p>Date: ${blDateDisplay} | Shipper: ${shipperDisplay} | Consignee: ${consigneeDisplay}</p>
-                <p>${b.mode === 'AIR' ? 'Flight' : 'Vessel'}: ${b.vessel || '-'} | ${b.mode === 'AIR' ? 'Airport' : 'Port'}: ${b.pol || '-'} → ${b.pod || '-'}</p>
-                ${b.mode !== 'AIR' ? `<p>Containers: ${totalContainers} | Gross Wt: ${b.totalGrossWeight || 0} KGS | Volume: ${b.totalVolume || 0} CBM</p>` : `<p>Gross Wt: ${b.grossWeight || 0} KGS | Volume: ${b.measurement || 0} CBM</p>`}
-                <p>Status: <span class="badge ${statusClass}">${b.status || 'Draft'}</span></p>
-                <p class="last-modified">Created: ${b.createdAt ? new Date(b.createdAt).toLocaleString('en-IN') : '-'}</p>
-            </div>
-            <div class="record-actions">
-                <button class="btn btn-sm btn-preview" onclick="previewBLDraft(${idx})">👁 Preview</button>
-                <button class="btn btn-sm btn-pdf" onclick="downloadBLPDF(${idx})">📄 PDF</button>
-                <button class="btn btn-sm btn-duplicate" onclick="duplicateBLDraft(${idx})">📋 Duplicate</button>
-                <button class="btn btn-sm btn-preview" onclick="openBLModal(${idx})">✏️ Edit</button>
-                ${b.status !== 'Finalized' ? `<button class="btn btn-sm btn-quoted" onclick="finalizeBLDraft(${idx})">✅ Finalize</button>` : ''}
-                <button class="btn btn-sm btn-clear" onclick="deleteBLDraft(${idx})">×</button>
-            </div>
-        </div>`;
-    }).join('');
+
+    const records = db.bldrafts.map((b, idx) => ({ b, idx }));
+    const visible = getBLDraftVisibleColumns();
+
+    const isVisible = key => visible.includes(key);
+    const th = (key, label) => isVisible(key) ? `<th class="bldraft-col-${key}">${label}</th>` : '';
+    const td = (key, html) => isVisible(key) ? `<td class="bldraft-col-${key}">${html}</td>` : '';
+
+    let html = `
+    <div class="rates-table-wrapper">
+        <table class="rates-enhanced-table bldraft-enhanced-table" id="bldraft-table">
+            <thead>
+                <tr>
+                    <th class="bldraft-col-select" style="width:30px;">
+                        <input type="checkbox" id="bldraft-select-all" onchange="toggleAllBLDraftCheckboxes()" />
+                    </th>
+                    ${th('blNo','BL NO.')}
+                    ${th('date','DATE')}
+                    ${th('blType','BL TYPE')}
+                    ${th('shipper','SHIPPER')}
+                    ${th('consignee','CONSIGNEE')}
+                    ${th('pol','POL')}
+                    ${th('pod','POD')}
+                    ${th('vessel','VESSEL / FLIGHT')}
+                    ${th('containers','CONTAINERS')}
+                    ${th('gross','GROSS WT')}
+                    ${th('volume','VOLUME')}
+                    ${th('status','STATUS')}
+                    ${th('created','CREATED ON')}
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    records.forEach(({b, idx}, rowIndex) => {
+        const status = b.status || 'Draft';
+        const statusClass = status === 'Finalized' ? 'follow-up-won' : 'follow-up-pending';
+        const mode = b.mode === 'AIR' ? 'AIR' : (b.mode === 'LCL' ? 'LCL' : 'SEA');
+        const blDateDisplay = b.blDate
+            ? new Date(b.blDate).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
+            : '-';
+        const createdDisplay = b.createdAt
+            ? new Date(b.createdAt).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'})
+            : '-';
+        const shipper = b.shipperName || b.shipper || '-';
+        const consignee = b.consigneeName || b.consignee || '-';
+        const vessel = b.vessel || '-';
+        const containers = mode === 'AIR' ? '-' : String((b.containers || []).length);
+        const gross = Number(b.totalGrossWeight || b.grossWeight || 0).toFixed(2);
+        const volume = Number(b.totalVolume || b.measurement || 0).toFixed(2);
+        const blType = String(b.blType || 'ORIGINAL').toUpperCase();
+        const rowBg = rowIndex % 2 === 1 ? '#C7F0EA' : 'transparent';
+
+        html += `
+            <tr style="background:${rowBg};" data-bl-index="${idx}"
+                ondblclick="handleBLDraftRowDoubleClick(${idx})"
+                title="Double-click to open BL Draft Preview">
+                <td class="bldraft-col-select" style="text-align:center;">
+                    <input type="checkbox" class="bldraft-row-checkbox" data-index="${idx}" onchange="updateBLDraftSelectedCount()" />
+                </td>
+                ${td('blNo', `<strong>${escHtmlBLList(b.blNumber || 'BL-Draft')}</strong>`)}
+                ${td('date', escHtmlBLList(blDateDisplay))}
+                ${td('blType', `<span class="bldraft-type-badge">${escHtmlBLList(blType)}</span>`)}
+                ${td('shipper', escHtmlBLList(shipper))}
+                ${td('consignee', escHtmlBLList(consignee))}
+                ${td('pol', escHtmlBLList(b.pol || '-'))}
+                ${td('pod', escHtmlBLList(b.pod || '-'))}
+                ${td('vessel', escHtmlBLList(vessel))}
+                ${td('containers', `<span style="display:block;text-align:center;">${containers}</span>`)}
+                ${td('gross', `${gross} KGS`)}
+                ${td('volume', `${volume} CBM`)}
+                ${td('status', `<span class="status-dropdown ${statusClass}" style="display:inline-block;height:auto;padding:3px 8px;cursor:default;">${escHtmlBLList(status)}</span>`)}
+                ${td('created', escHtmlBLList(createdDisplay))}
+            </tr>
+        `;
+    });
+
+    html += `</tbody></table></div><div id="bldraft-no-filter-match" class="bldraft-filter-empty" style="display:none;">No BL Draft matches the selected filter.</div>`;
+    list.innerHTML = html;
+    updateBLDraftSelectedCount();
+}
+
+function handleBLDraftRowDoubleClick(index) {
+    const idx = parseInt(index, 10);
+    if (!Number.isInteger(idx) || !db.bldrafts || !db.bldrafts[idx]) return;
+    previewBLDraft(idx);
+}
+
+function escHtmlBLList(value) {
+    return String(value ?? '-')
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;')
+        .replace(/'/g,'&#39;');
 }
 
 function saveBLDraft(editIdx) {
@@ -15432,6 +17228,7 @@ function saveBLDraft(editIdx) {
         freightType: document.getElementById('bl-freight').value,
         freightAmount: parseFloat(document.getElementById('bl-freight-amt').value) || 0,
         freightCurrency: document.getElementById('bl-freight-cur').value,
+        blType: document.getElementById('bl-type')?.value || 'ORIGINAL',
         numOriginals: parseInt(document.getElementById('bl-originals').value) || 1,
         placeOfIssue: document.getElementById('bl-place').value.trim(),
         issueDate: document.getElementById('bl-issue-date').value,
@@ -15522,6 +17319,24 @@ function updateBLTotals() {
     if (volumeEl) volumeEl.value = totalVolume.toFixed(2) + ' CBM';
 }
 
+function duplicateBLContainerRow(button) {
+    const sourceRow = button?.closest('.bl-container-row');
+    if (!sourceRow) return;
+
+    const containerData = {
+        containerNo: sourceRow.querySelector('.bl-cont-no')?.value?.trim() || '',
+        type: sourceRow.querySelector('.bl-cont-type')?.value || '',
+        seal: sourceRow.querySelector('.bl-cont-seal')?.value?.trim() || '',
+        grossWeight: sourceRow.querySelector('.bl-cont-weight')?.value || '',
+        netWeight: sourceRow.querySelector('.bl-cont-net-weight')?.value || '',
+        volume: sourceRow.querySelector('.bl-cont-volume')?.value || '',
+        packages: sourceRow.querySelector('.bl-cont-packages')?.value?.trim() || ''
+    };
+
+    // Duplicate with the complete current container data.
+    addBLContainerRow(containerData);
+}
+
 function addBLContainerRow(containerData) {
     const container = document.getElementById('bl-container-rows');
     if (!container) return;
@@ -15541,13 +17356,17 @@ function addBLContainerRow(containerData) {
         <input type="number" class="bl-cont-net-weight" value="${containerData?.netWeight || ''}" placeholder="Net Wt (KGS)" step="0.01" oninput="updateBLTotals()" />
         <input type="number" class="bl-cont-volume" value="${containerData?.volume || ''}" placeholder="Volume (CBM)" step="0.01" oninput="updateBLTotals()" />
         <input type="text" class="bl-cont-packages" value="${containerData?.packages || ''}" placeholder="Packages" />
-        <button class="btn btn-sm btn-clear" onclick="this.closest('.bl-container-row').remove(); updateBLTotals();">×</button>
+        <button type="button" class="btn btn-sm btn-preview bl-cont-duplicate" title="Duplicate container with all data" onclick="duplicateBLContainerRow(this)">⧉</button>
+        <button type="button" class="btn btn-sm btn-clear" title="Remove container" onclick="this.closest('.bl-container-row').remove(); updateBLTotals();">×</button>
     `;
     container.appendChild(row);
     updateBLTotals();
 }
 
+window.currentBLPreviewIndex = null;
+
 function previewBLDraft(idx) {
+    window.currentBLPreviewIndex = parseInt(idx, 10);
     const b = db.bldrafts[idx];
     if (!b) return alert('BL not found.');
     const combined = getBLCombinedData(b);
@@ -15566,7 +17385,8 @@ function buildBLPreviewHTML(b) {
     const isAir = mode === 'AIR';
 
     const titleText = isAir ? 'AIR WAYBILL' : 'BILL OF LADING';
-    const subtitleText = isAir ? 'NON-NEGOTIABLE AIR WAYBILL' : 'NON-NEGOTIABLE UNLESS CONSIGNED TO ORDER';
+    const blTypeDisplay = String(b.blType || 'ORIGINAL').toUpperCase();
+    const subtitleText = blTypeDisplay;
     const statusFinal = b.status === 'Finalized';
     const statusBadge = statusFinal
         ? '<span class="bl-status bl-status-final">✓ FINALIZED</span>'
@@ -15613,9 +17433,61 @@ function buildBLPreviewHTML(b) {
       .bl-brand{display:flex;align-items:center;gap:12px}.bl-logo{width:76px;height:76px;border-radius:8px;background:var(--bl-navy);display:flex;align-items:center;justify-content:center;color:#f4b63b;font-size:42px;flex:0 0 auto}.bl-brand-name{font-size:24px;font-weight:900;color:var(--bl-navy);letter-spacing:.5px}.bl-address{font-size:10px;color:#50627d;margin-top:5px;line-height:1.45}
       .bl-title{text-align:center}.bl-title h1{margin:0;color:var(--bl-navy);font-size:34px;line-height:1;font-weight:900;letter-spacing:.5px}.bl-subtitle{margin:9px auto 0;display:inline-block;padding:5px 14px;background:var(--bl-navy);color:#fff;font-size:10px;font-weight:800;letter-spacing:.2px;position:relative}.bl-subtitle:before,.bl-subtitle:after{content:'';position:absolute;top:50%;width:28px;height:1px;background:var(--bl-gold)}.bl-subtitle:before{right:100%;margin-right:7px}.bl-subtitle:after{left:100%;margin-left:7px}
       .bl-meta{text-align:right}.bl-date{border:1px solid var(--bl-line);border-radius:7px;padding:8px 10px;font-size:11px;background:#fff}.bl-date strong{display:block;color:var(--bl-navy);font-size:10px;text-transform:uppercase;margin-bottom:3px}.bl-status{display:inline-block;margin-top:10px;padding:8px 13px;border-radius:6px;color:#fff;font-size:12px;font-weight:900}.bl-status-draft{background:var(--bl-gold)}.bl-status-final{background:#0b9a69}
-      .bl-table{width:100%;border-collapse:collapse;border:1px solid var(--bl-line);font-size:11px}.bl-table th{padding:7px 8px;background:var(--bl-navy);color:#fff;border:1px solid #fff;font-weight:800;text-align:left}.bl-table td{padding:7px 8px;border:1px solid var(--bl-line);background:#fff;vertical-align:top}.bl-table .center{text-align:center}.bl-table .right{text-align:right}.bl-table tfoot td{background:#eef3f9;font-weight:800}.bl-info{margin-top:9px}.bl-card{border:1px solid var(--bl-line);border-radius:6px;background:#fff;overflow:hidden}.bl-section-title{padding:7px 10px;color:var(--bl-navy);font-weight:900;font-size:12px;border-bottom:1px solid var(--bl-line);background:#fff}.bl-section-title:before{color:var(--bl-gold)}
+      .bl-table{width:100%;border-collapse:collapse;border:1px solid var(--bl-line);font-size:11px}.bl-route-top .bl-route-cell + .bl-route-cell,.bl-route-bottom .bl-route-cell + .bl-route-cell{border-left:1px solid #fff !important}.bl-table th{padding:7px 8px;background:var(--bl-navy);color:#fff;border:1px solid #fff;font-weight:800;text-align:left}.bl-table td{padding:7px 8px;border:1px solid var(--bl-line);background:#fff;vertical-align:top}.bl-table .center{text-align:center}.bl-table .right{text-align:right}.bl-table tfoot td{background:#eef3f9;font-weight:800}.bl-info{margin-top:9px}.bl-description-section{margin-top:9px}.bl-top-bl-type{display:inline-block;margin-top:4px;padding:3px 10px;border-radius:4px;background:#ffdf00;color:#111;font-size:12px;font-weight:1000;letter-spacing:.7px;border:1px solid #c7a900;}
+.bl-type-highlight-row td{background:#fff8cc !important;font-weight:900 !important;}
+.bl-type-highlight-row td:first-child{color:var(--bl-navy) !important;}
+.bl-type-highlight{display:inline-block;padding:5px 12px;border-radius:5px;background:#ffdf00;color:#111;font-size:15px;font-weight:1000;letter-spacing:.6px;border:1px solid #c7a900;}
+
+.bl-description-party-grid .bl-description-box{
+  width:100%;
+  min-height:148px !important;
+  text-align:left !important;
+}
+ .bl-description-party-grid .bl-description-table{
+  width:100%;
+  height:100%;
+  table-layout:fixed;
+}
+.bl-description-party-grid .bl-description-table thead{
+  height:29px !important;
+}
+.bl-description-party-grid .bl-description-table thead tr{
+  height:29px !important;
+}
+.bl-description-party-grid .bl-description-table thead th{
+  text-align:left !important;
+  font-size:10px !important;
+  line-height:1.1 !important;
+  height:29px !important;
+  min-height:29px !important;
+  max-height:29px !important;
+  padding:3.5px 9px !important;
+  vertical-align:middle !important;
+  box-sizing:border-box !important;
+}
+.bl-description-party-grid .bl-description-table tbody{
+  height:calc(100% - 29px) !important;
+}
+.bl-description-party-grid .bl-description-table tbody tr{
+  height:100% !important;
+}
+.bl-description-party-grid .bl-description-table tbody td{
+  text-align:left !important;
+  font-size:10px !important;
+  line-height:1.35;
+  min-height:72px !important;
+  height:100% !important;
+  padding:14px 12px !important;
+  vertical-align:top !important;
+  box-sizing:border-box !important;
+}
+.bl-description-party-grid .bl-description-address{
+  font-size:10px !important;
+  line-height:1.35;
+}
+.bl-description-table{width:100%;border-collapse:collapse;table-layout:fixed}.bl-description-table thead th{background:var(--bl-navy);color:#fff;text-align:left;font-size:10px;font-weight:900;padding:7px 9px;border:1px solid #fff;letter-spacing:.1px}.bl-description-table tbody td{background:#fff;color:var(--bl-text);font-size:12px;font-weight:700;padding:8px 9px;border:1px solid var(--bl-line);vertical-align:top;min-height:36px}.bl-description-table tbody td:first-child{font-weight:800}.bl-description-table th,.bl-description-table td{overflow-wrap:anywhere}.bl-description-address{display:block;font-weight:400;white-space:pre-wrap;margin-top:2px}.bl-description-box{padding:0!important;overflow:hidden}.bl-description-party-grid{gap:8px}.bl-description-bottom-grid{gap:9px}.bl-description-bottom-grid .bl-description-table td:first-child{width:38%;font-weight:900}.bl-linked .bl-description-table td:nth-child(odd){width:15%;font-weight:900}.bl-linked .bl-description-table td:nth-child(even){width:35%;font-weight:700}.bl-card{border:1px solid var(--bl-line);border-radius:6px;background:#fff;overflow:hidden}.bl-section-title{padding:7px 10px;color:var(--bl-navy);font-weight:900;font-size:12px;border-bottom:1px solid var(--bl-line);background:#fff}.bl-section-title:before{color:var(--bl-gold)}
       .bl-party-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}.bl-party{padding:10px 12px;min-height:74px}.bl-party h3{margin:0 0 8px;color:var(--bl-navy);font-size:11px;border-bottom:1px solid var(--bl-line);padding-bottom:5px}.bl-party p{margin:0;font-size:12px;font-weight:600}
-      .bl-route{margin-top:9px;border:1px solid var(--bl-line);border-radius:6px;overflow:hidden}.bl-route-top,.bl-route-bottom{display:grid;grid-template-columns:repeat(4,1fr)}.bl-route-cell{padding:8px 10px;border-right:1px solid var(--bl-line);min-height:58px}.bl-route-cell:last-child{border-right:0}.bl-route-label{font-size:10px;font-weight:900;color:var(--bl-navy);margin-bottom:5px}.bl-route-value{font-size:12px}.bl-route-bottom{background:var(--bl-navy);color:#fff}.bl-route-bottom .bl-route-cell{border-right:1px solid rgba(255,255,255,.3)}.bl-route-bottom .bl-route-label{color:#fff}.bl-route-bottom .bl-route-value{font-weight:700}
+      .bl-route-description{margin-top:9px}.bl-route-description-table{margin:0;border-radius:0;table-layout:fixed}.bl-route-description-table:first-child{border-radius:6px 6px 0 0}.bl-route-description-bottom{border-top:0;border-radius:0 0 6px 6px}.bl-route-description-table th{text-align:left;padding:7px 10px;font-size:10px;letter-spacing:.1px;background:var(--bl-navy);color:#fff;border:1px solid #fff}.bl-route-description-table td{padding:8px 10px;font-size:12px;font-weight:700;color:var(--bl-text);background:#fff;border:1px solid var(--bl-line);vertical-align:top;min-height:38px}.bl-route-description-bottom th{background:var(--bl-navy);color:#fff}.bl-route-description-bottom td{font-weight:800}.bl-route-description-table th,.bl-route-description-table td{width:25%}.bl-route-top,.bl-route-bottom{display:grid;grid-template-columns:repeat(4,1fr)}.bl-route-cell{padding:8px 10px;border-right:1px solid var(--bl-line);min-height:58px}.bl-route-cell:last-child{border-right:0}.bl-route-label{font-size:10px;font-weight:900;color:var(--bl-navy);margin-bottom:5px}.bl-route-value{font-size:12px}.bl-route-bottom{background:var(--bl-navy);color:#fff}.bl-route-bottom .bl-route-cell{border-right:1px solid rgba(255,255,255,.3)}.bl-route-bottom .bl-route-label{color:#fff}.bl-route-bottom .bl-route-value{font-weight:700}
       .bl-goods{margin-top:9px}.bl-goods .bl-table th{text-align:center}.bl-goods .bl-table td{background:#fff}.bl-goods .bl-table tbody td{min-height:34px}.bl-goods .bl-table tbody tr{background:#fff}.bl-goods .bl-table tbody td,.bl-goods .bl-table tbody input,.bl-goods .bl-table tbody textarea{background:#fff!important;color:var(--bl-text)}
       .bl-bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:9px}.bl-box{padding:10px 12px;min-height:104px}.bl-box-title{font-size:12px;font-weight:900;color:var(--bl-navy);padding-bottom:6px;border-bottom:1px solid var(--bl-line);margin-bottom:6px}.bl-kv{display:grid;grid-template-columns:38% 62%;font-size:11px}.bl-kv div{padding:4px 5px;border-bottom:1px dotted #d8dee8}.bl-kv div:nth-child(odd){font-weight:800}
       .bl-linked{margin-top:9px}.bl-footer{margin-top:11px;padding-top:8px;border-top:2px solid var(--bl-navy);text-align:center;color:var(--bl-navy)}.bl-footer-main{font-weight:900;font-size:11px}.bl-footer-note{margin-top:3px;font-size:8px;color:#6b7b91}.bl-thanks{margin-top:7px;color:var(--bl-navy);font-family:cursive;font-size:15px;font-weight:700}
@@ -15624,35 +17496,89 @@ function buildBLPreviewHTML(b) {
     <div id="bl-preview-container">
       <div class="bl-topbar">
         <div class="bl-brand"><div class="bl-logo">🚢</div><div><div class="bl-brand-name">${val(companyName)}</div><div class="bl-address">${val(companyAddress)}</div></div></div>
-        <div class="bl-title"><h1>${titleText}</h1><div class="bl-subtitle">${subtitleText}</div></div>
+        <div class="bl-title"><h1>${titleText}</h1><div class="bl-subtitle"><span class="bl-top-bl-type">${subtitleText}</span></div></div>
         <div class="bl-meta"><div class="bl-date"><strong>DATE</strong>${blDateDisplay}</div>${statusBadge}</div>
       </div>
 
-      <div class="bl-info"><table class="bl-table"><tbody>
-        <tr><td style="width:11%;font-weight:900">BL NO.</td><td style="width:29%;font-weight:900;color:var(--bl-navy)">${val(b.blNumber || 'N/A')}</td><td style="width:10%;font-weight:900">DATE</td><td style="width:20%;font-weight:700">${blDateDisplay}</td><td style="width:12%;font-weight:900">BOOKING NO.</td><td style="width:18%">${val(b.bookingNo)}</td></tr>
-        <tr><td style="font-weight:900">EXPORT REF.</td><td>${val(b.exportRef)}</td><td style="font-weight:900">FORWARDING AGENT</td><td colspan="3">${val(b.forwardingAgent || companyName)}</td></tr>
-      </tbody></table></div>
-
-      <div class="bl-party-grid">
-        <div class="bl-card bl-party"><h3>◉ SHIPPER / EXPORTER</h3><p>${val(b.shipperName || b.shipper)}</p></div>
-        <div class="bl-card bl-party"><h3>◉ CONSIGNEE</h3><p>${val(b.consignee)}</p></div>
-        <div class="bl-card bl-party"><h3>◉ NOTIFY PARTY</h3><p>${val(b.notifyParty)}</p></div>
-        <div class="bl-card bl-party"><h3>◉ DELIVERY AGENT</h3><p>${val(b.deliveryAgent)}</p></div>
+      <div class="bl-description-section bl-info">
+        <table class="bl-table bl-description-table">
+          <thead><tr>
+            <th>BL NO.</th><th>DATE</th><th>BOOKING NO.</th><th>EXPORT REF.</th><th>FORWARDING AGENT</th>
+          </tr></thead>
+          <tbody><tr>
+            <td>${val(b.blNumber || 'N/A')}</td>
+            <td>${blDateDisplay}</td>
+            <td>${val(b.bookingNo)}</td>
+            <td>${val(b.exportRef)}</td>
+            <td>${val(b.forwardingAgent || companyName)}</td>
+          </tr></tbody>
+        </table>
       </div>
 
-      <div class="bl-route">
-        <div class="bl-route-top">
-          <div class="bl-route-cell"><div class="bl-route-label">⚓ PRE-CARRIAGE BY</div><div class="bl-route-value">${val(b.preCarriageBy)}</div></div>
-          <div class="bl-route-cell"><div class="bl-route-label">📍 ${receiptLabel}</div><div class="bl-route-value">${val(b.placeOfReceipt)}</div></div>
-          <div class="bl-route-cell"><div class="bl-route-label">🚢 ${vesselLabel}</div><div class="bl-route-value">${val(b.vessel)}</div></div>
-          <div class="bl-route-cell"><div class="bl-route-label">⚓ ${voyageLabel}</div><div class="bl-route-value">${val(isAir ? blDateDisplay : b.voyage)}</div></div>
+      <div class="bl-party-grid bl-description-party-grid">
+        <div class="bl-card bl-party bl-description-box">
+          <table class="bl-table bl-description-table">
+            <thead><tr><th>1. SHIPPER / EXPORTER</th></tr></thead>
+            <tbody><tr><td>${val(b.shipperName || b.shipper)}${(b.shipperAddr || b.shipperAddress) ? '<br><span class="bl-description-address">'+val(b.shipperAddr || b.shipperAddress)+'</span>' : ''}</td></tr></tbody>
+          </table>
         </div>
-        <div class="bl-route-bottom">
-          <div class="bl-route-cell"><div class="bl-route-label">${polLabel}</div><div class="bl-route-value">${val(b.pol)}</div></div>
-          <div class="bl-route-cell"><div class="bl-route-label">${podLabel}</div><div class="bl-route-value">${val(b.pod)}</div></div>
-          <div class="bl-route-cell"><div class="bl-route-label">PLACE OF DELIVERY</div><div class="bl-route-value">${val(b.placeOfDelivery)}</div></div>
-          <div class="bl-route-cell"><div class="bl-route-label">FREIGHT PAYABLE</div><div class="bl-route-value">${val(b.freightPayable || 'ORIGIN')}</div></div>
+        <div class="bl-card bl-party bl-description-box">
+          <table class="bl-table bl-description-table">
+            <thead><tr><th>2. CONSIGNEE</th></tr></thead>
+            <tbody><tr><td>${val(b.consigneeName || b.consignee)}${(b.consigneeAddr || b.consigneeAddress) ? '<br><span class="bl-description-address">'+val(b.consigneeAddr || b.consigneeAddress)+'</span>' : ''}</td></tr></tbody>
+          </table>
         </div>
+        <div class="bl-card bl-party bl-description-box">
+          <table class="bl-table bl-description-table">
+            <thead><tr><th>3. NOTIFY PARTY</th></tr></thead>
+            <tbody><tr><td>${val(b.notifyName || b.notifyParty)}${(b.notifyAddr || b.notifyAddress) ? '<br><span class="bl-description-address">'+val(b.notifyAddr || b.notifyAddress)+'</span>' : ''}</td></tr></tbody>
+          </table>
+        </div>
+        <div class="bl-card bl-party bl-description-box">
+          <table class="bl-table bl-description-table">
+            <thead><tr><th>4. DELIVERY AGENT</th></tr></thead>
+            <tbody><tr><td>${val(b.deliveryAgentName || b.deliveryAgent)}${(b.deliveryAgentAddr || b.deliveryAgentAddress) ? '<br><span class="bl-description-address">'+val(b.deliveryAgentAddr || b.deliveryAgentAddress)+'</span>' : ''}</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bl-route-description">
+        <table class="bl-table bl-route-description-table">
+          <thead>
+            <tr>
+              <th>⚓ PRE-CARRIAGE BY</th>
+              <th>📍 ${receiptLabel}</th>
+              <th>🚢 ${vesselLabel}</th>
+              <th>⚓ ${voyageLabel}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>${val(b.preCarriageBy)}</td>
+              <td>${val(b.placeOfReceipt)}</td>
+              <td>${val(b.vessel)}</td>
+              <td>${val(isAir ? blDateDisplay : b.voyage)}</td>
+            </tr>
+          </tbody>
+        </table>
+        <table class="bl-table bl-route-description-table bl-route-description-bottom">
+          <thead>
+            <tr>
+              <th>${polLabel}</th>
+              <th>${podLabel}</th>
+              <th>PLACE OF DELIVERY</th>
+              <th>FREIGHT PAYABLE</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>${val(b.pol)}</td>
+              <td>${val(b.pod)}</td>
+              <td>${val(b.placeOfDelivery)}</td>
+              <td>${val(b.freightPayable || 'ORIGIN')}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <div class="bl-card bl-goods">
@@ -15665,15 +17591,36 @@ function buildBLPreviewHTML(b) {
 
       ${containerHtml}
 
-      <div class="bl-bottom-grid">
-        <div class="bl-card bl-box"><div class="bl-box-title">▣ FREIGHT & CHARGES</div><div class="bl-kv"><div>Terms</div><div>${val(b.freightType || 'Prepaid')}</div><div>Amount</div><div>${val(b.freightCurrency || 'USD')} ${num(b.freightAmount)}</div></div></div>
-        <div class="bl-card bl-box"><div class="bl-box-title">✪ ISSUANCE DETAILS</div><div class="bl-kv"><div>Originals</div><div>${val(b.numOriginals || 1)}</div><div>Place</div><div>${val(b.placeOfIssue)}</div><div>Date</div><div>${b.issueDate ? new Date(b.issueDate).toLocaleDateString('en-IN', {day:'2-digit',month:'short',year:'numeric'}) : '-'}</div><div>Signature</div><div>${val(b.signature || companyName)}</div></div></div>
+      <div class="bl-bottom-grid bl-description-bottom-grid">
+        <div class="bl-card bl-box bl-description-box">
+          <table class="bl-table bl-description-table">
+            <thead><tr><th colspan="2">5. FREIGHT &amp; CHARGES</th></tr></thead>
+            <tbody>
+              <tr><td>TERMS</td><td>${val(b.freightType || 'Prepaid')}</td></tr>
+              <tr><td>AMOUNT</td><td>${val(b.freightCurrency || 'USD')} ${num(b.freightAmount)}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="bl-card bl-box bl-description-box">
+          <table class="bl-table bl-description-table">
+            <thead><tr><th colspan="2">6. ISSUANCE DETAILS</th></tr></thead>
+            <tbody>
+              <tr class="bl-type-highlight-row"><td>BL TYPE</td><td><span class="bl-type-highlight">${val(b.blType || 'ORIGINAL')}</span></td></tr>
+              <tr><td>PLACE</td><td>${val(b.placeOfIssue)}</td></tr>
+              <tr><td>DATE</td><td>${b.issueDate ? new Date(b.issueDate).toLocaleDateString('en-IN', {day:'2-digit',month:'short',year:'numeric'}) : '-'}</td></tr>
+              <tr><td>SIGNATURE</td><td>${val(b.signature || companyName)}</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      ${(b.linkedShipment || b.linkedRateQuote) ? `<div class="bl-card bl-linked"><div class="bl-section-title">🔗 LINKED REFERENCE DETAILS</div><table class="bl-table"><tbody>
-        <tr><td style="width:15%;font-weight:900">JOB NO.</td><td style="width:35%">${val(b.jobNo || b.shipmentCode)}</td><td style="width:15%;font-weight:900">QUOTE</td><td>${val(b.linkedRateQuote?.quoteNumber || b.linkedRateQuote?.quoteNo || b.linkedRateQuote?.id)}</td></tr>
-        <tr><td style="font-weight:900">SHIPMENT</td><td>${val(b.linkedShipment?.code || b.linkedShipment?.jobNo)}</td><td style="font-weight:900">CARRIER</td><td>${val(b.linkedShipment?.liner || b.linkedRateQuote?.carrier)}</td></tr>
-      </tbody></table></div>` : ''}
+      ${(b.linkedShipment || b.linkedRateQuote) ? `<div class="bl-card bl-linked bl-description-box"><table class="bl-table bl-description-table">
+        <thead><tr><th colspan="4">7. LINKED REFERENCE DETAILS</th></tr></thead>
+        <tbody>
+          <tr><td>JOB NO.</td><td>${val(b.jobNo || b.shipmentCode)}</td><td>QUOTE</td><td>${val(b.linkedRateQuote?.quoteNumber || b.linkedRateQuote?.quoteNo || b.linkedRateQuote?.id)}</td></tr>
+          <tr><td>SHIPMENT</td><td>${val(b.linkedShipment?.code || b.linkedShipment?.jobNo)}</td><td>CARRIER</td><td>${val(b.linkedShipment?.liner || b.linkedRateQuote?.carrier)}</td></tr>
+        </tbody>
+      </table></div>` : ''}
 
       <div class="bl-footer"><div class="bl-footer-main">${val(companyName)} — AS AGENT FOR THE CARRIER</div><div class="bl-thanks">Thank you for your business!</div><div class="bl-footer-note">Generated on ${formattedDateTime}</div></div>
     </div>`;
@@ -15690,7 +17637,14 @@ function getBLCombinedData(b) {
     const pick = (...vals) => vals.find(v => v !== undefined && v !== null && String(v).trim() !== '');
     out.jobNo = pick(out.jobNo, out.shipmentCode, s.jobNo, s.code, key);
     out.shipmentCode = pick(out.shipmentCode, s.jobNo, s.code, key);
-    out.shipperName = pick(out.shipperName, s.shipper, q.client, q.customer);
+    out.shipperName = pick(out.shipperName, s.shipper, s.shipperName, q.shipper, q.shipperName, q.client, q.customer);
+    out.shipperAddr = pick(out.shipperAddr, s.shipperAddr, s.shipperAddress, q.shipperAddr, q.shipperAddress);
+    out.consigneeName = pick(out.consigneeName, s.consignee, s.consigneeName, q.consignee, q.consigneeName);
+    out.consigneeAddr = pick(out.consigneeAddr, s.consigneeAddr, s.consigneeAddress, q.consigneeAddr, q.consigneeAddress);
+    out.notifyName = pick(out.notifyName, s.notifyParty, s.notifyName, q.notifyParty, q.notifyName);
+    out.notifyAddr = pick(out.notifyAddr, s.notifyAddr, s.notifyAddress, q.notifyAddr, q.notifyAddress);
+    out.deliveryAgentName = pick(out.deliveryAgentName, s.deliveryAgentName, s.deliveryAgent, q.deliveryAgentName, q.deliveryAgent);
+    out.deliveryAgentAddr = pick(out.deliveryAgentAddr, s.deliveryAgentAddr, s.deliveryAgentAddress, q.deliveryAgentAddr, q.deliveryAgentAddress);
     out.pol = pick(out.pol, s.pol, q.pol);
     out.pod = pick(out.pod, s.pod, q.pod);
     out.vessel = pick(out.vessel, s.vessel, s.liner, q.carrier);
@@ -15714,6 +17668,26 @@ function downloadBLPDF(idx) {
     const renderArea = document.getElementById('pdf-render-area');
     if (!renderArea) return alert('PDF render area not found.');
     renderArea.innerHTML = html;
+
+    // SHAHID ERP — BL PDF TEXT SIZE AMENDMENT
+    // Increase every rendered BL PDF text size by exactly 30%.
+    // This is applied only to the PDF render copy; BL preview/UI sizing,
+    // stored data, calculations, and the underlying BL HTML remain unchanged.
+    try {
+        const textSizeTargets = Array.from(renderArea.querySelectorAll('*')).map(el => {
+            const computed = window.getComputedStyle(el);
+            const px = parseFloat(computed.fontSize);
+            return { el, px: Number.isFinite(px) ? px : null };
+        });
+        textSizeTargets.forEach(({el, px}) => {
+            if (px !== null && px > 0) {
+                el.style.setProperty('font-size', `${(px * 1.30).toFixed(3)}px`, 'important');
+            }
+        });
+    } catch (e) {
+        console.warn('BL PDF text-size adjustment skipped:', e);
+    }
+
     // A4 printable area with exactly 0.5 cm margins on all sides.
     const PAGE_W_MM = 210, PAGE_H_MM = 297, MARGIN_MM = 5;
     const CONTENT_W_MM = PAGE_W_MM - (MARGIN_MM * 2);
@@ -15857,6 +17831,10 @@ let blModeChooserOpen = false;
 
 function toggleBLModeChooser() {
     const dd = document.getElementById('blModeChooser');
+    if (!dd) {
+        openBLModal(null, null, 'SEA');
+        return;
+    }
     blModeChooserOpen = !blModeChooserOpen;
     dd.classList.toggle('show', blModeChooserOpen);
 }
@@ -16707,6 +18685,9 @@ async function selectBackupFolder() {
         }
         const handle = await window.showDirectoryPicker();
         backupFolderHandle = handle;
+        // Keep the handle on window as well because the SQLite sync adapter
+        // accesses the persisted browser handle through window.backupFolderHandle.
+        window.backupFolderHandle = handle;
 
         // Store handle in IndexedDB for persistence.
         await storeFolderHandle(handle);
@@ -16821,26 +18802,31 @@ function saveBackupPath() {
 // ===== REPLACE autoBackupToFolder with this =====
 async function autoBackupToFolder() {
     try {
-        if (!backupFolderHandle) {
-            console.warn('No folder handle available – backup skipped.');
+        const folderHandle = backupFolderHandle || window.backupFolderHandle;
+
+        if (!folderHandle) {
+            console.warn('No browser folder handle available – backup skipped.');
             const statusEl = document.getElementById('backup-status');
             if (statusEl) {
-                statusEl.textContent = '⚠️ No folder selected. Click "Browse Folder" to select.';
+                statusEl.textContent =
+                    '⚠️ Local backup folder is not selected. Click "Browse Folder" to select.';
                 statusEl.className = 'backup-status error';
             }
-            return;
+            return false;
         }
 
+        backupFolderHandle = folderHandle;
+        window.backupFolderHandle = folderHandle;
+
         const opts = { mode: 'readwrite' };
-        if (await backupFolderHandle.requestPermission(opts) !== 'granted') {
+        if (await folderHandle.requestPermission(opts) !== 'granted') {
             throw new Error('Permission to write to folder was denied.');
         }
 
         const format = (db.backupFormat || 'json').toLowerCase();
 
         if (format === 'sqlite') {
-            await exportSQLiteToFolder(backupFolderHandle);
-            return;
+            return await window.SHAHID_RUN_IMPORT_MERGE_EXPORT_NOW();
         }
 
         const fileName = `AutoBackup_${new Date().toISOString().split('T')[0]}.json`;
@@ -16901,15 +18887,24 @@ async function fallbackBackupDownload() {
 
 // ==== REPLACE autoBackup (the manual trigger) ====
 async function autoBackup() {
-    if (backupFolderHandle) {
-        await autoBackupToFolder();
-    } else {
-        // No handle – show warning, do NOT download
+    if (!backupFolderHandle) {
         const statusEl = document.getElementById('backup-status');
-        statusEl.textContent = '⚠️ No folder selected. Click "Browse Folder" to enable auto-backup.';
-        statusEl.className = 'backup-status error';
+        if (statusEl) {
+            statusEl.textContent = '⚠️ No folder selected. Click "Browse Folder" to enable auto-backup.';
+            statusEl.className = 'backup-status error';
+        }
         console.warn('Auto-backup skipped – no folder handle.');
+        return false;
     }
+
+    const format = String(db?.backupFormat || 'json').toLowerCase();
+
+    if (format === 'sqlite' && typeof window.SHAHID_RUN_IMPORT_MERGE_EXPORT_NOW === 'function') {
+        return await window.SHAHID_RUN_IMPORT_MERGE_EXPORT_NOW();
+    }
+
+    await autoBackupToFolder();
+    return true;
 }
 
 
@@ -16988,8 +18983,15 @@ function populateRateRequestDropdowns() {
     const pols = master.pol.filter(p => !(db.hiddenItems?.pol || []).includes(p)).sort();
     const pods = master.pod.filter(p => !(db.hiddenItems?.pod || []).includes(p)).sort();
     const containers = master.containers.filter(c => !(db.hiddenItems?.containers || []).includes(c)).sort();
+
+    // RATE REQUEST INVENTORY:
+    // Always provide the requested combined default plus the two standard
+    // container choices, while preserving all other existing master options.
     const defaultInv = '20 GP & 40 HC';
-    if (!containers.includes(defaultInv)) containers.unshift(defaultInv);
+    const requiredInventoryOptions = ['20 GP & 40 HC', '20 GP', '40 HC'];
+    const inventoryOptions = requiredInventoryOptions.concat(
+        containers.filter(c => !requiredInventoryOptions.includes(c))
+    );
 
     const formatSuffixes = ['sea1', 'sea2', 'air'];
     formatSuffixes.forEach(suffix => {
@@ -17004,7 +19006,22 @@ function populateRateRequestDropdowns() {
         // Populate INVENTORY dropdown (only for SEA formats)
         const invEl = document.getElementById(`rr-inventory-${suffix}`);
         if (invEl && suffix !== 'air') {
-            invEl.innerHTML = containers.map(c => `<option value="${c}" ${c === defaultInv ? 'selected' : ''}>${c}</option>`).join('');
+            invEl.innerHTML = inventoryOptions
+                .map(c => `<option value="${c}">${c}</option>`)
+                .join('');
+
+            // Do not rely on the HTML selected attribute. Explicitly set the
+            // actual SELECT value after every rebuild.
+            if (Array.from(invEl.options).some(o => o.value === defaultInv)) {
+                invEl.value = defaultInv;
+            } else {
+                // Safety fallback: the required default must always exist.
+                const opt = document.createElement('option');
+                opt.value = defaultInv;
+                opt.textContent = defaultInv;
+                invEl.insertBefore(opt, invEl.firstChild);
+                invEl.value = defaultInv;
+            }
         }
     });
 
@@ -17144,7 +19161,24 @@ function buildRateRequestEmail(data) {
             <tr><td style="padding:6px 8px;font-weight:bold;">TEMP CARGO</td><td style="padding:6px 8px;">${data.temp || '-'}</td></tr>
         `;
     }
-    html += `</table>
+    html += `</table>`;
+
+    // Rate Request Remarks — plain text, line-by-line (no table).
+    if (data.remarks && String(data.remarks).trim()) {
+        const remarkLines = String(data.remarks)
+            .split(/\r\n|\r|\n/)
+            .map(line => line.trim())
+            .filter(Boolean)
+            .map(line => `<div style="margin:0 0 6px 0;font-size:14px;line-height:1.4;color:#dc2626;font-weight:700;">${line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}</div>`)
+            .join('');
+        html += `
+        <div style="margin-top:12px;">
+            <div style="font-weight:700;color:#dc2626;font-size:14px;margin-bottom:6px;">Remarks</div>
+            <div style="font-size:14px;line-height:1.4;color:#1a1a1a;">${remarkLines}</div>
+        </div>`;
+    }
+
+    html += `
         <p style="margin-top:16px;font-size:12px;color:#64748b;text-align:center;">Generated on ${new Date().toLocaleString('en-IN')}</p>
     </div>`;
     return html;
@@ -17186,6 +19220,20 @@ function clearRateRequestForm(format) {
     // Reset defaults (preserve remarks clearing)
     if (format === 'seaWithShipper' || format === 'seaWithoutShipper') {
         const suffix = format === 'seaWithShipper' ? 'sea1' : 'sea2';
+
+        // The generic SELECT reset above selects option #1. For Rate Request
+        // INVENTORY the business default is explicitly 20 GP & 40 HC.
+        const inventoryEl = document.getElementById(`rr-inventory-${suffix}`);
+        if (inventoryEl) {
+            if (!Array.from(inventoryEl.options).some(o => o.value === '20 GP & 40 HC')) {
+                const defaultOption = document.createElement('option');
+                defaultOption.value = '20 GP & 40 HC';
+                defaultOption.textContent = '20 GP & 40 HC';
+                inventoryEl.insertBefore(defaultOption, inventoryEl.firstChild);
+            }
+            inventoryEl.value = '20 GP & 40 HC';
+        }
+
         document.getElementById(`rr-validity-${suffix}`).value = getEndOfMonthDate();
         document.getElementById(`rr-weight-${suffix}`).value = 25500;
         document.getElementById(`rr-forwarder-${suffix}`).value = db.companyName || 'GATEWAY EXIM';
@@ -17291,12 +19339,21 @@ function buildRateRequestPreviewHTML(data) {
         </table>`;
 
     // ---- 🆕 ADD REMARKS SECTION ----
-    if (data.remarks) {
+    if (data.remarks && String(data.remarks).trim()) {
+        const remarkLines = String(data.remarks)
+            .replace(/<br\s*\/?>(?:\s*)/gi, '\n')
+            .replace(/<[^>]*>/g, '')
+            .split(/\r\n|\r|\n/)
+            .map(line => line.trim())
+            .filter(Boolean)
+            .map(line => line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'))
+            .map(line => `<div style="margin:0 0 5px 0;color:#dc2626;font-weight:700;font-size:0.85rem;line-height:1.4;">${line}</div>`)
+            .join('');
         html += `
         <div style="margin-top:12px; border-top:1px solid #e2e8f0; padding-top:8px;">
-            <div style="font-weight:700; color:#1e3a8a; font-size:0.78rem;">📝 Remarks</div>
-            <div style="font-size:0.85rem; color:#1a1a1a; background:#f8fafc; padding:6px 10px; border-radius:4px; margin-top:4px;">
-                ${data.remarks}
+            <div style="font-weight:700; color:#dc2626; font-size:0.78rem;">📝 Remarks</div>
+            <div style="padding:6px 10px; margin-top:4px;">
+                ${remarkLines}
             </div>
         </div>`;
     }
@@ -17377,14 +19434,18 @@ function buildRateRequestCompactEmailHTML(data) {
             </tbody>
         </table>`;
 
-    // ---- 🆕 ADD REMARKS (if present) ----
-    if (data.remarks) {
+    // ---- RATE REQUEST REMARKS — PLAIN TEXT, LINE-BY-LINE (NO TABLE) ----
+    if (data.remarks && String(data.remarks).trim()) {
+        const remarkLines = String(data.remarks)
+            .split(/\r\n|\r|\n/)
+            .map(line => line.trim())
+            .filter(Boolean)
+            .map(line => `<div style="margin:0 0 6px 0;color:#1a1a1a;font-size:15px;line-height:1.4;">${line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}</div>`)
+            .join('');
         html += `
-		<br>
-		<div style="margin-top:6px; font-size:17px; border-top:1px solid #e2e8f0; padding-top:4px;">
-			<strong>📝 Remarks:</strong> 
-			<strong style="color:#fa1500;">${data.remarks}</strong>
-        </div>`;
+        <br>
+        <div style="font-size:17px;font-weight:700;color:#1e3a8a;margin-bottom:6px;">Remarks</div>
+        <div style="font-size:15px;line-height:1.4;color:#1a1a1a;">${remarkLines}</div>`;
     }
 
     html += `</div>`;
@@ -17568,7 +19629,7 @@ function saveRateRequestDraftWithData(data) {
     // If no quote number, generate one
     if (!data.quoteNumber) {
         const now = new Date();
-        const base = `RQ-RR-${String(now.getFullYear()).slice(-2)}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+        const base = `RR-${String(now.getFullYear()).slice(-2)}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
         const all = db.drafts.rr || [];
         let seq = 1;
         let qn = base;
@@ -17752,7 +19813,7 @@ function renderRRDrafts() {
     if (counters) {
         counters.innerHTML = `
             <div class="counter-card" style="border-color:#ec4899;">
-                <div class="counter-label">📩 Total RR Drafts</div>
+                <div class="counter-label">📩 Total Rate Requested</div>
                 <div class="counter-value">${records.length}</div>
             </div>
         `;
@@ -17795,7 +19856,9 @@ function clearRRDraftsFilters() {
     document.getElementById('rrdrafts-search-text').value = '';
     document.getElementById('rrdrafts-search-qn').value = '';
     document.getElementById('rrdrafts-search-date').value = '';
-    renderRRDrafts();
+    rrModeFilter = '';
+    sessionStorage.removeItem('rrModeFilter');
+    renderRecords('rrdrafts');
 }
 
 
@@ -18076,14 +20139,24 @@ function updateQuoteStatus(select, mode, idx) {
     quote.followUpStatus = newStatus;
     quote.followUpUpdated = new Date().toISOString();
     quote.lastModified = new Date().toISOString();
+    // Lock the exact commercial data snapshot at the moment the quote is sent.
+    // Once locked, later status changes (FOLLOW-UP/WON/LOST) do not alter the rate snapshot.
+    if (newStatus === 'SENT' && quote.rateLocked !== true) {
+        lockQuotationRate(quote);
+    }
     if (newStatus === 'LOST') {
         setTimeout(() => {
-            const reason = prompt('Please enter reason for losing this quote:\n\nOptions:\n- High Rates\n- Slow Response\n- No Service\n- Client Not Interested\n- Competitor Won\n- Budget Constraints\n- Other');
-            if (reason) {
-                quote.lostReason = reason;
-                saveDB();
-                renderRecords('rates');
-            }
+            appPrompt(
+                'Please enter reason for losing this quote:\n\nOptions:\n- High Rates\n- Slow Response\n- No Service\n- Client Not Interested\n- Competitor Won\n- Budget Constraints\n- Other',
+                '',
+                (reason) => {
+                    if (reason && reason.trim()) {
+                        quote.lostReason = reason.trim();
+                        saveDB();
+                        renderRecords('rates');
+                    }
+                }
+            );
         }, 100);
     } else {
         saveDB();
@@ -18559,6 +20632,21 @@ function changeDraftsPage(page) {
 // ==================== ENHANCED RR DRAFTS VIEW ====================
 let rrSortColumn = 'timestamp';
 let rrSortOrder = 'desc';
+let rrModeFilter = '';
+
+function getRRDisplayMode(rr) {
+    const raw = String(rr?.requestType || rr?.mode || '').trim().toUpperCase();
+    if (raw === 'AIR' || String(rr?.format || '').toLowerCase() === 'air') return 'AIR';
+    if (raw === 'LCL' || String(rr?.format || '').toLowerCase().includes('lcl')) return 'LCL';
+    if (raw === 'SEA' || raw === 'RR' || raw === '') return 'SEA';
+    return raw;
+}
+
+function setRRModeFilter(mode) {
+    rrModeFilter = mode === 'SEA' || mode === 'AIR' || mode === 'LCL' ? mode : '';
+    sessionStorage.setItem('rrModeFilter', rrModeFilter);
+    renderRecords('rrdrafts');
+}
 
 function renderEnhancedRRDrafts() {
     const rrPanel = document.getElementById('rrdrafts');
@@ -18606,7 +20694,7 @@ function renderEnhancedRRDrafts() {
     const searchText = (document.getElementById('rrdrafts-search-text')?.value || '').toLowerCase();
     const searchQN = (document.getElementById('rrdrafts-search-qn')?.value || '').toLowerCase();
     const searchDate = document.getElementById('rrdrafts-search-date')?.value || '';
-    const modeFilter = document.getElementById('rrdrafts-mode-filter')?.value || '';
+    const modeFilter = rrModeFilter || sessionStorage.getItem('rrModeFilter') || '';
 
     let allRR = db.drafts.rr || [];
     allRR = allRR.map((rr, idx) => ({ ...rr, _idx: idx }));
@@ -18621,7 +20709,7 @@ function renderEnhancedRRDrafts() {
             const dDate = new Date(rr.timestamp).toISOString().split('T')[0];
             if (dDate !== searchDate) return false;
         }
-        if (modeFilter && rr.mode !== modeFilter) return false;
+        if (modeFilter && getRRDisplayMode(rr) !== modeFilter) return false;
         return true;
     });
 
@@ -18684,8 +20772,8 @@ function renderEnhancedRRDrafts() {
         const year = String(createdDate.getFullYear()).slice(-2);
         const createdDisplay = `${day}-${month}-${year}`;
 
-        const modeIcon = rr.mode === 'AIR' ? '✈️' : '🚢';
-        const modeDisplay = rr.mode || 'SEA';
+        const modeDisplay = getRRDisplayMode(rr);
+        const modeIcon = modeDisplay === 'AIR' ? '✈️' : (modeDisplay === 'LCL' ? '📦' : '🚢');
 
         const rowBg = (index % 2 === 1) ? '#C7F0EA' : 'transparent';
 
@@ -18787,10 +20875,28 @@ function rrBulkAction(action) {
 function updateRRCounters(allRR, filtered) {
     const countersEl = document.getElementById('rrdrafts-counters');
     if (!countersEl) return;
+    const sea = allRR.filter(r => getRRDisplayMode(r) === 'SEA').length;
+    const air = allRR.filter(r => getRRDisplayMode(r) === 'AIR').length;
+    const lcl = allRR.filter(r => getRRDisplayMode(r) === 'LCL').length;
     const total = allRR.length;
-    countersEl.innerHTML = `
-        <div class="counter-card" style="border-color:#ec4899;"><div class="counter-label">📩 RR Drafts</div><div class="counter-value">${total}</div></div>
-    `;
+    const active = rrModeFilter || sessionStorage.getItem('rrModeFilter') || '';
+    const card = (mode, icon, label, count, cls) => `
+        <div class="counter-card ${cls || ''}" role="button" tabindex="0"
+             onclick="setRRModeFilter('${mode}')"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setRRModeFilter('${mode}');}"
+             style="cursor:pointer;${active===mode ? 'box-shadow:0 0 0 3px rgba(59,130,246,.25);transform:translateY(-1px);' : ''}">
+            <div class="counter-label">${icon} ${label}</div>
+            <div class="counter-value">${count}</div>
+        </div>`;
+    countersEl.innerHTML =
+        card('SEA','🚢','Rate Requested - SEA',sea,'sea') +
+        card('AIR','✈️','Rate Requested - AIR',air,'air') +
+        card('LCL','📦','Rate Requested - LCL',lcl,'lcl') +
+        `<div class="counter-card" role="button" tabindex="0" onclick="setRRModeFilter('')"
+              onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setRRModeFilter('');}"
+              style="cursor:pointer;border-color:#8b5cf6;${active==='' ? 'box-shadow:0 0 0 3px rgba(139,92,246,.22);transform:translateY(-1px);' : ''}">
+            <div class="counter-label">📊 Rate Requested - TOTAL</div><div class="counter-value">${total}</div>
+        </div>`;
 }
 
 function sortRR(column) {
@@ -19706,13 +21812,18 @@ const buy = parseRateInput(
                 let basisVal = 'Normal';
                 let placeholder = '0.00';
                 if (mode === 'air') {
+                    // AIR FREIGHT basis is user-selectable and must never be forced.
+                    // Other AIR charges retain their existing fixed/default basis rules.
                     if (charge === 'AIR FREIGHT') basisVal = 'Per KGS';
                     else if (['CARTAGE','MCC','XRAY'].includes(charge)) { basisVal = 'Per KGS'; placeholder = 'Rate per KGS (min ' + AIR_MIN_THRESHOLDS[charge] + ')'; }
                     else if (charge === 'GATE PASS') { basisVal = 'Per KGS × 4'; placeholder = 'Rate per KGS ×4 (min ' + AIR_MIN_THRESHOLDS[charge] + ')'; }
                     else if (charge === 'PALLETISATION' || charge === 'PLY') basisVal = 'Normal';
                 } else if (mode === 'lcl' && (charge === 'FREIGHT' || charge === 'THC')) basisVal = 'Per CBM';
-                const existingBasis = sourceArrays.find(a => a?.[charge]?.basis)?.[charge]?.basis;
-                if (existingBasis) basisVal = existingBasis;
+                // The stored/user-selected basis is authoritative for every charge,
+                // including AIR FREIGHT. This preserves the selection across rebuilds
+                // and ensures Preview/PDF/Email/WhatsApp receive the same basis.
+                const existingBasis = sourceArrays.find(a => a?.[charge] && a[charge].basis != null)?.[charge]?.basis;
+                if (existingBasis !== undefined && existingBasis !== null && String(existingBasis).trim() !== '') basisVal = String(existingBasis);
                 let opts = `<option value="Normal" ${basisVal==='Normal'?'selected':''}>Normal</option>`;
                 if (mode === 'air') opts = ['Normal','Per KGS','Per KGS × 3','Per KGS × 4','Per CBM'].map(b=>`<option value="${b}" ${basisVal===b?'selected':''}>${b}</option>`).join('');
                 if (mode === 'lcl') opts = ['Normal','Per KGS','Per CBM'].map(b=>`<option value="${b}" ${basisVal===b?'selected':''}>${b}</option>`).join('');
@@ -19998,6 +22109,9 @@ const buy = parseRateInput(
     function editRecord(target, mode, idx) {
         const rec = db[target]?.[mode]?.[idx];
         if (!rec) return alert('Record not found.');
+        if (target === 'rates' && rec.rateLocked === true) {
+            return alert('🔒 This quotation is Rate Locked because it has been SENT. Duplicate the quote to create a new editable quotation.');
+        }
         if (mode === 'rr') return editRateRequestDraft(target, mode, idx);
         document.querySelectorAll('.tab-btn-vertical').forEach(b=>b.classList.remove('active'));
         document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
@@ -20234,6 +22348,7 @@ function mcBuildCustomerShipmentHTML(data, mode, carriers, compact=false) {
 
     // OLD Customer & Shipment Details visual template is intentionally preserved.
     const baseFont = '15px';
+    const tableRowFont = compact ? '15px' : '12px'; // Compact button only: match approved Preview table body size
     const headingSize = '17px';
     const thPadding = '4px 8px';
     const tdPadding = '4px 8px';
@@ -20254,10 +22369,10 @@ function mcBuildCustomerShipmentHTML(data, mode, carriers, compact=false) {
         const v1=r[0]==='Validity Date'?'color:#dc2626;font-weight:bold;':'';
         const v2=r[2]==='Validity Date'?'color:#dc2626;font-weight:bold;':'';
         html += `<tr style="background:${bg};">
-            <td style="border:1px solid #d1d5db;padding:${tdPadding};font-weight:700;width:20%;">${r[0]}</td>
-            <td style="border:1px solid #d1d5db;padding:${tdPadding};width:30%;${v1}">${r[1]}</td>
-            <td style="border:1px solid #d1d5db;padding:${tdPadding};font-weight:700;width:20%;">${r[2]}</td>
-            <td style="border:1px solid #d1d5db;padding:${tdPadding};width:30%;${v2}">${r[3]}</td>
+            <td style="border:1px solid #d1d5db;padding:${tdPadding};font-weight:700;width:20%;font-size:${tableRowFont};">${r[0]}</td>
+            <td style="border:1px solid #d1d5db;padding:${tdPadding};width:30%;${v1}font-size:${tableRowFont};">${r[1]}</td>
+            <td style="border:1px solid #d1d5db;padding:${tdPadding};font-weight:700;width:20%;font-size:${tableRowFont};">${r[2]}</td>
+            <td style="border:1px solid #d1d5db;padding:${tdPadding};width:30%;${v2}font-size:${tableRowFont};">${r[3]}</td>
         </tr>`;
     });
     html += `</tbody></table>`;
@@ -20268,7 +22383,7 @@ function mcBuildCustomerShipmentHTML(data, mode, carriers, compact=false) {
 /* ============================================================
    V21 — AIR QUOTE: NO AMOUNT SUBTOTAL/TOTAL
    Amount remains a line-level rate only. AIR subtotal and Grand Total
-   are displayed exclusively under INR Equivalent.
+   are displayed exclusively under INR Amount.
    ============================================================ */
 
 /* ============================================================
@@ -20283,7 +22398,7 @@ function mcBuildCustomerShipmentHTML(data, mode, carriers, compact=false) {
    V19 — AIR COPY COMPACT / PREVIEW LOGIC
    Based on the supplied legacy AIR JS logic.
    Amount = unit/entered rate.
-   INR Equivalent = calculated final amount.
+   INR Amount = calculated final amount.
    Basis = actual applied calculation rule.
    ============================================================ */
 function airCompactDisplayLogic(charge, raw, data) {
@@ -20296,9 +22411,19 @@ function airCompactDisplayLogic(charge, raw, data) {
     let finalINR = unit;
 
     if (name === 'AIR FREIGHT') {
-        basis = 'Per KGS';
-        finalINR = unit * weight;
-        return { unit, basis, finalINR, minApplied: false };
+        // AIR FREIGHT must honor the Basis selected in the quotation.
+        // Normal = flat amount; Per KGS / Per KGS x3 / Per KGS x4 / Per CBM
+        // are calculated according to the explicitly selected basis below.
+        if (basis === 'Per KGS') finalINR = unit * weight;
+        else if (basis === 'Per KGS × 3') finalINR = unit * weight * 3;
+        else if (basis === 'Per KGS × 4') finalINR = unit * weight * 4;
+        else if (basis === 'Per CBM') finalINR = unit * volume;
+        else {
+            // Any unrecognised/blank AIR FREIGHT basis is treated as Normal.
+            basis = 'Normal';
+            finalINR = unit;
+        }
+        return { unit, basis: basis === 'Normal' ? '1' : basis, finalINR, minApplied: false };
     }
 
     if (name === 'CARTAGE') {
@@ -20568,10 +22693,17 @@ function mcBuildSectionHTML(data, mode, section, carriers, srStart, compact=fals
     const multi = carriers.length > 1;
     const airMulti = multi && mode === 'air';
     const baseFont = '15px';
+    const tableRowFont = compact ? '15px' : '12px'; // Compact button only: match approved Preview charge-row size
     const headingSize = '17px';
     const thPadding = '4px 8px';
     const tdPadding = '4px 8px';
     const headerHeight = 'auto';
+    // Shared PDF summary-row geometry. Subtotal and Grand Total MUST use
+    // exactly the same font, padding, line-height and row height.
+    const summaryFont = compact ? '15px' : '12px'; // Compact button only: match approved Preview summary-row size
+    const summaryPadding = '4px 8px';
+    const summaryLineHeight = '1.35';
+    const summaryRowHeight = '29px';
 
     // EXACT COPY-COMPACT TYPOGRAPHY / GRID.
     // Single carrier: 10 / 30 / 10 / 15 / 10 / 29 = 104% in the legacy markup,
@@ -20600,7 +22732,7 @@ function mcBuildSectionHTML(data, mode, section, carriers, srStart, compact=fals
         `white-space:nowrap;overflow:hidden;text-overflow:clip;overflow-wrap:normal;word-break:normal;box-sizing:border-box;`;
 
     const tdBase =
-        `border:1px solid ${border};padding:${tdPadding};font-size:${baseFont};line-height:1.4;`+
+        `border:1px solid ${border};padding:${tdPadding};font-size:${tableRowFont};line-height:1.4;`+
         `vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:clip;overflow-wrap:normal;word-break:normal;box-sizing:border-box;`;
 
     const tableWidth = SHAHID_SIZE.quote;
@@ -20638,7 +22770,7 @@ function mcBuildSectionHTML(data, mode, section, carriers, srStart, compact=fals
             <th style="${thBase}padding:0;border-top:0;"></th>`;
         carriers.forEach(() => {
             html += `<th style="${thBase}width:${subWidth};white-space:nowrap;">Amount</th>` +
-                    `<th style="${thBase}width:${subWidth};white-space:nowrap;">INR Equivalent</th>`;
+                    `<th style="${thBase}width:${subWidth};white-space:nowrap;">INR Value</th>`;
         });
     } else if(multi){
         carriers.forEach(c => {
@@ -20647,7 +22779,7 @@ function mcBuildSectionHTML(data, mode, section, carriers, srStart, compact=fals
     } else {
         html += `<th style="${thBase}text-align:right;width:${amountWidth};white-space:nowrap;">Amount</th>`+
                 `<th style="${thBase}width:${basisWidth};white-space:nowrap;">Basis</th>`+
-                `<th style="${thBase}text-align:right;width:${inrWidth};white-space:nowrap;">INR Equivalent</th>`;
+                `<th style="${thBase}text-align:right;width:${inrWidth};white-space:nowrap;">INR Value</th>`;
     }
 
     html += `</tr></thead><tbody>`;
@@ -20719,32 +22851,32 @@ function mcBuildSectionHTML(data, mode, section, carriers, srStart, compact=fals
     });
 
     // SUBTOTAL: exact same column geometry as the main table.
-    html += `<tfoot><tr style="font-weight:700;background:#e6f7e6;">`;
+    html += `<tfoot><tr class="pdf-subtotal-row" style="font-weight:700;background:#e6f7e6;font-size:${summaryFont};line-height:${summaryLineHeight};height:${summaryRowHeight};min-height:${summaryRowHeight};">`;
     if(multi){
         const labelWidth = `${10 + 29 + 10}%`;
-        html += `<td colspan="3" style="${tdBase}text-align:right;width:${labelWidth};white-space:nowrap;">Subtotal (INR)</td>`;
+        html += `<td colspan="3" style="${tdBase}text-align:right;width:${labelWidth};white-space:nowrap;font-size:${summaryFont};line-height:${summaryLineHeight};height:${summaryRowHeight};padding:${summaryPadding};font-weight:700;">Subtotal (INR)</td>`;
         if (airMulti || lclMulti) {
             const subWidth = airMulti ? airSubWidth : lclSubWidth;
             totals.forEach(v=>{
                 // AIR: Amount is the displayed unit/entered rate only.
                 // Never show an Amount subtotal/total. Only INR Equivalent is totalled.
                 if (airMulti) {
-                    html += `<td style="${tdBase}text-align:right;width:${subWidth};white-space:nowrap;"></td>` +
-                            `<td style="${tdBase}text-align:right;width:${subWidth};white-space:nowrap;">${formatINR(v)}</td>`;
+                    html += `<td style="${tdBase}text-align:right;width:${subWidth};white-space:nowrap;font-size:${summaryFont};line-height:${summaryLineHeight};height:${summaryRowHeight};padding:${summaryPadding};font-weight:700;"></td>` +
+                            `<td style="${tdBase}text-align:right;width:${subWidth};white-space:nowrap;font-size:${summaryFont};line-height:${summaryLineHeight};height:${summaryRowHeight};padding:${summaryPadding};font-weight:700;">${formatINR(v)}</td>`;
                 } else {
                     // LCL: no Amount subtotal; subtotal belongs only to INR Equivalent.
-                    html += `<td style="${tdBase}text-align:right;width:${subWidth};white-space:nowrap;"></td>` +
-                            `<td style="${tdBase}text-align:right;width:${subWidth};white-space:nowrap;">${formatINR(v)}</td>`;
+                    html += `<td style="${tdBase}text-align:right;width:${subWidth};white-space:nowrap;font-size:${summaryFont};line-height:${summaryLineHeight};height:${summaryRowHeight};padding:${summaryPadding};font-weight:700;"></td>` +
+                            `<td style="${tdBase}text-align:right;width:${subWidth};white-space:nowrap;font-size:${summaryFont};line-height:${summaryLineHeight};height:${summaryRowHeight};padding:${summaryPadding};font-weight:700;">${formatINR(v)}</td>`;
                 }
             });
         } else {
             totals.forEach(v=>{
-                html += `<td style="${tdBase}text-align:right;width:${carrierWidth};white-space:nowrap;">${formatINR(v)}</td>`;
+                html += `<td style="${tdBase}text-align:right;width:${carrierWidth};white-space:nowrap;font-size:${summaryFont};line-height:${summaryLineHeight};height:${summaryRowHeight};padding:${summaryPadding};font-weight:700;">${formatINR(v)}</td>`;
             });
         }
     } else {
-        html += `<td colspan="5" style="${tdBase}text-align:right;width:74%;white-space:nowrap;">Subtotal (INR)</td>`+
-                `<td style="${tdBase}text-align:right;width:26%;white-space:nowrap;">${formatINR(totals[0])}</td>`;
+        html += `<td colspan="5" style="${tdBase}text-align:right;width:74%;white-space:nowrap;font-size:${summaryFont};line-height:${summaryLineHeight};height:${summaryRowHeight};padding:${summaryPadding};font-weight:700;">Subtotal (INR)</td>`+
+                `<td style="${tdBase}text-align:right;width:26%;white-space:nowrap;font-size:${summaryFont};line-height:${summaryLineHeight};height:${summaryRowHeight};padding:${summaryPadding};font-weight:700;">${formatINR(totals[0])}</td>`;
     }
     html += `</tr></tfoot></table>`;
     return {html,nextSr:sr,totals};
@@ -20776,10 +22908,12 @@ function mcCalculateGrandTotals(data, mode, carriers) {
 function mcBuildGrandTotalHTML(carriers, totals, compact=false, mode="sea") {
     if(!Array.isArray(carriers) || !carriers.length) return '';
 
-    const baseFont = '15px';
+    const baseFont = compact ? '16.5px' : '12px'; // Compact button only: Grand Total 16.5px
     const tdPadding = '4px 8px';
+    const summaryLineHeight = '1.35';
+    const summaryRowHeight = '29px';
     const td =
-        `border:1px solid #d1d5db;padding:${tdPadding};line-height:1.35;`+
+        `border:1px solid #d1d5db;padding:${tdPadding};line-height:${summaryLineHeight};height:${summaryRowHeight};font-size:${baseFont};font-weight:700;`+
         `vertical-align:middle;box-sizing:border-box;`;
 
     const tableStyle =
@@ -20790,7 +22924,7 @@ function mcBuildGrandTotalHTML(carriers, totals, compact=false, mode="sea") {
     if (carriers.length === 1) {
         return `<table class="quote-table" style="${tableStyle}">
             <tbody>
-              <tr class="pdf-grand-total" style="background:#05964b;color:#edeef0;font-weight:800;font-size:17px;line-height:1.4;">
+              <tr class="pdf-grand-total pdf-subtotal-row" style="background:#05964b;color:#edeef0;font-weight:700;font-size:${baseFont};line-height:${summaryLineHeight};height:${summaryRowHeight};min-height:${summaryRowHeight};">
                 <td style="${td}text-align:right;width:74%;white-space:nowrap;">
                     Grand Total (INR) + GST additional
                 </td>
@@ -20807,7 +22941,7 @@ function mcBuildGrandTotalHTML(carriers, totals, compact=false, mode="sea") {
         const airSubWidth = carriers.length === 2 ? '12.75%' : '8.5%';
         return `<table class="quote-table" style="${tableStyle}">
             <tbody>
-              <tr class="pdf-grand-total" style="background:#05964b;color:#edeef0;font-weight:800;font-size:1.05rem;line-height:1.35;">
+              <tr class="pdf-grand-total pdf-subtotal-row" style="background:#05964b;color:#edeef0;font-weight:700;font-size:${baseFont};line-height:${summaryLineHeight};height:${summaryRowHeight};min-height:${summaryRowHeight};">
                 <td colspan="3" style="${td}text-align:right;width:49%;white-space:nowrap;">Grand Total (INR) + GST additional</td>
                 ${carriers.map((carrier,i)=>`<td style="${td}text-align:right;width:${airSubWidth};white-space:nowrap;"></td><td style="${td}text-align:right;width:${airSubWidth};white-space:nowrap;">${formatINR(Number(totals[i])||0)}</td>`).join('')}
               </tr>
@@ -20817,7 +22951,7 @@ function mcBuildGrandTotalHTML(carriers, totals, compact=false, mode="sea") {
 
     return `<table class="quote-table" style="${tableStyle}">
         <tbody>
-          <tr class="pdf-grand-total" style="background:#05964b;color:#edeef0;font-weight:800;font-size:1.05rem;line-height:1.35;">
+          <tr class="pdf-grand-total pdf-subtotal-row" style="background:#05964b;color:#edeef0;font-weight:700;font-size:${baseFont};line-height:${summaryLineHeight};height:${summaryRowHeight};min-height:${summaryRowHeight};">
             <td colspan="3" style="${td}text-align:right;width:49%;white-space:nowrap;">
                 Grand Total (INR) + GST additional
             </td>
@@ -20904,8 +23038,41 @@ function mcStandardRemarks(mode, baseFont, headingSize, tdPadding, tableWidth='1
     }catch(e){reject(e);} });
   }
   window.shahidCopyRichHTMLCompat=copyRichHTMLCompat;
-  window.shahidOpenMailCompat=function(to,cc,subject){ var q=[]; if(subject) q.push('subject='+encodeURIComponent(subject)); if(cc) q.push('cc='+encodeURIComponent(cc)); var uri='mailto:'+encodeURIComponent(to||'')+(q.length?'?'+q.join('&'):''); try{ var a=document.createElement('a'); a.href=uri; a.style.display='none'; document.body.appendChild(a); a.click(); a.remove(); return true; }catch(e){ try{window.location.href=uri; return true;}catch(e2){return false;} } };
-})();
+  window.shahidOpenMailCompat=async function(to,cc,subject,body=''){
+    const payload={
+        to:String(to||''),
+        cc:String(cc||''),
+        subject:String(subject||''),
+        body:String(body||'')
+    };
+
+    if(window.electronAPI && typeof window.electronAPI.openOutlookMail==='function'){
+        const result=await window.electronAPI.openOutlookMail(
+            payload.to,payload.cc,payload.subject,payload.body
+        );
+
+        if(result && result.success){
+            console.log('📧 Outlook launch:', result.method || 'native', result.path || '');
+            return result;
+        }
+
+        throw new Error(result?.error || 'Outlook could not be opened.');
+    }
+
+    const q=[];
+    if(payload.subject) q.push('subject='+encodeURIComponent(payload.subject));
+    if(payload.cc) q.push('cc='+encodeURIComponent(payload.cc));
+    if(payload.body) q.push('body='+encodeURIComponent(payload.body));
+    const uri='mailto:'+encodeURIComponent(payload.to)+(q.length?'?'+q.join('&'):'');
+
+    const a=document.createElement('a');
+    a.href=uri;
+    a.style.display='none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    return {success:true,method:'browser-mailto',uri};
+}; })();
 
 /* SHAHID_FINAL_SIZE_CONSTANTS */
 /* SHAHID_FINAL_SIZE_CONSTANTS */
@@ -20934,7 +23101,7 @@ function buildPreviewHTML(data,mode,maxWidth='100%',compact=false){
     // Only the outer company/title header differs in non-compact Preview.
     const modeLabel={sea:'SEA FREIGHT',air:'AIR FREIGHT',lcl:'LCL FREIGHT'}[mode]||'FREIGHT';
     const carriers=mcOutputCarriers(data,mode);
-    const detail=mcBuildCustomerShipmentHTML(data,mode,carriers,true);
+    const detail=mcBuildCustomerShipmentHTML(data,mode,carriers,compact);
     const baseFont='15px';
     const headingSize='17px';
     const titleFont='16px';
@@ -24616,7 +26783,7 @@ function shahidPreviewShell(innerHtml, mode='quote') {
         <div><label>PAYMENT TERMS</label><input id="vie-terms" value="${esc(inv.paymentTerms||'')}"></div>
         <div><label>STATUS</label><select id="vie-status"><option>DRAFT</option><option>ISSUED</option><option>SENT</option><option>PARTIALLY PAID</option><option>PAID</option><option>OVERDUE</option><option>CANCELLED</option></select></div>
       </div>
-      <div style="overflow:auto"><table class="v91-charge-editor"><thead><tr><th>Charge</th><th>Basis</th><th>Qty</th><th>Rate</th><th>Currency</th><th>INR Equivalent</th><th>Action</th></tr></thead><tbody id="vie-lines"></tbody></table></div>
+      <div style="overflow:auto"><table class="v91-charge-editor"><thead><tr><th>Charge</th><th>Basis</th><th>Qty</th><th>Rate</th><th>Currency</th><th>INR Amount</th><th>Action</th></tr></thead><tbody id="vie-lines"></tbody></table></div>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-sm btn-info" onclick="invoiceEditorAddLine()">＋ Add Charge</button><strong id="vie-grand">Grand Total: ₹ 0.00</strong></div>
       <div class="v91-edit-actions"><button class="btn btn-clear" onclick="document.getElementById('v91InvoiceEditModal').classList.remove('show')">Cancel</button><button class="btn btn-success" onclick="saveInvoiceEditor(${idx})">💾 Save Invoice</button></div>`;
     const mode=String(inv.mode||'SEA').toUpperCase(); document.getElementById('vie-mode').value=['SEA','AIR','LCL'].includes(mode)?mode:'SEA';
@@ -25023,31 +27190,39 @@ window.invoiceActionWhatsApp=function(){
     try {
       const folderPath = db.backupFolderPath;
       if (!folderPath) {
-        console.warn('No backup folder path set.');
         const statusEl = document.getElementById('backup-status');
         if (statusEl) {
           statusEl.textContent = '⚠️ No folder selected. Click "Browse Folder" to select.';
           statusEl.className = 'backup-status error';
         }
-        return;
+        return false;
+      }
+
+      const format = String(db.backupFormat || 'json').toLowerCase();
+
+      // SQLite LOCAL backup is completely independent of Google Drive/OneDrive.
+      // Local backup must work offline and when no cloud folder is configured.
+      if (format === 'sqlite' &&
+          typeof window.SHAHID_RUN_IMPORT_MERGE_EXPORT_NOW === 'function') {
+        return await window.SHAHID_RUN_IMPORT_MERGE_EXPORT_NOW();
       }
 
       const fileName = `AutoBackup_${new Date().toISOString().split('T')[0]}.json`;
       const backupData = { timestamp: new Date().toISOString(), data: db };
-      const jsonStr = JSON.stringify(backupData, null, 2);
-
-      const result = await window.electronAPI.writeBackupFile(folderPath, fileName, jsonStr);
-      if (!result.success) {
-        throw new Error(result.error);
-      }
+      const result = await window.electronAPI.writeBackupFile(
+        folderPath, fileName, JSON.stringify(backupData, null, 2)
+      );
+      if (!result.success) throw new Error(result.error);
 
       db.lastBackup = new Date().toISOString();
       saveDB();
       const statusEl = document.getElementById('backup-status');
       if (statusEl) {
-        statusEl.textContent = `✅ Last backup: ${new Date().toLocaleString('en-IN')} (saved to ${folderPath}\\${fileName})`;
+        statusEl.textContent =
+          `✅ Last backup: ${new Date().toLocaleString('en-IN')} (saved to ${folderPath}\${fileName})`;
         statusEl.className = 'backup-status success';
       }
+      return true;
     } catch (e) {
       console.error('Folder backup failed:', e);
       const statusEl = document.getElementById('backup-status');
@@ -25055,6 +27230,7 @@ window.invoiceActionWhatsApp=function(){
         statusEl.textContent = `❌ Backup failed: ${e.message}`;
         statusEl.className = 'backup-status error';
       }
+      return false;
     }
   };
 
@@ -25083,32 +27259,37 @@ window.invoiceActionWhatsApp=function(){
     }
   };
 
-  // Override startAutoBackup to use the new folder path
+  // Override startAutoBackup to use the native folder path.
   const originalStartAutoBackup = window.startAutoBackup;
   window.startAutoBackup = function() {
     if (window.autoBackupInterval) clearInterval(window.autoBackupInterval);
     window.autoBackupInterval = setInterval(async () => {
       await window.autoBackup();
     }, 60000);
+
     const statusEl = document.getElementById('auto-backup-status');
     if (statusEl) {
-      statusEl.textContent = '✅ Running (every 1 min) – writing to folder';
+      const format = String(db?.backupFormat || 'json').toUpperCase();
+      statusEl.textContent = `✅ Running (every 1 min) – ${format} backup`;
     }
   };
 
   // Override autoBackup (the manual trigger)
   const originalAutoBackup = window.autoBackup;
   window.autoBackup = async function() {
+    // LOCAL backup has its own required folder. Cloud configuration is optional.
     if (db.backupFolderPath) {
-      await window.autoBackupToFolder();
-    } else {
-      const statusEl = document.getElementById('backup-status');
-      if (statusEl) {
-        statusEl.textContent = '⚠️ No folder selected. Click "Browse Folder" to enable auto-backup.';
-        statusEl.className = 'backup-status error';
-      }
-      console.warn('Auto-backup skipped – no folder handle.');
+      return await window.autoBackupToFolder();
     }
+
+    const statusEl = document.getElementById('backup-status');
+    if (statusEl) {
+      statusEl.textContent =
+        '⚠️ Local backup folder not selected. Select the LOCAL backup folder.';
+      statusEl.className = 'backup-status error';
+    }
+    console.warn('Local auto-backup skipped – local backup folder is not configured.');
+    return false;
   };
 
   // Also update the Backup Folder Path display on load
@@ -25129,3 +27310,806 @@ window.invoiceActionWhatsApp=function(){
 
   console.log('✅ Backup functions overridden for Electron.');
 })();
+
+
+/* SHAHID ERP — CRITICAL SQLITE AUTO SYNC FIX V4
+   Correct local-folder workflow:
+   1) Read SHAHID_ERP.sqlite directly from the selected folder (no file input).
+   2) Parse the complete erp_state table.
+   3) Merge with the current ERP state.
+   4) Persist current ERP state.
+   5) Export the merged complete database back to the SAME file.
+   This is used only when Backup Format = SQLite.
+*/
+(function(){
+    'use strict';
+
+    const SQLITE_FILE_NAME = 'SHAHID_ERP.sqlite';
+
+    async function getReadyFolder(){
+        // Browser/File System Access API: use the actual selected directory handle.
+        // Support both legacy lexical reference and window reference.
+        const folderHandle = backupFolderHandle || window.backupFolderHandle;
+
+        if(!folderHandle){
+            const statusEl = document.getElementById('backup-status');
+            if(statusEl){
+                statusEl.textContent =
+                    '⚠️ Local backup folder is not selected. Click BROWSE FOLDER.';
+                statusEl.className = 'backup-status error';
+            }
+            return null;
+        }
+
+        const permission = await folderHandle.requestPermission({
+            mode: 'readwrite'
+        });
+
+        if(permission !== 'granted'){
+            throw new Error('Permission to read/write the backup folder was denied.');
+        }
+
+        // Keep both references synchronized for subsequent automatic cycles.
+        backupFolderHandle = folderHandle;
+        window.backupFolderHandle = folderHandle;
+
+        return folderHandle;
+    }
+
+    async function readSQLiteStateFromFolder(folderHandle){
+        let fileHandle;
+        try{
+            fileHandle = await folderHandle.getFileHandle(SQLITE_FILE_NAME, {create:false});
+        }catch(error){
+            // First run: no local SQLite exists yet. This is not an error.
+            if(error && (error.name === 'NotFoundError' || error.code === 8)){
+                return null;
+            }
+            throw error;
+        }
+
+        const file = await fileHandle.getFile();
+        const buffer = await file.arrayBuffer();
+
+        await initSQLite();
+        if(!window.SQL) throw new Error('SQLite library failed to load.');
+
+        const sqliteDb = new window.SQL.Database(new Uint8Array(buffer));
+
+        try{
+            const check = sqliteDb.prepare(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='erp_state'"
+            );
+            const hasState = check.step();
+            check.free();
+
+            if(!hasState){
+                throw new Error('SHAHID_ERP.sqlite does not contain the complete ERP state table.');
+            }
+
+            const stmt = sqliteDb.prepare('SELECT key, value_json FROM erp_state');
+            const importedState = {};
+
+            while(stmt.step()){
+                const row = stmt.getAsObject();
+
+                try{
+                    importedState[row.key] = JSON.parse(row.value_json);
+                }catch(error){
+                    console.warn('Skipping invalid SQLite state key:', row.key, error);
+                }
+            }
+
+            stmt.free();
+
+            if(!Object.keys(importedState).length){
+                throw new Error('SHAHID_ERP.sqlite contains no ERP state.');
+            }
+
+            return importedState;
+        }finally{
+            sqliteDb.close();
+        }
+    }
+
+    async function exportMergedSQLiteToSameFile(folderHandle){
+        const dbInstance = await buildCompleteSQLiteDatabase();
+
+        try{
+            const data = dbInstance.export();
+            const fileHandle = await folderHandle.getFileHandle(
+                SQLITE_FILE_NAME,
+                {create:true}
+            );
+
+            const writable = await fileHandle.createWritable({
+                keepExistingData:false
+            });
+
+            try{
+                await writable.write(
+                    new Blob([data], {type:'application/x-sqlite3'})
+                );
+            }finally{
+                await writable.close();
+            }
+        }finally{
+            dbInstance.close();
+        }
+
+        db.lastBackup = new Date().toISOString();
+        if(typeof saveDB === 'function') saveDB();
+
+        const statusEl = document.getElementById('backup-status');
+        if(statusEl){
+            statusEl.textContent =
+                `✅ SQLite sync completed: IMPORT → MERGE → EXPORT ` +
+                `(${new Date().toLocaleString('en-IN')}) ` +
+                `— ${folderHandle.name}/${SQLITE_FILE_NAME}`;
+            statusEl.className = 'backup-status success';
+        }
+
+        return true;
+    }
+
+    window.SHAHID_RUN_IMPORT_MERGE_EXPORT_NOW = async function(){
+        if(String(db?.backupFormat || '').toLowerCase() !== 'sqlite'){
+            return false;
+        }
+
+        // Electron: use one direct local SQLite path and verify the actual file.
+        if(window.electronAPI && db?.backupFolderPath){
+            try{
+                const folderPath = String(db.backupFolderPath || '').trim();
+                if(!folderPath){
+                    throw new Error('Local backup folder is not configured.');
+                }
+
+                const result = await window.electronAPI.readBackupFile(
+                    folderPath,
+                    SQLITE_FILE_NAME
+                );
+
+                if(!result || result.success === false){
+                    throw new Error(result?.error || 'Unable to read local SQLite backup.');
+                }
+
+                let incoming = null;
+
+                if(result.exists && result.data){
+                    await initSQLite();
+                    if(!window.SQL) throw new Error('SQLite library failed to load.');
+
+                    const sourceDb = new window.SQL.Database(new Uint8Array(result.data));
+                    try{
+                        const check = sourceDb.prepare(
+                            "SELECT name FROM sqlite_master WHERE type='table' AND name='erp_state'"
+                        );
+                        const hasState = check.step();
+                        check.free();
+
+                        if(!hasState){
+                            throw new Error(
+                                'SHAHID_ERP.sqlite does not contain the complete ERP state table.'
+                            );
+                        }
+
+                        const stmt = sourceDb.prepare(
+                            'SELECT key, value_json FROM erp_state'
+                        );
+                        incoming = {};
+
+                        while(stmt.step()){
+                            const row = stmt.getAsObject();
+                            try{
+                                incoming[row.key] = JSON.parse(row.value_json);
+                            }catch(parseError){
+                                console.warn(
+                                    'Skipping invalid SQLite state key:',
+                                    row.key,
+                                    parseError
+                                );
+                            }
+                        }
+
+                        stmt.free();
+
+                        if(!Object.keys(incoming).length){
+                            throw new Error(
+                                'SHAHID_ERP.sqlite contains no ERP state.'
+                            );
+                        }
+                    }finally{
+                        sourceDb.close();
+                    }
+                }
+
+                // If a previous local SQLite exists, merge it first.
+                if(incoming){
+                    if(typeof window.SHAHID_MERGE_LOCAL_SQLITE !== 'function'){
+                        throw new Error('SQLite merge engine is not available.');
+                    }
+
+                    const merged = await window.SHAHID_MERGE_LOCAL_SQLITE(incoming);
+                    if(!merged){
+                        throw new Error(
+                            'SQLite merge failed; current ERP data was preserved.'
+                        );
+                    }
+                }
+
+                // Persist merged/current ERP state before creating the SQLite file.
+                if(typeof window.saveDB === 'function'){
+                    await Promise.resolve(window.saveDB());
+                }
+
+                // Build the COMPLETE current ERP SQLite and write it directly
+                // to the selected local folder.
+                const outputDb = await buildCompleteSQLiteDatabase();
+
+                let outputBytes;
+                try{
+                    outputBytes = outputDb.export();
+                }finally{
+                    outputDb.close();
+                }
+
+                if(!outputBytes || !outputBytes.length){
+                    throw new Error('Generated SQLite backup is empty.');
+                }
+
+                const writeResult = await window.electronAPI.writeBackupFile(
+                    folderPath,
+                    SQLITE_FILE_NAME,
+                    new Uint8Array(outputBytes)
+                );
+
+                if(!writeResult || writeResult.success !== true){
+                    throw new Error(
+                        writeResult?.error || 'Local SQLite write failed.'
+                    );
+                }
+
+                // Verify the actual file on disk after the write.
+                let verified = null;
+                if(typeof window.electronAPI.statBackupFile === 'function'){
+                    verified = await window.electronAPI.statBackupFile(
+                        folderPath,
+                        SQLITE_FILE_NAME
+                    );
+                }
+
+                if(
+                    verified &&
+                    (
+                        verified.success !== true ||
+                        verified.exists !== true ||
+                        Number(verified.size) !== Number(outputBytes.length)
+                    )
+                ){
+                    throw new Error(
+                        `Local SQLite verification failed: expected ${outputBytes.length} bytes.`
+                    );
+                }
+
+                db.lastBackup = new Date().toISOString();
+                if(typeof saveDB === 'function') saveDB();
+
+                const statusEl = document.getElementById('backup-status');
+                if(statusEl){
+                    const modifiedText =
+                        verified && verified.modifiedAt
+                            ? new Date(verified.modifiedAt).toLocaleString('en-IN')
+                            : new Date().toLocaleString('en-IN');
+
+                    statusEl.textContent =
+                        `✅ LOCAL SQLITE UPDATED — IMPORT → MERGE → EXPORT ` +
+                        `(${modifiedText}) — ${folderPath}\\${SQLITE_FILE_NAME}`;
+
+                    statusEl.className = 'backup-status success';
+                }
+
+                console.log(
+                    'LOCAL SQLITE BACKUP VERIFIED:',
+                    folderPath,
+                    SQLITE_FILE_NAME,
+                    'bytes=', outputBytes.length,
+                    'modifiedAt=', verified?.modifiedAt || null
+                );
+
+                return true;
+
+            }catch(error){
+                console.error(
+                    'Local SQLite backup failed. Current ERP database preserved:',
+                    error
+                );
+
+                const statusEl = document.getElementById('backup-status');
+                if(statusEl){
+                    statusEl.textContent =
+                        `❌ LOCAL SQLITE BACKUP FAILED: ${error.message}`;
+                    statusEl.className = 'backup-status error';
+                }
+
+                return false;
+            }
+        }
+
+        const folderHandle = await getReadyFolder();
+        if(!folderHandle) return false;
+
+        try{
+            const incoming = await readSQLiteStateFromFolder(folderHandle);
+
+            if(incoming){
+                if(typeof window.SHAHID_MERGE_LOCAL_SQLITE !== 'function'){
+                    throw new Error('SQLite merge engine is not available.');
+                }
+
+                const merged = await window.SHAHID_MERGE_LOCAL_SQLITE(incoming);
+
+                if(!merged){
+                    throw new Error('SQLite merge failed; current ERP data was preserved.');
+                }
+
+                if(typeof window.saveDB === 'function'){
+                    await Promise.resolve(window.saveDB());
+                }
+            }
+
+            // If no backup exists yet, export current ERP as the initial
+            // complete SQLite file. If backup exists, this exports the merged state.
+            return await exportMergedSQLiteToSameFile(folderHandle);
+
+        }catch(error){
+            console.error(
+                'SQLite import/merge/export failed. Current database preserved:',
+                error
+            );
+
+            const statusEl = document.getElementById('backup-status');
+            if(statusEl){
+                statusEl.textContent =
+                    `❌ SQLite sync failed: ${error.message}`;
+                statusEl.className = 'backup-status error';
+            }
+
+            return false;
+        }
+    };
+
+    // Correct the adapters used by the old framework APIs so they cannot
+    // accidentally invoke the manual <input type="file"> importer.
+    window.SHAHID_LOCAL_SQLITE_IMPORT = async function(){
+        const folderHandle = await getReadyFolder();
+        if(!folderHandle) return null;
+        return await readSQLiteStateFromFolder(folderHandle);
+    };
+
+    window.SHAHID_LOCAL_SQLITE_EXPORT = async function(){
+        const folderHandle = await getReadyFolder();
+        if(!folderHandle) return false;
+        return await exportMergedSQLiteToSameFile(folderHandle);
+    };
+})();
+
+
+/* SHAHID ERP — GOOGLE DRIVE LOCAL MIRROR BACKUP V1
+   Google Drive Desktop/Drive-for-desktop folder is a local synced folder.
+*/
+(function(){
+    'use strict';
+    const DRIVE_SQLITE_NAME='SHAHID_ERP.sqlite';
+
+    function setDriveStatus(message, ok){
+        const el=document.getElementById('google-drive-backup-status');
+        if(el){
+            el.textContent=message;
+            el.className='backup-status '+(ok?'success':'error');
+        }
+    }
+
+    window.selectGoogleDriveFolder=async function(){
+        try{
+            if(!window.electronAPI || typeof window.electronAPI.selectBackupFolder!=='function'){
+                alert('Google Drive folder selection is available in the EXE version.');
+                return;
+            }
+            const path=await window.electronAPI.selectBackupFolder();
+            if(!path) return;
+            db.googleDriveFolderPath=path;
+            if(typeof saveDB==='function') saveDB();
+            const input=document.getElementById('google-drive-folder-path-input');
+            const display=document.getElementById('google-drive-folder-path');
+            if(input) input.value=path;
+            if(display) display.textContent=`☁️ ${path}`;
+            setDriveStatus('☁️ Google Drive folder selected — ready for SQLite mirror.',true);
+        }catch(error){
+            console.error('Google Drive folder selection failed:',error);
+            setDriveStatus(`❌ Google Drive folder selection failed: ${error.message}`,false);
+        }
+    };
+
+    window.saveGoogleDrivePath=function(){
+        const input=document.getElementById('google-drive-folder-path-input');
+        const path=input?input.value.trim():'';
+        if(!path){alert('Please select or enter the Google Drive synced folder path.');return;}
+        db.googleDriveFolderPath=path;
+        if(typeof saveDB==='function') saveDB();
+        const display=document.getElementById('google-drive-folder-path');
+        if(display) display.textContent=`☁️ ${path}`;
+        setDriveStatus('☁️ Google Drive folder path saved.',true);
+    };
+
+    window.SHAHID_EXPORT_CURRENT_SQLITE_TO_GOOGLE_DRIVE=async function(){
+        const path=String(db?.googleDriveFolderPath||'').trim();
+        if(!path){
+            setDriveStatus('⚠️ Google Drive not configured — local SQLite backup completed only.',false);
+            return false;
+        }
+        if(!window.electronAPI || typeof window.electronAPI.writeBackupFile!=='function'){
+            setDriveStatus('⚠️ Google Drive mirror requires the EXE/native backup bridge.',false);
+            return false;
+        }
+        try{
+            const sqliteDb=await buildCompleteSQLiteDatabase();
+            try{
+                const result=await window.electronAPI.writeBackupFile(
+                    path,DRIVE_SQLITE_NAME,new Uint8Array(sqliteDb.export())
+                );
+                if(!result || result.success!==true){
+                    throw new Error(result?.error||'Unable to write SQLite backup to Google Drive folder.');
+                }
+            }finally{sqliteDb.close();}
+            db.lastGoogleDriveBackup=new Date().toISOString();
+            if(typeof saveDB==='function') saveDB();
+            setDriveStatus(`☁️ Google Drive SQLite updated: ${new Date().toLocaleString('en-IN')} — ${path}\\${DRIVE_SQLITE_NAME}`,true);
+            return true;
+        }catch(error){
+            console.error('Google Drive SQLite mirror failed:',error);
+            setDriveStatus(`❌ Google Drive SQLite update failed: ${error.message}`,false);
+            return false;
+        }
+    };
+
+    window.SHAHID_RUN_LOCAL_AND_GOOGLEDRIVE_BACKUP_NOW=async function(){
+        const status=document.getElementById('backup-status');
+        try{
+            if(status){
+                status.textContent='⏳ Local SQLite: IMPORT → MERGE → EXPORT...';
+                status.className='backup-status';
+            }
+
+            // LOCAL SQLITE — mandatory, offline capable.
+            let localOk=false;
+            if(typeof window.SHAHID_RUN_IMPORT_MERGE_EXPORT_NOW==='function'){
+                localOk=await window.SHAHID_RUN_IMPORT_MERGE_EXPORT_NOW();
+            }else if(typeof window.autoBackupToFolder==='function'){
+                localOk=await window.autoBackupToFolder();
+            }
+
+            if(!localOk) throw new Error('Local SQLite backup failed.');
+
+            // GOOGLE DRIVE — optional second destination.
+            const drivePath=String(db?.googleDriveFolderPath||'').trim();
+
+            if(!drivePath){
+                if(status){
+                    status.textContent=
+                        `✅ Local SQLite updated — Google Drive not configured (${new Date().toLocaleString('en-IN')})`;
+                    status.className='backup-status success';
+                }
+                return {localOk:true,driveOk:false,driveSkipped:true};
+            }
+
+            if(status){
+                status.textContent='✅ Local SQLite updated. Updating Google Drive...';
+                status.className='backup-status success';
+            }
+
+            let driveOk=false;
+            if(typeof window.SHAHID_EXPORT_CURRENT_SQLITE_TO_GOOGLE_DRIVE==='function'){
+                driveOk=await window.SHAHID_EXPORT_CURRENT_SQLITE_TO_GOOGLE_DRIVE();
+            }
+
+            if(status){
+                status.textContent=driveOk
+                    ? `✅ Local SQLite + Google Drive SQLite updated — ${new Date().toLocaleString('en-IN')}`
+                    : `⚠️ Local SQLite updated. Google Drive update failed — ${new Date().toLocaleString('en-IN')}`;
+                // Local backup succeeded; optional Drive failure does not invalidate it.
+                status.className='backup-status success';
+            }
+
+            return {localOk:true,driveOk};
+        }catch(error){
+            console.error('Local + Google Drive backup failed:',error);
+            if(status){
+                status.textContent=`❌ Local SQLite backup failed: ${error.message}`;
+                status.className='backup-status error';
+            }
+            return {localOk:false,driveOk:false,error:error.message};
+        }
+    };
+
+    document.addEventListener('DOMContentLoaded',function(){
+        const path=String(db?.googleDriveFolderPath||'').trim();
+        const input=document.getElementById('google-drive-folder-path-input');
+        const display=document.getElementById('google-drive-folder-path');
+        if(path){
+            if(input) input.value=path;
+            if(display) display.textContent=`☁️ ${path}`;
+            setDriveStatus('☁️ Google Drive folder configured.',true);
+        }
+    });
+})();
+
+// ===== PRODUCT KEY INPUT MASKING =====
+// Product keys remain stored/validated exactly as before; only their visual
+// representation is masked while the user types.
+function maskProductKeyInputs() {
+    document.querySelectorAll('input').forEach(input => {
+        const idName = ((input.id || '') + ' ' + (input.name || '')).toLowerCase();
+        const labelText = input.closest('label')?.textContent?.toLowerCase() || '';
+        const contextText = input.parentElement?.textContent?.toLowerCase() || '';
+        if (idName.includes('product') && idName.includes('key') ||
+            idName.includes('productkey') ||
+            labelText.includes('product key') ||
+            contextText.includes('product key')) {
+            input.type = 'password';
+            input.autocomplete = 'off';
+            input.spellcheck = false;
+        }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', maskProductKeyInputs);
+
+
+
+/* ============================================================================
+   SHAHID ERP — ALL-TAB FUNCTION COMPLETENESS PATCH
+   Restores missing tab initialization/refresh hooks without redesigning tabs.
+   Existing tab renderers remain the single source of truth.
+============================================================================ */
+(function(){
+    'use strict';
+
+    const originalTabSwitch = window.switchToTab;
+    if(typeof originalTabSwitch === 'function' && !originalTabSwitch.__SHAHID_ALL_TAB_COMPLETENESS){
+        const patchedSwitch = function(targetTab){
+            const result = originalTabSwitch.apply(this, arguments);
+            try{
+                switch(String(targetTab || '')){
+                    case 'planner':
+                        if(typeof initPlanner === 'function') initPlanner();
+                        break;
+                    case 'invoice':
+                        if(typeof renderInvoiceTab === 'function') renderInvoiceTab();
+                        break;
+                    case 'localcharges':
+                        if(typeof switchLocalTab === 'function') switchLocalTab(window.currentLocalTab || 'sea');
+                        break;
+                    case 'reporting':
+                        if(typeof showReportingMenu === 'function') setTimeout(showReportingMenu, 50);
+                        break;
+                    case 'actioncenter':
+                        if(typeof renderActionCenter === 'function') renderActionCenter();
+                        break;
+                    case 'measurement':
+                        if(typeof showMeasurementMenu === 'function') showMeasurementMenu();
+                        break;
+                }
+            }catch(e){ console.warn('All-tab initialization skipped:', e); }
+            return result;
+        };
+        patchedSwitch.__SHAHID_ALL_TAB_COMPLETENESS = true;
+        window.switchToTab = patchedSwitch;
+    }
+
+    const originalRefresh = window.refreshCurrentTab;
+    if(typeof originalRefresh === 'function' && !originalRefresh.__SHAHID_ALL_TAB_COMPLETENESS){
+        const patchedRefresh = function(){
+            const result = originalRefresh.apply(this, arguments);
+            try{
+                const active = document.querySelector('.tab-panel.active')?.id || '';
+                switch(active){
+                    case 'invoice': if(typeof renderInvoiceTab === 'function') renderInvoiceTab(); break;
+                    case 'planner': if(typeof refreshPlanner === 'function') refreshPlanner(); else if(typeof initPlanner === 'function') initPlanner(); break;
+                    case 'reporting': {
+                        const panel = document.querySelector('#reporting .report-panel.active');
+                        const id = panel?.id || '';
+                        const map = {
+                            'report-panel-salesreport':'renderSalesReport',
+                            'report-panel-opsreport':'renderOperationsReport',
+                            'report-panel-dashboard':'renderDashboard',
+                            'report-panel-profitreport':'renderProfitabilityReport',
+                            'report-panel-customer360':'renderCustomer360',
+                            'report-panel-dsr-exceptions':'renderDSRExceptions',
+                            'report-panel-cutoff-calendar':'renderCutoffCalendar',
+                            'report-panel-container-tracker':'renderContainerTracker',
+                            'report-panel-carrierreport':'renderCarrierPerformance',
+                            'report-panel-receivables':'renderReceivables'
+                        };
+                        const fn = map[id];
+                        if(fn && typeof window[fn] === 'function') window[fn]();
+                        break;
+                    }
+                    case 'localcharges': if(typeof switchLocalTab === 'function') switchLocalTab(window.currentLocalTab || 'sea'); break;
+                    case 'actioncenter': if(typeof renderActionCenter === 'function') renderActionCenter(); break;
+                    case 'measurement': if(typeof showMeasurementMenu === 'function') showMeasurementMenu(); break;
+                }
+            }catch(e){ console.warn('All-tab refresh skipped:', e); }
+            return result;
+        };
+        patchedRefresh.__SHAHID_ALL_TAB_COMPLETENESS = true;
+        window.refreshCurrentTab = patchedRefresh;
+    }
+
+    window.SHAHID_TAB_FUNCTION_AUDIT = function(){
+        const requirements = {
+            raterequest:['populateRateRequestDropdowns','switchRateRequestFormat','sendRateRequestEmail','previewRateRequest','saveRateRequestDraft','clearRateRequestForm'],
+            sea:['buildChargesGrid','saveRecord','clearFormWithConfirm','downloadPDF','previewQuote','emailQuote'],
+            air:['buildChargesGrid','saveRecord','clearFormWithConfirm','downloadPDF','previewQuote','emailQuote'],
+            lcl:['buildChargesGrid','saveRecord','clearFormWithConfirm','downloadPDF','previewQuote','emailQuote'],
+            drafts:['renderRecords','clearFilters'],
+            rates:['renderRecords','ratesBulkAction','clearRatesFilters'],
+            ratesheet:['renderRateSheet','openRateSheetModal','processBulkRateImport','exportRateSheetReport'],
+            rrdrafts:['renderRecords','clearRRDraftsFilters'],
+            dsr:['renderShipments','dsrAddNew','dsrRunSelectedAction','exportDSRToExcel'],
+            bldraft:['renderBLDrafts','bldraftBulkAction','exportBLDraftsToExcel'],
+            invoice:['renderInvoiceTab','invoiceActionPreview','invoiceActionEdit','invoiceActionCopyCompact','invoiceActionEmail','invoiceActionPDF','invoiceActionWhatsApp','invoiceActionDelete'],
+            planner:['initPlanner','refreshPlanner','plannerAddTaskModal','plannerAddNote','plannerSaveNote'],
+            reporting:['showReportingMenu','switchReportTab','renderSalesReport','renderOperationsReport','renderProfitabilityReport','renderCustomer360','renderDSRExceptions','renderCutoffCalendar','renderContainerTracker','renderCarrierPerformance','renderReceivables'],
+            measurement:['showMeasurementMenu','switchCalcTab','calcDuty','calcProduct','calcInsurance','calcUSDuty','renderFreightRecords'],
+            database:['renderDatabase','saveCompanyInfo','saveDefaultCC','saveDefaultUser','exportToSQLite','importFromSQLite'],
+            localcharges:['switchLocalTab','renderDefaultChargesMaster','renderCarrierChargesMaster','localChargesAction']
+        };
+        const result={};
+        Object.entries(requirements).forEach(([tab,names])=>{
+            const missing=names.filter(name=>typeof window[name] !== 'function');
+            result[tab]={ok:missing.length===0,missing};
+        });
+        return result;
+    };
+})();
+
+// ==================== EMBEDDED QUOTATION CALCULATORS ====================
+// Non-invasive duplicates of the existing Measurement calculators.
+// They use the same calculation rules and the existing saved-record arrays,
+// but use unique DOM IDs so they cannot interfere with the original tools.
+function calculateCBMEmbedded() {
+    const length = parseFloat(document.getElementById('lcl-cbm-length')?.value) || 0;
+    const width = parseFloat(document.getElementById('lcl-cbm-width')?.value) || 0;
+    const height = parseFloat(document.getElementById('lcl-cbm-height')?.value) || 0;
+    const unit = document.getElementById('lcl-cbm-unit')?.value || 'cm';
+    const qty = parseFloat(document.getElementById('lcl-cbm-qty')?.value) || 1;
+    let lengthM = length, widthM = width, heightM = height;
+    if (unit === 'cm') { lengthM = length / 100; widthM = width / 100; heightM = height / 100; }
+    else if (unit === 'inch') { lengthM = length * 0.0254; widthM = width * 0.0254; heightM = height * 0.0254; }
+    else if (unit === 'mm') { lengthM = length / 1000; widthM = width / 1000; heightM = height / 1000; }
+    const cbm = lengthM * widthM * heightM * qty;
+    const result = document.getElementById('lcl-cbm-result');
+    if (result) result.value = cbm.toFixed(4) + ' CBM';
+    const saveBtn = document.getElementById('lcl-cbm-save-btn');
+    if (saveBtn) {
+        saveBtn.style.display = 'inline-block';
+        saveBtn.dataset.length = length;
+        saveBtn.dataset.width = width;
+        saveBtn.dataset.height = height;
+        saveBtn.dataset.unit = unit;
+        saveBtn.dataset.qty = qty;
+        saveBtn.dataset.cbm = cbm;
+    }
+    renderCBMRecordsEmbedded();
+}
+
+function saveCBMRecordEmbedded() {
+    const btn = document.getElementById('lcl-cbm-save-btn');
+    if (!btn) return;
+    const length = parseFloat(btn.dataset.length) || 0;
+    const width = parseFloat(btn.dataset.width) || 0;
+    const height = parseFloat(btn.dataset.height) || 0;
+    const unit = btn.dataset.unit || 'cm';
+    const qty = parseFloat(btn.dataset.qty) || 1;
+    const cbm = parseFloat(btn.dataset.cbm) || 0;
+    if (length === 0 || width === 0 || height === 0) return alert('Please fill all dimensions first.');
+    if (!db.cbmRecords) db.cbmRecords = [];
+    db.cbmRecords.push({ id: 'CBM-' + Date.now().toString(36).toUpperCase(), length, width, height, unit, qty, cbm, timestamp: new Date().toISOString() });
+    saveDB();
+    renderCBMRecords();
+    renderCBMRecordsEmbedded();
+    alert('CBM record saved!');
+}
+
+function deleteCBMRecordEmbedded(id) {
+    if (!confirm('Delete this CBM record?')) return;
+    db.cbmRecords = (db.cbmRecords || []).filter(r => r.id !== id);
+    saveDB();
+    renderCBMRecords();
+    renderCBMRecordsEmbedded();
+}
+
+function renderCBMRecordsEmbedded() {
+    const container = document.getElementById('lcl-cbm-records-list');
+    if (!container) return;
+    const records = db.cbmRecords || [];
+    if (!records.length) {
+        container.innerHTML = '<p style="color:var(--text-light);padding:10px;text-align:center;">No CBM records saved.</p>';
+        return;
+    }
+    container.innerHTML = `<table class="master-table"><thead><tr><th>#</th><th>L</th><th>W</th><th>H</th><th>Unit</th><th>Qty</th><th>CBM</th><th>Date</th><th>Action</th></tr></thead><tbody>${records.map((r,i)=>`<tr><td>${i+1}</td><td>${r.length}</td><td>${r.width}</td><td>${r.height}</td><td>${r.unit}</td><td>${r.qty}</td><td><strong>${Number(r.cbm||0).toFixed(4)}</strong></td><td>${new Date(r.timestamp).toLocaleDateString('en-IN')}</td><td><button class="btn btn-sm btn-clear" onclick="deleteCBMRecordEmbedded('${r.id}')">×</button></td></tr>`).join('')}</tbody></table>`;
+}
+
+function calculateAirChargeableEmbedded() {
+    const length = parseFloat(document.getElementById('rr-aircalc-length')?.value) || 0;
+    const width = parseFloat(document.getElementById('rr-aircalc-width')?.value) || 0;
+    const height = parseFloat(document.getElementById('rr-aircalc-height')?.value) || 0;
+    const unit = document.getElementById('rr-aircalc-unit')?.value || 'cm';
+    const qty = parseFloat(document.getElementById('rr-aircalc-qty')?.value) || 1;
+    let volumeCm3 = 0;
+    if (unit === 'cm') volumeCm3 = length * width * height;
+    else if (unit === 'inch') volumeCm3 = (length * 2.54) * (width * 2.54) * (height * 2.54);
+    else if (unit === 'mm') volumeCm3 = (length / 10) * (width / 10) * (height / 10);
+    const chargeableWeight = (volumeCm3 / 6000) * qty;
+    const result = document.getElementById('rr-aircalc-result');
+    if (result) result.value = chargeableWeight.toFixed(2) + ' KGS';
+    const saveBtn = document.getElementById('rr-aircalc-save-btn');
+    if (saveBtn) {
+        saveBtn.style.display = 'inline-block';
+        saveBtn.dataset.length = length;
+        saveBtn.dataset.width = width;
+        saveBtn.dataset.height = height;
+        saveBtn.dataset.unit = unit;
+        saveBtn.dataset.qty = qty;
+        saveBtn.dataset.weight = chargeableWeight;
+    }
+    renderAirWeightRecordsEmbedded();
+}
+
+function saveAirWeightRecordEmbedded() {
+    const btn = document.getElementById('rr-aircalc-save-btn');
+    if (!btn) return;
+    const length = parseFloat(btn.dataset.length) || 0;
+    const width = parseFloat(btn.dataset.width) || 0;
+    const height = parseFloat(btn.dataset.height) || 0;
+    const unit = btn.dataset.unit || 'cm';
+    const qty = parseFloat(btn.dataset.qty) || 1;
+    const weight = parseFloat(btn.dataset.weight) || 0;
+    if (length === 0 || width === 0 || height === 0) return alert('Please fill all dimensions first.');
+    if (!db.airWeightRecords) db.airWeightRecords = [];
+    db.airWeightRecords.push({ id: 'AIR-' + Date.now().toString(36).toUpperCase(), length, width, height, unit, qty, weight, timestamp: new Date().toISOString() });
+    saveDB();
+    renderAirWeightRecords();
+    renderAirWeightRecordsEmbedded();
+    alert('Air weight record saved!');
+}
+
+function deleteAirWeightRecordEmbedded(id) {
+    if (!confirm('Delete this air weight record?')) return;
+    db.airWeightRecords = (db.airWeightRecords || []).filter(r => r.id !== id);
+    saveDB();
+    renderAirWeightRecords();
+    renderAirWeightRecordsEmbedded();
+}
+
+function renderAirWeightRecordsEmbedded() {
+    const container = document.getElementById('rr-aircalc-records-list');
+    if (!container) return;
+    const records = db.airWeightRecords || [];
+    if (!records.length) {
+        container.innerHTML = '<p style="color:var(--text-light);padding:10px;text-align:center;">No air weight records saved.</p>';
+        return;
+    }
+    container.innerHTML = `<table class="master-table"><thead><tr><th>#</th><th>L</th><th>W</th><th>H</th><th>Unit</th><th>Qty</th><th>Chargeable Wt (KGS)</th><th>Date</th><th>Action</th></tr></thead><tbody>${records.map((r,i)=>`<tr><td>${i+1}</td><td>${r.length}</td><td>${r.width}</td><td>${r.height}</td><td>${r.unit}</td><td>${r.qty}</td><td><strong>${Number(r.weight||0).toFixed(2)}</strong></td><td>${new Date(r.timestamp).toLocaleDateString('en-IN')}</td><td><button class="btn btn-sm btn-clear" onclick="deleteAirWeightRecordEmbedded('${r.id}')">×</button></td></tr>`).join('')}</tbody></table>`;
+}
+
+(function initEmbeddedQuotationCalculators(){
+    const render = () => {
+        if (typeof renderCBMRecordsEmbedded === 'function') renderCBMRecordsEmbedded();
+        if (typeof renderAirWeightRecordsEmbedded === 'function') renderAirWeightRecordsEmbedded();
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render, { once:true });
+    else render();
+})();
+
