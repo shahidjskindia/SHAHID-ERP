@@ -1944,13 +1944,21 @@ function getShipmentsUnderProcessForDate(dateKey) {
 
 function getShipmentMilestonesForDate(dateKey) {
     const milestones = [];
+    const normalizeMilestoneDate = value => {
+        if (!value) return '';
+        const raw = String(value).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+        const dmy = raw.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/);
+        if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+        const parsed = new Date(raw);
+        if (isNaN(parsed)) return '';
+        return formatDateKey(parsed);
+    };
     (db.shipments || []).forEach(s => {
-        if (s.etd && formatDateKey(new Date(s.etd)) === dateKey) {
-            milestones.push({ ...s, milestoneType: 'ETD', milestoneDate: s.etd });
-        }
-        if (s.eta && formatDateKey(new Date(s.eta)) === dateKey) {
-            milestones.push({ ...s, milestoneType: 'ETA', milestoneDate: s.eta });
-        }
+        const etd = normalizeMilestoneDate(s.etd);
+        const eta = normalizeMilestoneDate(s.eta);
+        if (etd === dateKey) milestones.push({ ...s, milestoneType: 'ETD', milestoneDate: s.etd });
+        if (eta === dateKey) milestones.push({ ...s, milestoneType: 'ETA', milestoneDate: s.eta });
     });
     return milestones;
 }
@@ -2110,18 +2118,20 @@ function loadPlannerDay(dateKey) {
     if (milestones.length === 0) {
         milesContainer.innerHTML = '<em style="color:var(--text-light);">No milestones on this day.</em>';
     } else {
-        milesContainer.innerHTML = milestones.map(s =>
-            `<div class="planner-milestone-item">
+        milesContainer.innerHTML = milestones.map(s => {
+            const shipmentRef = s.code || s.jobNo || s.shipmentNo || s.id || '';
+            const customer = shipmentCustomer(s);
+            return `<div class="planner-milestone-item">
                 <div>
                     <span class="milestone-type ${s.milestoneType === 'ETD' ? 'milestone-etd' : 'milestone-eta'}">${s.milestoneType}</span>
-                    <a href="javascript:void(0)" onclick="plannerOpenShipment('${s.code}')" style="color:var(--primary);">
-                        ${s.code} - ${s.shipper}
+                    <a href="javascript:void(0)" onclick="plannerOpenShipment('${String(shipmentRef).replace(/'/g, "\\'")}')" style="color:var(--primary);">
+                        ${shipmentRef} - ${customer}
                     </a>
-                    (${s.pol} → ${s.pod})
+                    (${s.pol || '-'} → ${s.pod || '-'})
                 </div>
-                <span style="font-size:0.7rem;color:var(--text-light);">${s.milestoneDate}</span>
-            </div>`
-        ).join('');
+                <span style="font-size:0.7rem;color:var(--text-light);">${s.milestoneDate || '-'}</span>
+            </div>`;
+        }).join('');
     }
 
     // ---- QUOTES QUOTED ----
@@ -2451,7 +2461,9 @@ function plannerOpenQuote(quoteNumber, mode) {
 }
 
 function plannerOpenShipment(code) {
-    const s = db.shipments.find(s => s.code === code);
+    const s = db.shipments.find(s =>
+        (s.code || s.jobNo || s.shipmentNo || s.id) === code
+    );
     if (!s) return alert('Shipment not found.');
     switchToTab('dsr');
     setTimeout(() => {
@@ -2694,6 +2706,8 @@ let masterPerPage = 20;
 let masterSearch = '';
 let masterShowMode = 'visible';
 let masterSort = 'alpha-asc';
+let masterSelected = {};
+
 let backupFolderHandle = null;
 let autoBackupInterval = null;
 let currentLocalContainer = null;
@@ -4477,7 +4491,7 @@ function clearFilters(target) {
 function debouncedSearch(target) {
     if (searchTimeout) clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => {
-        if (target === 'rrdrafts') renderRRDrafts();
+        if (target === 'rrdrafts') renderEnhancedRRDrafts();
         else renderRecords(target);
     }, 300);
 }
@@ -4488,6 +4502,12 @@ function renderRecords(target) {
     // === ENHANCED RATES VIEW ===
     if (target === 'rates') {
         renderEnhancedRates();
+        return;
+    }
+
+    // === ENHANCED RATE REQUESTED VIEW ===
+    if (target === 'rrdrafts') {
+        renderEnhancedRRDrafts();
         return;
     }
 
@@ -7560,10 +7580,16 @@ function copyPreviewText() {
         }
         if (typeof mcOutputRowData === 'function') {
             const d = mcOutputRowData(data, m, carrier, charge);
+            const raw = d.raw || carrier?.charges?.[charge] || {};
+            // LCL WhatsApp must display the entered unit rate for Freight (e.g. $10 / CBM),
+            // not the calculated extended amount ($10 × 2 CBM = $20). Calculation remains unchanged.
+            const isLclFreightPerCbm = m === 'lcl' &&
+                String(charge || '').trim().toUpperCase() === 'FREIGHT' &&
+                String(raw?.basis || '').trim().toUpperCase() === 'PER CBM';
             return {
-                raw: d.raw || carrier?.charges?.[charge] || {},
-                sell: Number(d?.x?.sell) || 0,
-                cur: d.sellCur || d?.raw?.currency || (m === 'sea' || m === 'lcl' ? 'USD' : 'INR'),
+                raw,
+                sell: isLclFreightPerCbm ? (Number(raw?.amount) || 0) : (Number(d?.x?.sell) || 0),
+                cur: d.sellCur || raw?.currency || (m === 'sea' || m === 'lcl' ? 'USD' : 'INR'),
                 sellINR: Number(d?.sellINR) || 0
             };
         }
@@ -9388,24 +9414,43 @@ function renderDatabase() {
 // ==================== MASTER DATA ====================
 function switchMasterTab(tab) {
     currentMasterTab = tab;
+    masterSelected = {};
+    masterPage = 1;
     document.querySelectorAll('.master-tab').forEach(t => t.classList.toggle('active', t.dataset.master === tab));
     renderMasterData();
+}
+function getMasterListKey(tab) {
+    return tab === 'carriers' ? 'carriers' :
+        tab === 'pol' ? 'pol' :
+        tab === 'pod' ? 'pod' :
+        tab === 'incoterms' ? 'incoterms' :
+        tab === 'containers' ? 'containers' :
+        tab === 'cargostatus' ? 'cargoStatusMaster' :
+        tab === 'docsstatus' ? 'docsStatusMaster' :
+        'carriers';
+}
+function normalizeMasterValue(value) {
+    return String(value ?? '').trim().toUpperCase();
 }
 function renderMasterData() {
     const list = document.getElementById('master-list');
     const pagination = document.getElementById('master-pagination');
-    let data = [];
-    if (currentMasterTab === 'carriers') data = db.carriers || [];
-    else if (currentMasterTab === 'pol') data = db.pol || [];
-    else if (currentMasterTab === 'pod') data = db.pod || [];
-    else if (currentMasterTab === 'incoterms') data = db.incoterms || [];
-    else if (currentMasterTab === 'containers') data = db.containers || [];
-    else if (currentMasterTab === 'cargostatus') data = db.cargoStatusMaster || [];
-    else if (currentMasterTab === 'docsstatus') data = db.docsStatusMaster || [];
+    const bulkBar = document.getElementById('master-bulk-actions');
+    if (!list || !pagination) return;
+    const listKey = getMasterListKey(currentMasterTab);
+    const data = db[listKey] || [];
     const hidden = db.hiddenItems[currentMasterTab] || [];
     let filteredData = data.map((item, idx) => ({ item, idx }));
     if (masterShowMode === 'visible') filteredData = filteredData.filter(({ item }) => !hidden.includes(item));
     else if (masterShowMode === 'hidden') filteredData = filteredData.filter(({ item }) => hidden.includes(item));
+    // Prevent duplicate master entries from being displayed while preserving existing stored data.
+    const seenMasterValues = new Set();
+    filteredData = filteredData.filter(({ item }) => {
+        const norm = normalizeMasterValue(item);
+        if (seenMasterValues.has(norm)) return false;
+        seenMasterValues.add(norm);
+        return true;
+    });
     if (masterSearch) {
         const searchLower = masterSearch.toLowerCase();
         filteredData = filteredData.filter(({ item }) => item.toLowerCase().includes(searchLower));
@@ -9418,38 +9463,137 @@ function renderMasterData() {
     if (masterPage < 1) masterPage = 1;
     const start = (masterPage - 1) * perPage;
     const pageData = filteredData.slice(start, start + perPage);
+    const selectedSet = new Set((masterSelected[currentMasterTab] || []).map(normalizeMasterValue));
+    const selectedCount = (masterSelected[currentMasterTab] || []).length;
+    const pageAllSelected = pageData.length > 0 && pageData.every(({ item }) => selectedSet.has(normalizeMasterValue(item)));
+    const allFilteredSelected = filteredData.length > 0 && filteredData.every(({ item }) => selectedSet.has(normalizeMasterValue(item)));
+    if (bulkBar) {
+        bulkBar.innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;">
+                <label style="display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer;">
+                    <input type="checkbox" ${allFilteredSelected ? 'checked' : ''} onchange="toggleMasterSelectAll(this.checked)">
+                    Select All
+                </label>
+                <span id="master-selected-count" style="font-weight:600;color:var(--text-light);">Selected: ${selectedCount}</span>
+                <button class="btn btn-sm btn-preview" type="button" onclick="masterBulkAction('show')" ${selectedCount ? '' : 'disabled'}>👁 Show Selected</button>
+                <button class="btn btn-sm btn-warning" type="button" onclick="masterBulkAction('hide')" ${selectedCount ? '' : 'disabled'}>🙈 Hide Selected</button>
+                <button class="btn btn-sm btn-clear" type="button" onclick="masterBulkAction('delete')" ${selectedCount ? '' : 'disabled'}>🗑 Delete Selected</button>
+                <button class="btn btn-sm btn-info" type="button" onclick="clearMasterSelection()" ${selectedCount ? '' : 'disabled'}>Clear Selection</button>
+            </div>`;
+    }
     if (pageData.length === 0) {
         list.innerHTML = '<p style="padding:20px;text-align:center;color:var(--text-light);">No items found.</p>';
         pagination.innerHTML = '';
         return;
     }
-    list.innerHTML = pageData.map(({ item, idx: originalIdx }) => {
-        const isHidden = hidden.includes(item);
-        const hiddenClass = isHidden ? 'hidden-item' : '';
-        return `<div class="master-item ${hiddenClass}">
-            <span>${item}</span>
-            <div class="master-item-actions">
-                <button class="btn btn-sm btn-preview" onclick="editMasterItem('${currentMasterTab}',${originalIdx})">✏️</button>
-                <button class="btn btn-sm btn-warning" onclick="toggleHiddenMasterItem('${currentMasterTab}',${originalIdx})">${isHidden ? '👁 Show' : '🙈 Hide'}</button>
-                <button class="btn btn-sm btn-clear" onclick="deleteMasterItem('${currentMasterTab}',${originalIdx})">×</button>
-            </div>
-        </div>`;
-    }).join('');
+    list.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--card-bg);font-size:0.8rem;color:var(--text-light);">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:600;">
+                <input type="checkbox" ${pageAllSelected ? 'checked' : ''} onchange="toggleMasterPageSelection(this.checked)">
+                Select page
+            </label>
+        </div>
+        ${pageData.map(({ item, idx: originalIdx }) => {
+            const isHidden = hidden.includes(item);
+            const hiddenClass = isHidden ? 'hidden-item' : '';
+            const isSelected = selectedSet.has(normalizeMasterValue(item));
+            return `<div class="master-item ${hiddenClass}">
+                <label style="display:flex;align-items:center;gap:10px;min-width:0;flex:1;cursor:pointer;">
+                    <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleMasterSelection(${originalIdx}, this.checked)">
+                    <span>${item}</span>
+                </label>
+            </div>`;
+        }).join('')}`;
     if (totalPages <= 1) { pagination.innerHTML = ''; return; }
     let pagHtml = `<button class="page-btn" onclick="changeMasterPage(${masterPage - 1})" ${masterPage === 1 ? 'disabled' : ''}>‹ Prev</button>`;
     pagHtml += `<span class="page-info">Page ${masterPage} of ${totalPages}</span>`;
     pagHtml += `<button class="page-btn" onclick="changeMasterPage(${masterPage + 1})" ${masterPage === totalPages ? 'disabled' : ''}>Next ›</button>`;
     pagination.innerHTML = pagHtml;
 }
+function toggleMasterSelection(originalIdx, checked) {
+    const listKey = getMasterListKey(currentMasterTab);
+    const data = db[listKey] || [];
+    const item = data[originalIdx];
+    if (!item) return;
+    if (!masterSelected[currentMasterTab]) masterSelected[currentMasterTab] = [];
+    const norm = normalizeMasterValue(item);
+    masterSelected[currentMasterTab] = masterSelected[currentMasterTab].filter(v => normalizeMasterValue(v) !== norm);
+    if (checked) masterSelected[currentMasterTab].push(item);
+    renderMasterData();
+}
+function toggleMasterSelectAll(checked) {
+    const listKey = getMasterListKey(currentMasterTab);
+    const data = db[listKey] || [];
+    const hidden = db.hiddenItems[currentMasterTab] || [];
+    let filteredData = data.map((item, idx) => ({ item, idx }));
+    if (masterShowMode === 'visible') filteredData = filteredData.filter(({ item }) => !hidden.includes(item));
+    else if (masterShowMode === 'hidden') filteredData = filteredData.filter(({ item }) => hidden.includes(item));
+    if (masterSearch) filteredData = filteredData.filter(({ item }) => item.toLowerCase().includes(masterSearch.toLowerCase()));
+    if (checked) masterSelected[currentMasterTab] = filteredData.map(({ item }) => item);
+    else masterSelected[currentMasterTab] = [];
+    renderMasterData();
+}
+function toggleMasterPageSelection(checked) {
+    const listKey = getMasterListKey(currentMasterTab);
+    const data = db[listKey] || [];
+    const hidden = db.hiddenItems[currentMasterTab] || [];
+    let filteredData = data.map((item, idx) => ({ item, idx }));
+    if (masterShowMode === 'visible') filteredData = filteredData.filter(({ item }) => !hidden.includes(item));
+    else if (masterShowMode === 'hidden') filteredData = filteredData.filter(({ item }) => hidden.includes(item));
+    if (masterSearch) filteredData = filteredData.filter(({ item }) => item.toLowerCase().includes(masterSearch.toLowerCase()));
+    if (masterSort === 'alpha-asc') filteredData.sort((a, b) => a.item.localeCompare(b.item));
+    else if (masterSort === 'alpha-desc') filteredData.sort((a, b) => b.item.localeCompare(a.item));
+    const perPage = parseInt(masterPerPage) || 20;
+    const pageData = filteredData.slice((masterPage - 1) * perPage, masterPage * perPage);
+    if (!masterSelected[currentMasterTab]) masterSelected[currentMasterTab] = [];
+    const selected = masterSelected[currentMasterTab];
+    const pageNorms = new Set(pageData.map(({ item }) => normalizeMasterValue(item)));
+    masterSelected[currentMasterTab] = selected.filter(v => !pageNorms.has(normalizeMasterValue(v)));
+    if (checked) pageData.forEach(({ item }) => masterSelected[currentMasterTab].push(item));
+    renderMasterData();
+}
+function clearMasterSelection() {
+    masterSelected[currentMasterTab] = [];
+    renderMasterData();
+}
+function masterBulkAction(action) {
+    const listKey = getMasterListKey(currentMasterTab);
+    const data = db[listKey] || [];
+    const selected = masterSelected[currentMasterTab] || [];
+    if (!selected.length) return alert('Select at least one item');
+    const selectedNorms = new Set(selected.map(normalizeMasterValue));
+    const hidden = db.hiddenItems[currentMasterTab] || [];
+    let changed = 0;
+    if (action === 'delete') {
+        if (!confirm(`Delete ${selected.length} selected item(s)?`)) return;
+        for (let i = data.length - 1; i >= 0; i--) {
+            if (selectedNorms.has(normalizeMasterValue(data[i]))) {
+                data.splice(i, 1);
+                changed++;
+            }
+        }
+        db.hiddenItems[currentMasterTab] = hidden.filter(item => !selectedNorms.has(normalizeMasterValue(item)));
+    } else if (action === 'hide') {
+        selected.forEach(item => {
+            if (!hidden.some(h => normalizeMasterValue(h) === normalizeMasterValue(item))) {
+                hidden.push(item);
+                changed++;
+            }
+        });
+        db.hiddenItems[currentMasterTab] = hidden;
+    } else if (action === 'show') {
+        const nextHidden = hidden.filter(item => selectedNorms.has(normalizeMasterValue(item)) ? (changed++, false) : true);
+        db.hiddenItems[currentMasterTab] = nextHidden;
+    }
+    masterSelected[currentMasterTab] = [];
+    saveDB();
+    renderMasterData();
+    populateDropdowns();
+    autoBackup();
+}
 function changeMasterPage(page) {
-    const data = currentMasterTab === 'carriers' ? db.carriers :
-        currentMasterTab === 'pol' ? db.pol :
-        currentMasterTab === 'pod' ? db.pod :
-        currentMasterTab === 'incoterms' ? db.incoterms :
-        currentMasterTab === 'containers' ? db.containers :
-        currentMasterTab === 'cargostatus' ? db.cargoStatusMaster :
-        currentMasterTab === 'docsstatus' ? db.docsStatusMaster :
-        db.carriers;
+    const listKey = getMasterListKey(currentMasterTab);
+    const data = db[listKey] || [];
     const hidden = db.hiddenItems[currentMasterTab] || [];
     let filteredData = data.map((item, idx) => ({ item, idx }));
     if (masterShowMode === 'visible') filteredData = filteredData.filter(({ item }) => !hidden.includes(item));
@@ -9465,64 +9609,54 @@ function addMasterItem() {
     const input = document.getElementById('new-master-item');
     const val = input.value.trim();
     if (!val) return alert('Enter a value');
-    const listKey = currentMasterTab === 'carriers' ? 'carriers' :
-        currentMasterTab === 'pol' ? 'pol' :
-        currentMasterTab === 'pod' ? 'pod' :
-        currentMasterTab === 'incoterms' ? 'incoterms' :
-        currentMasterTab === 'containers' ? 'containers' :
-        currentMasterTab === 'cargostatus' ? 'cargoStatusMaster' :
-        currentMasterTab === 'docsstatus' ? 'docsStatusMaster' :
-        'carriers';
-    if (db[listKey].includes(val)) return alert('Item already exists');
+    const listKey = getMasterListKey(currentMasterTab);
+    const normalized = normalizeMasterValue(val);
+    if ((db[listKey] || []).some(item => normalizeMasterValue(item) === normalized)) return alert('Item already exists');
     db[listKey].push(val);
     saveDB();
     input.value = '';
+    masterSelected[currentMasterTab] = [];
     renderMasterData();
     populateDropdowns();
     autoBackup();
 }
 function addMultipleMasterItems() {
     const textarea = document.getElementById('new-master-items');
-    const items = textarea.value.split(/\n/).map(s => s.trim().toUpperCase()).filter(s => s);
+    const items = textarea.value.split(/[\n.]+/).map(s => s.trim()).filter(s => s);
     if (!items.length) return alert('Enter at least one item');
-    const listKey = currentMasterTab === 'carriers' ? 'carriers' :
-        currentMasterTab === 'pol' ? 'pol' :
-        currentMasterTab === 'pod' ? 'pod' :
-        currentMasterTab === 'incoterms' ? 'incoterms' :
-        currentMasterTab === 'containers' ? 'containers' :
-        currentMasterTab === 'cargostatus' ? 'cargoStatusMaster' :
-        currentMasterTab === 'docsstatus' ? 'docsStatusMaster' :
-        'carriers';
-    let added = 0;
-    items.forEach(item => {
-        if (!db[listKey].includes(item)) {
-            db[listKey].push(item);
-            added++;
-        }
+    const listKey = getMasterListKey(currentMasterTab);
+    const existing = new Set((db[listKey] || []).map(normalizeMasterValue));
+    const batch = new Set();
+    let added = 0, skipped = 0;
+    items.forEach(raw => {
+        const item = raw.trim();
+        const norm = normalizeMasterValue(item);
+        if (!norm || existing.has(norm) || batch.has(norm)) { skipped++; return; }
+        batch.add(norm);
+        db[listKey].push(item.toUpperCase());
+        added++;
     });
     saveDB();
     textarea.value = '';
+    masterSelected[currentMasterTab] = [];
     renderMasterData();
     populateDropdowns();
-    alert(`Added ${added} items`);
+    alert(`Added ${added} items${skipped ? `; skipped ${skipped} duplicate item(s)` : ''}`);
     autoBackup();
 }
 function editMasterItem(tab, originalIdx) {
-    const listKey = tab === 'carriers' ? 'carriers' :
-        tab === 'pol' ? 'pol' :
-        tab === 'pod' ? 'pod' :
-        tab === 'incoterms' ? 'incoterms' :
-        tab === 'containers' ? 'containers' :
-        tab === 'cargostatus' ? 'cargoStatusMaster' :
-        tab === 'docsstatus' ? 'docsStatusMaster' :
-        'carriers';
+    const listKey = getMasterListKey(tab);
     const data = db[listKey];
     const item = data[originalIdx];
     if (!item) return alert('Item not found');
     appPrompt('Edit item:', item, (newVal) => {
         if (newVal && newVal.trim() !== item) {
-            data[originalIdx] = newVal.trim();
+            const cleaned = newVal.trim();
+            const norm = normalizeMasterValue(cleaned);
+            if (data.some((existing, idx) => idx !== originalIdx && normalizeMasterValue(existing) === norm)) return alert('Item already exists');
+            data[originalIdx] = cleaned;
             saveDB();
+            masterSelected[tab] = [];
             renderMasterData();
             populateDropdowns();
             autoBackup();
@@ -9530,14 +9664,7 @@ function editMasterItem(tab, originalIdx) {
     });
 }
 function toggleHiddenMasterItem(tab, originalIdx) {
-    const listKey = tab === 'carriers' ? 'carriers' :
-        tab === 'pol' ? 'pol' :
-        tab === 'pod' ? 'pod' :
-        tab === 'incoterms' ? 'incoterms' :
-        tab === 'containers' ? 'containers' :
-        tab === 'cargostatus' ? 'cargoStatusMaster' :
-        tab === 'docsstatus' ? 'docsStatusMaster' :
-        'carriers';
+    const listKey = getMasterListKey(tab);
     const data = db[listKey];
     const item = data[originalIdx];
     if (!item) return;
@@ -9548,19 +9675,13 @@ function toggleHiddenMasterItem(tab, originalIdx) {
         db.hiddenItems[tab].push(item);
     }
     saveDB();
+    masterSelected[tab] = [];
     renderMasterData();
     populateDropdowns();
     autoBackup();
 }
 function deleteMasterItem(tab, originalIdx) {
-    const listKey = tab === 'carriers' ? 'carriers' :
-        tab === 'pol' ? 'pol' :
-        tab === 'pod' ? 'pod' :
-        tab === 'incoterms' ? 'incoterms' :
-        tab === 'containers' ? 'containers' :
-        tab === 'cargostatus' ? 'cargoStatusMaster' :
-        tab === 'docsstatus' ? 'docsStatusMaster' :
-        'carriers';
+    const listKey = getMasterListKey(tab);
     const data = db[listKey];
     const item = data[originalIdx];
     if (!item) return alert('Item not found');
@@ -9571,6 +9692,7 @@ function deleteMasterItem(tab, originalIdx) {
             db.hiddenItems[tab] = hidden.filter(h => h !== item);
         }
         saveDB();
+        masterSelected[tab] = [];
         renderMasterData();
         populateDropdowns();
         autoBackup();
@@ -19629,7 +19751,7 @@ function saveRateRequestDraftWithData(data) {
     // If no quote number, generate one
     if (!data.quoteNumber) {
         const now = new Date();
-        const base = `RR-${String(now.getFullYear()).slice(-2)}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+        const base = `RQ-RR-${String(now.getFullYear()).slice(-2)}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
         const all = db.drafts.rr || [];
         let seq = 1;
         let qn = base;
@@ -22908,7 +23030,7 @@ function mcCalculateGrandTotals(data, mode, carriers) {
 function mcBuildGrandTotalHTML(carriers, totals, compact=false, mode="sea") {
     if(!Array.isArray(carriers) || !carriers.length) return '';
 
-    const baseFont = compact ? '16.5px' : '12px'; // Compact button only: Grand Total 16.5px
+    const baseFont = compact ? '16px' : '12px'; // Compact Grand Total = Subtotal font size
     const tdPadding = '4px 8px';
     const summaryLineHeight = '1.35';
     const summaryRowHeight = '29px';
@@ -23147,12 +23269,12 @@ function buildPreviewHTML(data,mode,maxWidth='100%',compact=false){
 }
 
 function buildCompactEmailHTML(data, mode) {
-    // AIR/SEA/LCL all use the same canonical quotation renderer.
-    // AIR renderer follows the legacy AIR unit-rate + basis + final-INR logic.
+    // Dedicated Compact output: preserve the approved Preview table content and
+    // Compact-specific typography without altering Preview/PDF rendering.
     const carrierCount = shahidCarrierList(data).length;
     const html = buildPreviewHTML(data, mode, SHAHID_SIZE.quote, true);
     const finalHtml = normalizeQuotationOutputHTML(html, mode);
-    return `<div class="quote-output" data-carrier-count="${carrierCount}" style="width:100%;max-width:${SHAHID_SIZE.quote};min-width:0;margin:0 auto;box-sizing:border-box;">${finalHtml}</div>`;
+    return `<div class="quote-output compact-output" data-carrier-count="${carrierCount}" style="width:100%;max-width:${SHAHID_SIZE.quote};min-width:0;margin:0 auto;box-sizing:border-box;font-family:'Aptos','Segoe UI',Arial,sans-serif;">${finalHtml}</div>`;
 }
 
 // Persist all selected carrier rate sets when a quote/draft is saved.
@@ -23742,17 +23864,21 @@ function shahidCarrierList(data) {
 function normalizeQuotationOutputHTML(rawHtml, mode='sea') {
   if (!rawHtml) return '';
   let html = String(rawHtml);
-
-  // Normalize quotation outer geometry to 22cm.
   html = html.replace(/max-width:\s*(?:19cm|22cm|100%|200mm)/gi, `max-width:${SHAHID_SIZE.quote}`);
   html = html.replace(/min-width:\s*(?:19cm|100%|200mm)/gi, `min-width:${SHAHID_SIZE.quote}`);
   html = html.replace(/width:\s*(?:19cm|22cm|100%|200mm)/gi, `width:${SHAHID_SIZE.quote}`);
 
-  // Prevent cell/header wrapping without changing content.
-  html = html.replace(/<th\b([^>]*)>/gi, '<th$1 style="white-space:nowrap;">');
-  html = html.replace(/<td\b([^>]*)>/gi, '<td$1 style="white-space:nowrap;">');
-
-  // Insert consistent section gaps where separate tables are concatenated.
+  // Preserve existing Compact cell styles; append nowrap instead of replacing style.
+  const preserveNoWrap = (tag, attrs) => {
+    const m = attrs.match(/\sstyle\s*=\s*(["'])([\s\S]*?)\1/i);
+    if (!m) return `<${tag}${attrs} style="white-space:nowrap;">`;
+    const cleaned = m[2].replace(/(?:^|;)\s*white-space\s*:[^;]+;?/gi, '').replace(/;\s*$/, '');
+    const before = attrs.slice(0, m.index);
+    const after = attrs.slice(m.index + m[0].length);
+    return `<${tag}${before} style=${m[1]}${cleaned};white-space:nowrap;${m[1]}${after}>`;
+  };
+  html = html.replace(/<th\b([^>]*)>/gi, (_m,a) => preserveNoWrap('th',a));
+  html = html.replace(/<td\b([^>]*)>/gi, (_m,a) => preserveNoWrap('td',a));
   html = html.replace(/<\/table>\s*(?=<table\b)/gi, `</table>${shahidSectionGapHTML()}`);
   return html;
 }
