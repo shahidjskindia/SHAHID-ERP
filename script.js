@@ -1,4 +1,17 @@
 
+/* ===== BEGIN JS/00-core.js ===== */
+
+/* SHAHID ERP — OUTPUT SIZE CONSTANTS
+   Must be defined before any renderer references SHAHID_SIZE.
+   Values preserve the existing 200mm quotation geometry and spacing.
+*/
+const SHAHID_SIZE = Object.freeze({
+    quote: '200mm',
+    rateRequestOuter: '200mm',
+    rateRequestTable: '200mm',
+    sectionGap: '6px'
+});
+
 /* SHAHID ERP — SECURITY DIAGNOSTICS */
 (function(){
     'use strict';
@@ -1116,7 +1129,7 @@ window.SHAHID_RUN_GDRIVE_EXPORT_CHECK_NOW=driveCheck;
 
     function normalizeInput(el){
         if (!el || el.tagName === 'SELECT') return;
-        if (el.matches('input:not([type="number"]):not([type="date"]):not([type="time"]):not([type="datetime-local"]):not([type="range"]), textarea')){
+        if (el.matches('input:not([type="number"]):not([type="date"]):not([type="time"]):not([type="datetime-local"]):not([type="range"]):not([type="file"]), textarea')){
             var posStart = el.selectionStart;
             var posEnd = el.selectionEnd;
             var old = el.value;
@@ -2089,6 +2102,23 @@ function renderPlannerCalendar() {
         `${new Intl.DateTimeFormat('en', { month: 'long' }).format(plannerCurrentDate)} ${year}`;
 }
 
+// ---------- Planner Section Count Badges ----------
+function updatePlannerSectionCounts(counts) {
+    const map = {
+        notes: 'planner-count-notes',
+        milestones: 'planner-count-milestones',
+        quotes: 'planner-count-quotes',
+        expiringQuotes: 'planner-count-expiring-quotes',
+        expiringRates: 'planner-count-expiring-rates',
+        tasks: 'planner-count-tasks',
+        shipments: 'planner-count-shipments'
+    };
+    Object.keys(map).forEach(key => {
+        const el = document.getElementById(map[key]);
+        if (el) el.textContent = String(Number(counts[key]) || 0);
+    });
+}
+
 // ---------- Load Day Details ----------
 function loadPlannerDay(dateKey) {
     const displayDate = new Date(dateKey + 'T00:00:00');
@@ -2216,26 +2246,43 @@ function loadPlannerDay(dateKey) {
         ).join('');
     }
 
+    updatePlannerSectionCounts({
+        notes: notes.length,
+        milestones: milestones.length,
+        quotes: quotes.length,
+        expiringQuotes: expQuotes.length,
+        expiringRates: expRates.length,
+        tasks: tasks.length,
+        shipments: shipments.length
+    });
+
     // (No need to call updateExpiringToday() separately)
 }
 
 // ---------- Expiring Today ----------
 function updateExpiringToday() {
-    const expiring = getRatesExpiringToday();
-    const countEl = document.getElementById('planner-expiring-today-count');
-    const listEl = document.getElementById('planner-expiring-today-list');
+    const expiring = typeof getRatesExpiringToday === 'function' ? getRatesExpiringToday() : [];
+    // Current Planner uses the section badge + detail list. Keep compatibility
+    // with the older count/list IDs without assuming they still exist.
+    const countEl = document.getElementById('planner-expiring-today-count')
+        || document.getElementById('planner-count-expiring-rates');
+    const listEl = document.getElementById('planner-expiring-today-list')
+        || document.getElementById('planner-expiring-today-list-detail');
+
+    if (countEl) countEl.textContent = String(expiring.length);
+    if (!listEl) return;
+
     if (expiring.length === 0) {
-        countEl.textContent = '0';
-        listEl.innerHTML = '<em>No rates expiring today.</em>';
-    } else {
-        countEl.textContent = expiring.length;
-        listEl.innerHTML = expiring.map(r =>
-            `<div class="expiring-item">
-                <strong>${r.carrierName}</strong> - ${r.pol} → ${r.pod} (${r.freightType}) - ${r.freightAmount} ${r.currency}
-                <button class="btn btn-sm btn-preview" onclick="plannerRenewRate('${r.id}')">🔄 Renew</button>
-            </div>`
-        ).join('');
+        listEl.innerHTML = '<em style="color:var(--text-light);">No rates expiring on this date.</em>';
+        return;
     }
+
+    listEl.innerHTML = expiring.map(r =>
+        `<div class="expiring-item">
+            <strong>${r.carrierName}</strong> - ${r.pol} → ${r.pod} (${r.freightType}) - ${r.freightAmount} ${r.currency}
+            <button class="btn btn-sm btn-preview" onclick="plannerRenewRate('${r.id}')">🔄 Renew</button>
+        </div>`
+    ).join('');
 }
 
 // ---------- Navigation ----------
@@ -4718,8 +4765,22 @@ function setFollowUpStatus(target, mode, idx, status) {
     }
 }
 
+
+/* ===== END JS/00-core.js ===== */
+
+/* ===== BEGIN JS/01-dashboard.js ===== */
 // ==================== DASHBOARD ====================
 function renderDashboard() {
+    // Dashboard panel/targets are not present in the current master HTML.
+    // Exit safely instead of throwing null-element runtime errors if this
+    // renderer is invoked by legacy/deep-link navigation.
+    const dashboardTargets = [
+        'dash-total-revenue', 'dash-total-margin', 'dash-total-quotes',
+        'dash-conversion', 'dash-expiring', 'dash-expired',
+        'dash-top-clients', 'dash-top-routes'
+    ];
+    if (!dashboardTargets.every(id => document.getElementById(id))) return;
+
     const allRates = [...db.rates.sea, ...db.rates.air, ...db.rates.lcl];
     const totalRevenue = allRates.reduce((sum, r) => sum + (r.totalSellINR || 0), 0);
     const totalMargin = allRates.reduce((sum, r) => sum + (r.marginINR || 0), 0);
@@ -4975,6 +5036,10 @@ document.querySelectorAll('#calc-stuffing input[type="number"]').forEach(input =
     });
 });
 
+
+/* ===== END JS/01-dashboard.js ===== */
+
+/* ===== BEGIN JS/02-rate-sheet.js ===== */
 // ==================== RATE SHEET MANAGEMENT ====================
 function getExpiryStatus(validityDate) {
     if (!validityDate) return { status: 'none', days: null, color: 'gray' };
@@ -5684,6 +5749,10 @@ function legacy_saveFreightRate(mode) {
     alert(`Freight rate saved to Rate Sheet!\n\nCarrier: ${carrier}\nRoute: ${pol} → ${pod}\nAmount: ${formatINR(freightAmount)}`);
     autoBackup();
 }
+
+/* ===== END JS/02-rate-sheet.js ===== */
+
+/* ===== BEGIN JS/03-local-charges.js ===== */
 // ==================== BULK IMPORT (POL/POD/CARRIER) ====================
 function bulkImport() {
     const type = document.getElementById('bulk-import-type').value;
@@ -6376,6 +6445,10 @@ function copyToClipboard() {
     alert('✅ Data copied to clipboard!');
 }
 
+
+/* ===== END JS/03-local-charges.js ===== */
+
+/* ===== BEGIN JS/04-quotation-communication.js ===== */
 // ==================== EMAIL FUNCTIONS ====================
 function buildEmailHTML(data, mode) {
     const modeLabel = { sea: 'SEA FREIGHT', air: 'AIR FREIGHT', lcl: 'LCL FREIGHT' }[mode];
@@ -6603,7 +6676,11 @@ function emailQuote(mode) {
     currentEmailData = { data, mode, htmlContent };
     
     const modeLabel = mode.toUpperCase();
-    const containerInfo = mode === 'sea' ? (data.container || 'N/A') : (data.volume ? `${data.volume} CBM` : 'N/A');
+    const containerInfo = mode === 'sea'
+        ? ((data.comparisonMode === 'container' && Array.isArray(data.comparisonContainers) && data.comparisonContainers.filter(Boolean).length)
+            ? data.comparisonContainers.filter(Boolean).join(' / ')
+            : (data.container || 'N/A'))
+        : (data.volume ? `${data.volume} CBM` : 'N/A');
     document.getElementById('email-subject').value = `${modeLabel} FREIGHT QUOTE // ${data.quoteNumber} // ${data.pol||'N/A'} TO ${data.pod||'N/A'} // ${containerInfo} // ${data.commodity||'N/A'}`;
     
     document.getElementById('email-html-preview').innerHTML = htmlContent;
@@ -6642,7 +6719,11 @@ function emailSavedQuote(target, mode, idx) {
     else if (mode === 'lcl') defaultCC = db.defaultCCEmailLcl || '';
 
     const modeLabel = mode.toUpperCase();
-    const containerInfo = mode === 'sea' ? (rec.container || 'N/A') : (rec.volume ? `${rec.volume} CBM` : 'N/A');
+    const containerInfo = mode === 'sea'
+        ? ((rec.comparisonMode === 'container' && Array.isArray(rec.comparisonContainers) && rec.comparisonContainers.filter(Boolean).length)
+            ? rec.comparisonContainers.filter(Boolean).join(' / ')
+            : (rec.container || 'N/A'))
+        : (rec.volume ? `${rec.volume} CBM` : 'N/A');
     document.getElementById('email-subject').value = `${modeLabel} FREIGHT QUOTE // ${rec.quoteNumber} // ${rec.pol||'N/A'} TO ${rec.pod||'N/A'} // ${containerInfo} // ${rec.commodity||'N/A'}`;
     document.getElementById('email-html-preview').innerHTML = htmlContent;
 
@@ -7318,7 +7399,7 @@ function legacy_buildPreviewHTML(data, mode, maxWidth = '100%', compact = false)
     if (mode === 'air') {
         standardRemarks = [
             "1. Rate Subject To Booking Acceptance",
-            "2. 100% Of Total Freight Charges applicable if Shipments Cancelled Within 48 Hours Before The Delivery Cut-Off Time",
+            "2. 100% Of Total Freight Charges applicable if Shipments Cancelled Within 48HR Before Delivery Cut-Off Time",
             "3. GST At Actual",
             "4. Rest other charges if any at actual as per receipt.",
             "5. Above rates are valid for 3 days",
@@ -7544,6 +7625,12 @@ function emailFromPreview() {
 }
 
 
+function getWhatsAppSpecialRemarks(data) {
+    const candidates = [data?.remarks, data?.specialRemarks, data?.special_remarks];
+    const value = candidates.find(v => v !== undefined && v !== null && String(v).trim() !== '');
+    return String(value ?? '-').trim() || '-';
+}
+
 function copyPreviewText() {
     if (!_previewData) {
         alert('No preview data available. Please open a preview first.');
@@ -7583,12 +7670,14 @@ function copyPreviewText() {
             const raw = d.raw || carrier?.charges?.[charge] || {};
             // LCL WhatsApp must display the entered unit rate for Freight (e.g. $10 / CBM),
             // not the calculated extended amount ($10 × 2 CBM = $20). Calculation remains unchanged.
-            const isLclFreightPerCbm = m === 'lcl' &&
-                String(charge || '').trim().toUpperCase() === 'FREIGHT' &&
-                String(raw?.basis || '').trim().toUpperCase() === 'PER CBM';
+            const lclUnitPerCbm = m === 'lcl' &&
+                ['FREIGHT', 'THC'].includes(String(charge || '').trim().toUpperCase()) &&
+                (String(raw?.basis || '').trim().toUpperCase() === 'PER CBM' ||
+                 String(charge || '').trim().toUpperCase() === 'FREIGHT' ||
+                 String(charge || '').trim().toUpperCase() === 'THC');
             return {
                 raw,
-                sell: isLclFreightPerCbm ? (Number(raw?.amount) || 0) : (Number(d?.x?.sell) || 0),
+                sell: lclUnitPerCbm ? (Number(raw?.amount) || 0) : (Number(d?.x?.sell) || 0),
                 cur: d.sellCur || raw?.currency || (m === 'sea' || m === 'lcl' ? 'USD' : 'INR'),
                 sellINR: Number(d?.sellINR) || 0
             };
@@ -7650,7 +7739,7 @@ function copyPreviewText() {
     // LCL: both Gross Weight and CBM are shown.
     let text = '';
     if (m === 'air' || m === 'lcl') {
-        const carrierName = carriers.map(c => String(c?.carrier || '').trim()).filter(Boolean).join(', ') || data?.carrier || '-';
+        const carrierName = [...new Set(carriers.map(c => String(c?.carrier || '').trim()).filter(Boolean))].join(', ') || data?.carrier || '-';
         text += `${m === 'air' ? '✈️ AIR FREIGHT QUOTATION' : '📦 LCL FREIGHT QUOTATION'}\n\n`;
         text += `📌 SHIPMENT DETAILS\n`;
         text += `━━━━━━━━━━━━━━━━━━\n`;
@@ -7666,11 +7755,12 @@ function copyPreviewText() {
             text += `Volume        : ${data?.volume || '-'} CBM\n`;
         }
         text += `Transit Time  : ${data?.transit || '-'} Days\n`;
-        text += `Valid Until   : ${validity}\n\n`;
+        text += `Valid Until   : ${validity}\n`;
+        text += `Special Remarks: ${getWhatsAppSpecialRemarks(data)}\n\n`;
     } else {
         // SEA keeps its own compact professional WhatsApp format.
         // AIR/LCL output above remains unchanged.
-        const seaCarrier = carriers.map(c => String(c?.carrier || '').trim()).filter(Boolean).join(', ') || data?.carrier || '-';
+        const seaCarrier = [...new Set(carriers.map(c => String(c?.carrier || '').trim()).filter(Boolean))].join(', ') || data?.carrier || '-';
         text += `🚢 SEA FREIGHT QUOTATION\n\n`;
         text += `📌 SHIPMENT DETAILS\n`;
         text += `━━━━━━━━━━━━━━━━━━\n`;
@@ -7678,10 +7768,14 @@ function copyPreviewText() {
         text += `POL           : ${data?.pol || '-'}\n`;
         text += `POD           : ${data?.pod || '-'}\n`;
         text += `Commodity     : ${data?.commodity || '-'}\n`;
-        text += `Container     : ${data?.container || '-'}\n`;
+        const waContainers = (m === 'sea' && data?.comparisonMode === 'container' && Array.isArray(data?.comparisonContainers))
+            ? data.comparisonContainers.filter(Boolean).slice(0,3).join(' / ')
+            : (data?.container || '-');
+        text += `Container     : ${waContainers || '-'}\n`;
         if (data?.weight) text += `Gross Weight  : ${data.weight} KGS\n`;
         text += `Transit Time  : ${data?.transit || '-'} Days\n`;
-        text += `Valid Until   : ${validity}\n\n`;
+        text += `Valid Until   : ${validity}\n`;
+        text += `Special Remarks: ${getWhatsAppSpecialRemarks(data)}\n\n`;
     }
 
     // Build a COMPLETE ordered charge list. First use the saved quotation order,
@@ -7738,7 +7832,9 @@ function copyPreviewText() {
             if (m === 'air') {
                 if (basis === 'PER KGS × 4' && String(charge).toUpperCase() !== 'GATE PASS') unitSuffix = ' / KG × 4';
                 else if (basis === 'PER KGS') unitSuffix = ' / KG';
-            } else if (m === 'lcl' && basis === 'PER CBM') {
+            } else if (m === 'lcl' &&
+                       (basis === 'PER CBM' ||
+                        ['FREIGHT', 'THC'].includes(String(charge || '').toUpperCase()))) {
                 unitSuffix = ' / CBM';
             } else if (m === 'sea' && String(charge).toUpperCase() === 'FREIGHT' && data?.container) {
                 unitSuffix = ` / ${data.container}`;
@@ -7755,42 +7851,65 @@ function copyPreviewText() {
         text += `${carrierTotalLabel.toUpperCase()} TOTAL : ₹ ${Number(grandTotal).toLocaleString('en-IN', { minimumFractionDigits:0, maximumFractionDigits:2 })}\n`;
         text += `━━━━━━━━━━━━━━━━━━\n`;
     } else {
-        // Multi-carrier: keep every carrier separate so no carrier's charges are
-        // lost. Each carrier gets its own complete charge list and Grand Total.
+        // Multi-option output. In SEA container-comparison mode each carrierRates
+        // slot represents one container option. Never display the carrier as the
+        // freight basis and never emit an empty/zero-value option block.
+        const isSeaContainerMode = m === 'sea' && String(data?.comparisonMode || '').toLowerCase() === 'container';
+        let optionNumber = 0;
         carriers.forEach((carrier, carrierIndex) => {
-            const label = carrier?.carrier || `Carrier ${carrierIndex + 1}`;
-            text += `\n--- CARRIER : ${String(label).toUpperCase()} ---\n`;
-            let carrierTotal = 0;
+            const label = String(carrier?.carrier || '').trim();
+            const containerLabel = isSeaContainerMode
+                ? String(carrier?.container || data?.comparisonContainers?.[carrier?.optionIndex ?? carrierIndex] || '').trim()
+                : '';
 
+            // In SEA container-comparison mode, both carrier and container must be valid.
+            // Blank slots are ignored completely.
+            if (isSeaContainerMode && (!label || !containerLabel)) return;
+
+            const rows = [];
+            let carrierTotal = 0;
             charges.forEach(charge => {
                 const raw = carrier?.charges?.[charge];
                 if (!raw && !(typeof mcHasOutputSell === 'function' && mcHasOutputSell(data, m, carrier, charge))) return;
                 const d = getWhatsAppRow(carrier, charge);
                 const sell = Number(d.sell) || 0;
-                const cur = d.cur || 'INR';
-                if (sell > 0) {
-                    carrierTotal += Number(d.sellINR) || 0;
-                    const basis = String(d.raw?.basis || '').toUpperCase();
-                    let unitSuffix = '';
-                    if (m === 'air') {
-                        if (basis === 'PER KGS × 4' && String(charge).toUpperCase() !== 'GATE PASS') unitSuffix = ' / KG × 4';
-                        else if (basis === 'PER KGS') unitSuffix = ' / KG';
-                    } else if (m === 'lcl' && basis === 'PER CBM') {
-                        unitSuffix = ' / CBM';
-                    } else if (m === 'sea' && String(charge).toUpperCase() === 'FREIGHT' && data?.container) {
-                        unitSuffix = ` / ${data.container}`;
-                    }
-                    const airMin = m === 'air' && AIR_MIN_THRESHOLDS && Object.prototype.hasOwnProperty.call(AIR_MIN_THRESHOLDS, charge)
-                        ? ` (MIN ${money(AIR_MIN_THRESHOLDS[charge], 'INR')})` : '';
-                    text += `${String(charge).toUpperCase()} : ${money(sell, cur)}${unitSuffix}${airMin}\n`;
+                if (sell <= 0) return;
+                carrierTotal += Number(d.sellINR) || 0;
+                const basis = String(d.raw?.basis || '').toUpperCase();
+                let unitSuffix = '';
+                if (m === 'air') {
+                    if (basis === 'PER KGS × 4' && String(charge).toUpperCase() !== 'GATE PASS') unitSuffix = ' / KG × 4';
+                    else if (basis === 'PER KGS') unitSuffix = ' / KG';
+                } else if (m === 'lcl' &&
+                           (basis === 'PER CBM' ||
+                            ['FREIGHT', 'THC'].includes(String(charge || '').toUpperCase()))) {
+                    unitSuffix = ' / CBM';
+                } else if (m === 'sea' && String(charge).toUpperCase() === 'FREIGHT') {
+                    if (containerLabel) unitSuffix = ` / ${containerLabel}`;
                 }
+                const airMin = m === 'air' && AIR_MIN_THRESHOLDS && Object.prototype.hasOwnProperty.call(AIR_MIN_THRESHOLDS, charge)
+                    ? ` (MIN ${money(AIR_MIN_THRESHOLDS[charge], 'INR')})` : '';
+                rows.push(`${String(charge).toUpperCase()} : ${money(sell, d.cur || 'INR')}${unitSuffix}${airMin}`);
             });
 
-            // Exact same total as the Preview for this carrier.
-            carrierTotal = previewTotalForCarrier(carrier);
-            text += `━━━━━━━━━━━━━━━━━━\n`;
-            text += `${String(label).toUpperCase()} TOTAL : ₹ ${Number(carrierTotal).toLocaleString('en-IN', { minimumFractionDigits:0, maximumFractionDigits:2 })}\n`;
-            text += `━━━━━━━━━━━━━━━━━━\n`;
+            // Skip empty/zero-value carrier or container options entirely.
+            if (!rows.length || carrierTotal <= 0) return;
+
+            if (isSeaContainerMode) {
+                optionNumber += 1;
+                const optionLabel = `${label} / ${containerLabel}`;
+                text += `\n--- OPTION ${optionNumber} : ${String(optionLabel).toUpperCase()} ---\n\n`;
+                text += rows.join('\n') + '\n';
+                text += `━━━━━━━━━━━━━━━━━━\n`;
+                text += `${containerLabel.toUpperCase()} TOTAL : ₹ ${Number(carrierTotal).toLocaleString('en-IN', { minimumFractionDigits:0, maximumFractionDigits:2 })}\n`;
+                text += `━━━━━━━━━━━━━━━━━━\n`;
+            } else {
+                text += `\n--- CARRIER : ${label.toUpperCase()} ---\n`;
+                text += rows.join('\n') + '\n';
+                text += `━━━━━━━━━━━━━━━━━━\n`;
+                text += `${label.toUpperCase()} TOTAL : ₹ ${Number(carrierTotal).toLocaleString('en-IN', { minimumFractionDigits:0, maximumFractionDigits:2 })}\n`;
+                text += `━━━━━━━━━━━━━━━━━━\n`;
+            }
         });
     }
 
@@ -7907,6 +8026,10 @@ function copyPreviewTables() {
     })();
 }
 
+
+/* ===== END JS/04-quotation-communication.js ===== */
+
+/* ===== BEGIN JS/05-dsr.js ===== */
 // ==================== DSR FUNCTIONS ====================
 let addShipmentDropdownOpen = false;
 function toggleAddShipmentDropdown() {
@@ -9000,6 +9123,10 @@ closeModal = function(id) {
     }
 };
 
+
+/* ===== END JS/05-dsr.js ===== */
+
+/* ===== BEGIN JS/06-bl-draft.js ===== */
 // ==================== BL DRAFT ====================
 // ===== BL JOB NO. LINK / AUTO-FILL =====
 function findBLRelatedRecords(jobNo) {
@@ -9378,6 +9505,10 @@ function updateBLLabels(mode) {
 }
 
 
+
+/* ===== END JS/06-bl-draft.js ===== */
+
+/* ===== BEGIN JS/07-master-admin.js ===== */
 // ==================== DATABASE RENDER ====================
 function renderDatabase() {
     document.getElementById('company-name').value = db.companyName || '';
@@ -9557,6 +9688,7 @@ function clearMasterSelection() {
     renderMasterData();
 }
 function masterBulkAction(action) {
+    if (!requireMasterAccess('manage Master Data')) return;
     const listKey = getMasterListKey(currentMasterTab);
     const data = db[listKey] || [];
     const selected = masterSelected[currentMasterTab] || [];
@@ -9606,6 +9738,7 @@ function changeMasterPage(page) {
     renderMasterData();
 }
 function addMasterItem() {
+    if (!requireMasterAccess('add Master Data')) return;
     const input = document.getElementById('new-master-item');
     const val = input.value.trim();
     if (!val) return alert('Enter a value');
@@ -9621,6 +9754,7 @@ function addMasterItem() {
     autoBackup();
 }
 function addMultipleMasterItems() {
+    if (!requireMasterAccess('add Master Data')) return;
     const textarea = document.getElementById('new-master-items');
     const items = textarea.value.split(/[\n.]+/).map(s => s.trim()).filter(s => s);
     if (!items.length) return alert('Enter at least one item');
@@ -9645,6 +9779,7 @@ function addMultipleMasterItems() {
     autoBackup();
 }
 function editMasterItem(tab, originalIdx) {
+    if (!requireMasterAccess('edit Master Data')) return;
     const listKey = getMasterListKey(tab);
     const data = db[listKey];
     const item = data[originalIdx];
@@ -9664,6 +9799,7 @@ function editMasterItem(tab, originalIdx) {
     });
 }
 function toggleHiddenMasterItem(tab, originalIdx) {
+    if (!requireMasterAccess('change Master Data visibility')) return;
     const listKey = getMasterListKey(tab);
     const data = db[listKey];
     const item = data[originalIdx];
@@ -9681,6 +9817,7 @@ function toggleHiddenMasterItem(tab, originalIdx) {
     autoBackup();
 }
 function deleteMasterItem(tab, originalIdx) {
+    if (!requireMasterAccess('delete Master Data')) return;
     const listKey = getMasterListKey(tab);
     const data = db[listKey];
     const item = data[originalIdx];
@@ -9876,29 +10013,18 @@ function refreshOperationalDropdowns() {
         if(mode==='sea') setList(`${mode}-container-list`, visibleContainers);
     });
 
-    ['rr-pol-list-sea1','rr-pol-list-sea2','rr-pol-list-air'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=visiblePol.map(v=>`<option value="${escapeHtml(v)}">`).join(''); });
-    ['rr-pod-list-sea1','rr-pod-list-sea2','rr-pod-list-air'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=visiblePod.map(v=>`<option value="${escapeHtml(v)}">`).join(''); });
-    ['rr-inventory-sea1','rr-inventory-sea2'].forEach(id => {
-        const el = document.getElementById(id);
-        if (!el) return;
-
-        const old = el.value;
-        const required = ['20 GP & 40 HC', '20 GP', '40 HC'];
-        const inventoryValues = required.concat(
-            visibleContainers.filter(v => !required.includes(v))
-        );
-
-        el.innerHTML = [...new Set(inventoryValues)]
-            .map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`)
-            .join('');
-
-        // Preserve an existing user/record selection when it is valid.
-        // On a new Rate Request, force the business default.
-        if (old && [...el.options].some(o => o.value === old)) {
-            el.value = old;
-        } else {
-            el.value = '20 GP & 40 HC';
-        }
+    ['rr-pol-list-sea1','rr-pol-list-sea2','rr-pol-list-air'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=[...new Map(visiblePol.map(v=>[String(v).trim().toUpperCase(),v])).values()].map(v=>`<option value="${escapeHtml(v)}">`).join(''); });
+    ['rr-pod-list-sea1','rr-pod-list-sea2','rr-pod-list-air'].forEach(id=>{ const el=document.getElementById(id); if(el) el.innerHTML=[...new Map(visiblePod.map(v=>[String(v).trim().toUpperCase(),v])).values()].map(v=>`<option value="${escapeHtml(v)}">`).join(''); });
+    // Rate Request autocomplete lists (POL/POD + Commodity/Inventory/Free Time).
+    const rrInventoryValues = [...new Set(['20 GP & 40 HC', '20 GP', '40 HC', ...visibleContainers])];
+    ['sea1','sea2','air'].forEach(suffix => {
+        const setRRList = (id, vals) => {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = [...new Set(vals)].map(v => `<option value="${escapeHtml(v)}">`).join('');
+        };
+        setRRList(`rr-commodity-list-${suffix}`, ['NON HAZ','HAZ']);
+        setRRList(`rr-inventory-list-${suffix}`, rrInventoryValues);
+        setRRList(`rr-freeTime-list-${suffix}`, ['14 Days','21 Days']);
     });
 
     // Any currently rendered DSR form.
@@ -11425,6 +11551,21 @@ function normalizeUser(user){
     if(!user) return null;
     return {id:user.id,name:user.name||user.id,role:user.role||'user',permissions:user.permissions||[],passwordHash:user.passwordHash||null};
 }
+function requireMasterAccess(action = 'perform this action') {
+    const user = checkLogin();
+    if (!user) {
+        alert('Please login again to continue.');
+        return false;
+    }
+    const permissions = user.permissions;
+    const allowed = user.role === 'master' || permissions === 'all' || (Array.isArray(permissions) && permissions.includes('master'));
+    if (!allowed) {
+        alert(`You do not have permission to ${action}.`);
+        return false;
+    }
+    return true;
+}
+
 function getLoggedInUserName() {
     try { const user=checkLogin(); return user ? (user.name||user.id||null) : null; } catch(e){ return null; }
 }
@@ -11551,6 +11692,7 @@ function openUserModal(idx,userData=null){
 }
 function toggleUserPerms(){ const role=document.getElementById('modal-user-role').value; document.querySelectorAll('#previewBody .user-perm-cb').forEach(cb=>{cb.checked=role==='master';cb.disabled=role==='master';cb.closest('label').classList.toggle('disabled',role==='master');}); }
 async function saveUser(idx){
+    if (!requireMasterAccess('manage users')) return;
     const id=document.getElementById('modal-user-id').value.trim(); const name=document.getElementById('modal-user-name').value.trim(); const pass=document.getElementById('modal-user-pass').value; const role=document.getElementById('modal-user-role').value;
     if(!id) return alert('User ID is required.');
     if(idx===null && !pass) return alert('New users must have a password.');
@@ -11566,8 +11708,12 @@ async function saveUser(idx){
     else { if(db.users.find(u=>u.id===id)) return alert('User ID already exists.'); db.users.push(userData); }
     saveDB(); closeModal('previewModal'); renderUserTable(); alert('User saved successfully!');
 }
-function deleteUser(idx){ if(idx<0||idx>=db.users.length)return alert('User not found.'); const user=db.users[idx]; if(user.id==='Shaikh Shahid')return alert('Cannot delete the Master user.'); if(!confirm(`Delete user "${user.id}"?`))return; db.users.splice(idx,1); saveDB(); renderUserTable(); }
+function deleteUser(idx){ if(!requireMasterAccess('delete users')) return; if(idx<0||idx>=db.users.length)return alert('User not found.'); const user=db.users[idx]; if(user.id==='Shaikh Shahid')return alert('Cannot delete the Master user.'); if(!confirm(`Delete user "${user.id}"?`))return; db.users.splice(idx,1); saveDB(); renderUserTable(); }
 
+
+/* ===== END JS/07-master-admin.js ===== */
+
+/* ===== BEGIN JS/08-action-report.js ===== */
 // ==================== ACTION & EXCEPTION CENTER ====================
 let actionCenterView = 'actions';
 let actionCenterFilter = 'all';
@@ -12241,6 +12387,10 @@ document.addEventListener('click', function(e) {
     }
 });
 
+
+/* ===== END JS/08-action-report.js ===== */
+
+/* ===== BEGIN JS/09-measurement-tools.js ===== */
 // ==================== MEASUREMENT DEFAULTS (New) ====================
 function refreshMeasurementDefaults() {
     const d = db.defaults || {};
@@ -14372,6 +14522,17 @@ function switchCalcTab(tabId) {
     document.getElementById('measurement-menu').style.display = 'none';
     document.getElementById('measurement-content').style.display = 'block';
     document.querySelectorAll('#measurement-content .calc-panel').forEach(p => p.classList.remove('active'));
+
+    // Apply the same selected-card visual treatment used by the Reporting Command Center.
+    const measurementCards = document.querySelectorAll('#measurement-menu > div > .form-section');
+    measurementCards.forEach(card => card.classList.remove('shahid-selection-active'));
+    measurementCards.forEach(card => {
+        const action = card.getAttribute('onclick') || '';
+        if (action.indexOf("switchCalcTab('" + tabId + "')") !== -1) {
+            card.classList.add('shahid-selection-active');
+        }
+    });
+
     const panel = document.getElementById('calc-' + tabId);
     if (panel) panel.classList.add('active');
 
@@ -14568,7 +14729,7 @@ function legacy_createStuffingRow(index) {
             <input type="date" class="stuffing-si-cut" readonly style="width:100%;padding:4px;border:1px solid var(--border);border-radius:4px;text-align:center;background:#F1F5F9;" />
         </td>
         <td style="padding:8px 14px;text-align:center;">
-            <button class="btn btn-sm btn-clear" onclick="removeStuffingRow(this)" style="padding:2px 8px;">×</button>
+            <button class="btn btn-sm btn-clear" onclick="event.stopPropagation(); removeStuffingRow(this)" style="padding:2px 8px;">×</button>
         </td>
     `;
     return row;
@@ -14576,9 +14737,11 @@ function legacy_createStuffingRow(index) {
 
 function addStuffingRow() {
     const tbody = document.getElementById('stuffing-table-body');
+    if (!tbody) return;
     const index = tbody.children.length;
-    const row = createStuffingRow(index);
+    const row = createStuffingRow(index, {});
     tbody.appendChild(row);
+    if (typeof saveStuffingData === 'function') saveStuffingData();
 }
 
 function legacy_removeStuffingRow(btn) {
@@ -14595,38 +14758,57 @@ function legacy_removeStuffingRow(btn) {
 }
 
 function clearStuffingRows() {
-    if (confirm('Clear all stuffing rows?')) {
-        const tbody = document.getElementById('stuffing-table-body');
-        tbody.innerHTML = '';
-        addStuffingRow();
-    }
+    if (!confirm('Clear all stuffing rows?')) return;
+    const tbody = document.getElementById('stuffing-table-body');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    addStuffingRow();
 }
 
 function updateStuffingDates(departureInput) {
+    if (!departureInput) return;
     const row = departureInput.closest('tr');
-    const depDate = new Date(departureInput.value);
-    if (isNaN(depDate)) return;
-    const offsetEta = parseInt(document.getElementById('offset-eta').value) || -1;
-    const offsetGateOpen = parseInt(document.getElementById('offset-gate-open').value) || -5;
-    const offsetGateCut = parseInt(document.getElementById('offset-gate-cut').value) || -2;
-    const offsetSbCut = parseInt(document.getElementById('offset-sb-cut').value) || -2;
-    const offsetSiCut = parseInt(document.getElementById('offset-si-cut').value) || -3;
-    const formatDate = (date) => date.toISOString().split('T')[0];
-    const eta = new Date(depDate);
-    eta.setDate(eta.getDate() + offsetEta);
-    row.querySelector('.stuffing-eta').value = formatDate(eta);
-    const gateOpen = new Date(depDate);
-    gateOpen.setDate(gateOpen.getDate() + offsetGateOpen);
-    row.querySelector('.stuffing-gate-open').value = formatDate(gateOpen);
-    const gateCut = new Date(depDate);
-    gateCut.setDate(gateCut.getDate() + offsetGateCut);
-    row.querySelector('.stuffing-gate-cut').value = formatDate(gateCut);
-    const sbCut = new Date(depDate);
-    sbCut.setDate(sbCut.getDate() + offsetSbCut);
-    row.querySelector('.stuffing-sb-cut').value = formatDate(sbCut);
-    const siCut = new Date(depDate);
-    siCut.setDate(siCut.getDate() + offsetSiCut);
-    row.querySelector('.stuffing-si-cut').value = formatDate(siCut);
+    if (!row || !departureInput.value) return;
+
+    // Treat YYYY-MM-DD as a local calendar date so the displayed day never shifts by timezone.
+    const parts = departureInput.value.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(Number.isNaN)) return;
+    const depDate = new Date(parts[0], parts[1] - 1, parts[2]);
+    if (Number.isNaN(depDate.getTime())) return;
+
+    const readOffset = (id, fallback) => {
+        const el = document.getElementById(id);
+        if (!el || el.value === '') return fallback;
+        const n = Number(el.value);
+        return Number.isFinite(n) ? n : fallback;
+    };
+
+    const offsetEta = readOffset('offset-eta', -1);
+    const offsetGateOpen = readOffset('offset-gate-open', -5);
+    const offsetGateCut = readOffset('offset-gate-cut', -2);
+    const offsetSbCut = readOffset('offset-sb-cut', -2);
+    const offsetSiCut = readOffset('offset-si-cut', -3);
+
+    const formatDate = (date) => {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    };
+
+    const setOffsetDate = (selector, offset) => {
+        const target = row.querySelector(selector);
+        if (!target) return;
+        const date = new Date(depDate);
+        date.setDate(date.getDate() + offset);
+        target.value = formatDate(date);
+    };
+
+    setOffsetDate('.stuffing-eta', offsetEta);
+    setOffsetDate('.stuffing-gate-open', offsetGateOpen);
+    setOffsetDate('.stuffing-gate-cut', offsetGateCut);
+    setOffsetDate('.stuffing-sb-cut', offsetSbCut);
+    setOffsetDate('.stuffing-si-cut', offsetSiCut);
 }
 
 function legacy_initStuffingPlanning() {
@@ -14746,25 +14928,28 @@ function createStuffingRow(index, data) {
             <input type="date" class="stuffing-si-cut" value="${data?.siCut || ''}" readonly style="width:100%;padding:4px;border:1px solid var(--border);border-radius:4px;text-align:center;background:#f1f5f9;" />
         </td>
         <td style="padding:8px 14px;text-align:center;">
-            <button class="btn btn-sm btn-clear" onclick="removeStuffingRow(this)" style="padding:2px 8px;">×</button>
+            <button class="btn btn-sm btn-clear" onclick="event.stopPropagation(); removeStuffingRow(this)" style="padding:2px 8px;">×</button>
         </td>
     `;
     return row;
 }
 
 function saveStuffingData() {
-    const rows = document.querySelectorAll('#stuffing-table-body tr');
-    db.stuffing = [];
-    rows.forEach((row, i) => {
-        const vessel = row.querySelector('.stuffing-vessel').value;
-        const departure = row.querySelector('.stuffing-departure').value;
-        const eta = row.querySelector('.stuffing-eta').value;
-        const gateOpen = row.querySelector('.stuffing-gate-open').value;
-        const gateCut = row.querySelector('.stuffing-gate-cut').value;
-        const sbCut = row.querySelector('.stuffing-sb-cut').value;
-        const siCut = row.querySelector('.stuffing-si-cut').value;
-        db.stuffing.push({ vessel, departure, eta, gateOpen, gateCut, sbCut, siCut });
-    });
+    const tbody = document.getElementById('stuffing-table-body');
+    if (!tbody) return;
+    const rows = tbody.querySelectorAll('tr');
+    if (!db || typeof db !== 'object') return;
+    if (!Array.isArray(db.stuffing)) db.stuffing = [];
+
+    db.stuffing = Array.from(rows).map(row => ({
+        vessel: row.querySelector('.stuffing-vessel')?.value || '',
+        departure: row.querySelector('.stuffing-departure')?.value || '',
+        eta: row.querySelector('.stuffing-eta')?.value || '',
+        gateOpen: row.querySelector('.stuffing-gate-open')?.value || '',
+        gateCut: row.querySelector('.stuffing-gate-cut')?.value || '',
+        sbCut: row.querySelector('.stuffing-sb-cut')?.value || '',
+        siCut: row.querySelector('.stuffing-si-cut')?.value || ''
+    }));
     saveDB();
 }
 
@@ -14774,20 +14959,21 @@ function onStuffingInput() {
 
 function onOffsetChange() {
     document.querySelectorAll('#stuffing-table-body .stuffing-departure').forEach(depInput => {
-        if (depInput.value) {
-            updateStuffingDates(depInput);
-        }
+        if (depInput.value) updateStuffingDates(depInput);
     });
     saveStuffingData();
 }
 
 function removeStuffingRow(btn) {
-    const row = btn.closest('tr');
+    const row = btn && btn.closest('tr');
     const tbody = document.getElementById('stuffing-table-body');
+    if (!row || !tbody) return;
+
     if (tbody.children.length > 1) {
         row.remove();
         tbody.querySelectorAll('tr').forEach((tr, i) => {
-            tr.querySelector('td:first-child').textContent = i + 1;
+            const numberCell = tr.querySelector('td:first-child');
+            if (numberCell) numberCell.textContent = i + 1;
         });
         saveStuffingData();
     } else {
@@ -14797,23 +14983,44 @@ function removeStuffingRow(btn) {
 
 function initStuffingPlanning() {
     const tbody = document.getElementById('stuffing-table-body');
+    const panel = document.getElementById('calc-stuffing');
+    if (!tbody || !panel) return;
+
+    // Keep Stuffing Planning open while initializing/reinitializing its rows.
+    panel.classList.add('active');
     tbody.innerHTML = '';
-    const data = db.stuffing || [];
+    const data = Array.isArray(db.stuffing) ? db.stuffing : [];
+
     if (data.length === 0) {
-        addStuffingRow();
+        const row = createStuffingRow(0, {});
+        tbody.appendChild(row);
     } else {
         data.forEach((item, idx) => {
-            const row = createStuffingRow(idx, item);
-            tbody.appendChild(row);
+            tbody.appendChild(createStuffingRow(idx, item || {}));
         });
     }
-    document.querySelectorAll('#stuffing-table-body .stuffing-departure').forEach(depInput => {
-        if (depInput.value) {
-            updateStuffingDates(depInput);
-        }
+
+    tbody.querySelectorAll('.stuffing-departure').forEach(depInput => {
+        if (depInput.value) updateStuffingDates(depInput);
     });
 }
 
+// Explicit global bindings for Stuffing Planning action buttons.
+// Kept module-scoped in purpose: no other ERP function is modified.
+window.createStuffingRow = createStuffingRow;
+window.addStuffingRow = addStuffingRow;
+window.removeStuffingRow = removeStuffingRow;
+window.clearStuffingRows = clearStuffingRows;
+window.updateStuffingDates = updateStuffingDates;
+window.onStuffingInput = onStuffingInput;
+window.onOffsetChange = onOffsetChange;
+window.saveStuffingData = saveStuffingData;
+window.initStuffingPlanning = initStuffingPlanning;
+
+
+/* ===== END JS/09-measurement-tools.js ===== */
+
+/* ===== BEGIN JS/10-us-trucking.js ===== */
 // ==================== USA TRUCKING MODULE ====================
 if (!db.truckingShipments) db.truckingShipments = [];
 
@@ -15257,6 +15464,10 @@ function downloadTruckingPDF(idx = null) {
     }, 500);
 }
 
+
+/* ===== END JS/10-us-trucking.js ===== */
+
+/* ===== BEGIN JS/11-oog-ot.js ===== */
 // ==================== OOG & OT (OVER DIMENSION / OVERWEIGHT) ====================
 const oogContainerData = [
     { type: "20 GP", internal: { l: 5.898, w: 2.352, h: 2.393 }, door: { w: 2.340, h: 2.280 }, maxWeight: 28200 },
@@ -15524,6 +15735,10 @@ function saveOOGContainers() {
     autoBackup();
 }
 
+
+/* ===== END JS/11-oog-ot.js ===== */
+
+/* ===== BEGIN JS/12-detention-demurrage.js ===== */
 // ==================== DETENTION & DEMURRAGE (5 SLAB PROGRESSIVE) ====================
 if (!db.detentionLots) db.detentionLots = [];
 if (!db.detentionRecords) db.detentionRecords = [];
@@ -15981,6 +16196,10 @@ function downloadDetentionPDF(idx = null) {
     }, 500);
 }
 
+
+/* ===== END JS/12-detention-demurrage.js ===== */
+
+/* ===== BEGIN JS/13-freight-calculation.js ===== */
 // ==================== MULTI-CARRIER FREIGHT CALCULATOR ====================
 if (!db.freightCalculations) db.freightCalculations = [];
 
@@ -16521,6 +16740,10 @@ function populateFreightDropdowns() {
             visiblePod.map(p => `<option value="${p}">${p}</option>`).join('');
     }
 }
+
+/* ===== END JS/13-freight-calculation.js ===== */
+
+/* ===== BEGIN JS/14-compact-email.js ===== */
 // ==================== COMPACT EMAIL BUILDER ====================
 function legacy_buildCompactEmailHTML(data, mode) {
     const modeLabel = { sea: 'SEA FREIGHT', air: 'AIR FREIGHT', lcl: 'LCL FREIGHT' }[mode];
@@ -16760,7 +16983,7 @@ function legacy_buildCompactEmailHTML(data, mode) {
     if (mode === 'air') {
         standardRemarks = [
             "1. Rate Subject To Booking Acceptance",
-            "2. 100% Of Total Freight Charges applicable if Shipments Cancelled Within 48 Hours Before The Delivery Cut-Off Time",
+            "2. 100% Of Total Freight Charges applicable if Shipments Cancelled Within 48HR Before Delivery Cut-Off Time",
             "3. GST At Actual",
             "4. Rest other charges if any at actual as per receipt.",
             "5. Above rates are valid for 3 days",
@@ -17009,6 +17232,10 @@ function buildDsrPDFDefinition(s, mode) {
     };
 }
 
+
+/* ===== END JS/14-compact-email.js ===== */
+
+/* ===== BEGIN JS/15-bl-dsr-support.js ===== */
 // =============================================================
 // 2. downloadDsrPDF - Complete Debug version
 // =============================================================
@@ -17878,6 +18105,10 @@ function downloadBLPDF(idx) {
     }, 400);
 }
 
+
+/* ===== END JS/15-bl-dsr-support.js ===== */
+
+/* ===== BEGIN JS/16-dsr-custom-export.js ===== */
 // ==================== DSR CUSTOM COLUMNS ====================
 let dsrColumns = (db.dsrColumns || ['code','shipper','pol','pod','liner','cargoStatus','docsStatus']).filter(c => c !== 'actions');
 
@@ -18798,6 +19029,10 @@ function bulkImportCarrierCharges(input){
 }
 function normSafe(v){return String(v??'').trim().replace(/\s+/g,' ').toUpperCase();}
 
+
+/* ===== END JS/16-dsr-custom-export.js ===== */
+
+/* ===== BEGIN JS/17-backup-sync.js ===== */
 // ===== 1. selectBackupFolder – select folder, then choose auto-backup format =====
 async function selectBackupFolder() {
     try {
@@ -19102,66 +19337,33 @@ function getFolderHandle() {
 
 function populateRateRequestDropdowns() {
     const master = getMasterDropdownLists();
-    const pols = master.pol.filter(p => !(db.hiddenItems?.pol || []).includes(p)).sort();
-    const pods = master.pod.filter(p => !(db.hiddenItems?.pod || []).includes(p)).sort();
-    const containers = master.containers.filter(c => !(db.hiddenItems?.containers || []).includes(c)).sort();
-
-    // RATE REQUEST INVENTORY:
-    // Always provide the requested combined default plus the two standard
-    // container choices, while preserving all other existing master options.
-    const defaultInv = '20 GP & 40 HC';
-    const requiredInventoryOptions = ['20 GP & 40 HC', '20 GP', '40 HC'];
-    const inventoryOptions = requiredInventoryOptions.concat(
-        containers.filter(c => !requiredInventoryOptions.includes(c))
-    );
-
-    const formatSuffixes = ['sea1', 'sea2', 'air'];
-    formatSuffixes.forEach(suffix => {
-        // Populate POL datalist
-        const polList = document.getElementById(`rr-pol-list-${suffix}`);
-        if (polList) polList.innerHTML = pols.map(p => `<option value="${p}">`).join('');
-
-        // Populate POD datalist
-        const podList = document.getElementById(`rr-pod-list-${suffix}`);
-        if (podList) podList.innerHTML = pods.map(p => `<option value="${p}">`).join('');
-
-        // Populate INVENTORY dropdown (only for SEA formats)
-        const invEl = document.getElementById(`rr-inventory-${suffix}`);
-        if (invEl && suffix !== 'air') {
-            invEl.innerHTML = inventoryOptions
-                .map(c => `<option value="${c}">${c}</option>`)
-                .join('');
-
-            // Do not rely on the HTML selected attribute. Explicitly set the
-            // actual SELECT value after every rebuild.
-            if (Array.from(invEl.options).some(o => o.value === defaultInv)) {
-                invEl.value = defaultInv;
-            } else {
-                // Safety fallback: the required default must always exist.
-                const opt = document.createElement('option');
-                opt.value = defaultInv;
-                opt.textContent = defaultInv;
-                invEl.insertBefore(opt, invEl.firstChild);
-                invEl.value = defaultInv;
-            }
-        }
+    const hidden = db.hiddenItems || {};
+    const pols = [...new Map((master.pol || []).filter(p => !(hidden.pol || []).includes(p)).map(v => [String(v).trim().toUpperCase(), v])).values()].sort();
+    const pods = [...new Map((master.pod || []).filter(p => !(hidden.pod || []).includes(p)).map(v => [String(v).trim().toUpperCase(), v])).values()].sort();
+    const containers = (master.containers || []).filter(c => !(hidden.containers || []).includes(c)).sort();
+    const commodityOptions = ['NON HAZ', 'HAZ'];
+    const inventoryOptions = [...new Set(['20 GP & 40 HC', '20 GP', '40 HC', ...containers])];
+    const freeTimeOptions = ['14 Days', '21 Days'];
+    const suffixes = ['sea1', 'sea2', 'air'];
+    const setList = (id, values) => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = [...new Set(values)].map(v => `<option value="${escapeHtml(v)}">`).join('');
+    };
+    suffixes.forEach(suffix => {
+        setList(`rr-pol-list-${suffix}`, pols);
+        setList(`rr-pod-list-${suffix}`, pods);
+        setList(`rr-commodity-list-${suffix}`, commodityOptions);
+        setList(`rr-inventory-list-${suffix}`, inventoryOptions);
+        setList(`rr-freeTime-list-${suffix}`, freeTimeOptions);
     });
-
-    // Set default values
     const company = db.companyName || 'GATEWAY EXIM';
-    const fwd1 = document.getElementById('rr-forwarder-sea1');
-    const fwd2 = document.getElementById('rr-forwarder-sea2');
-    if (fwd1) fwd1.value = company;
-    if (fwd2) fwd2.value = company;
-
-    const validity1 = document.getElementById('rr-validity-sea1');
-    const validity2 = document.getElementById('rr-validity-sea2');
+    ['rr-forwarder-sea1','rr-forwarder-sea2'].forEach(id => { const el=document.getElementById(id); if(el) el.value=company; });
     const endOfMonth = getEndOfMonthDate();
-    if (validity1) validity1.value = endOfMonth;
-    if (validity2) validity2.value = endOfMonth;
-
-    const clearance = document.getElementById('rr-clearance-air');
-    if (clearance) clearance.value = 'INQUIRY';
+    ['rr-validity-sea1','rr-validity-sea2'].forEach(id => { const el=document.getElementById(id); if(el) el.value=endOfMonth; });
+    ['rr-commodity-sea1','rr-commodity-sea2','rr-commodity-air'].forEach(id => { const el=document.getElementById(id); if(el && !el.value) el.value=''; });
+    ['rr-inventory-sea1','rr-inventory-sea2'].forEach(id => { const el=document.getElementById(id); if(el && !el.value) el.value='20 GP & 40 HC'; });
+    ['rr-freeTime-sea1','rr-freeTime-sea2'].forEach(id => { const el=document.getElementById(id); if(el && !el.value) el.value='14 Days'; });
+    const clearance=document.getElementById('rr-clearance-air'); if(clearance && !clearance.value) clearance.value='INQUIRY';
 }
 
 // Switch between formats
@@ -19208,6 +19410,7 @@ function getRateRequestData(format) {
         data.weight = getVal('rr-weight-sea1');
         data.term = getSel('rr-term-sea1');
         data.validity = getVal('rr-validity-sea1');
+        if (data.validity) { const el=document.getElementById('rr-validity-sea1'); setRateRequestMonthEnd(el); data.validity=el?.value||data.validity; }
         data.freeTime = getSel('rr-freeTime-sea1');
 		data.remarks = getVal('rr-remarks-sea1');
     } else if (format === 'seaWithoutShipper') {
@@ -19219,6 +19422,7 @@ function getRateRequestData(format) {
         data.weight = getVal('rr-weight-sea2');
         data.term = getSel('rr-term-sea2');
         data.validity = getVal('rr-validity-sea2');
+        if (data.validity) { const el=document.getElementById('rr-validity-sea2'); setRateRequestMonthEnd(el); data.validity=el?.value||data.validity; }
         data.freeTime = getSel('rr-freeTime-sea2');
 		data.remarks = getVal('rr-remarks-sea2');
     } else if (format === 'air') {
@@ -19226,8 +19430,12 @@ function getRateRequestData(format) {
         data.pol = getVal('rr-pol-air');
         data.pod = getVal('rr-pod-air');
         data.clearance = getVal('rr-clearance-air');
-        data.commodity = getSel('rr-commodity-air');
+        data.commodity = getVal('rr-commodity-air');
+        data.inventory = getVal('rr-inventory-air');
         data.weight = getVal('rr-weight-air');
+        data.validity = getVal('rr-validity-air');
+        if (data.validity) { const el=document.getElementById('rr-validity-air'); setRateRequestMonthEnd(el); data.validity=el?.value||data.validity; }
+        data.freeTime = getVal('rr-freeTime-air');
         data.packaging = getVal('rr-packaging-air');
         data.pallet = getSel('rr-pallet-air');
         data.dimension = getVal('rr-dimension-air');
@@ -19235,6 +19443,17 @@ function getRateRequestData(format) {
 		data.remarks = getVal('rr-remarks-air');
     }
     return data;
+}
+
+function dedupeRateRequestRows(rows) {
+    const seen = new Set();
+    return (rows || []).filter(row => {
+        const label = String(row?.[0] || '').trim().toUpperCase();
+        if (!label) return true;
+        if (seen.has(label)) return false;
+        seen.add(label);
+        return true;
+    });
 }
 
 function buildRateRequestEmail(data) {
@@ -19325,7 +19544,8 @@ function clearRateRequestForm(format) {
         ],
         'air': [
             'rr-shipper-air', 'rr-pol-air', 'rr-pod-air', 'rr-clearance-air',
-            'rr-commodity-air', 'rr-weight-air', 'rr-packaging-air',
+            'rr-commodity-air', 'rr-inventory-air', 'rr-weight-air',
+            'rr-validity-air', 'rr-freeTime-air', 'rr-packaging-air',
             'rr-pallet-air', 'rr-dimension-air', 'rr-temp-air',
             'rr-remarks-air'    // 🆕 added
         ]
@@ -19365,6 +19585,7 @@ function clearRateRequestForm(format) {
     }
     if (format === 'air') {
         document.getElementById('rr-clearance-air').value = 'INQUIRY';
+        document.getElementById('rr-commodity-air').value = '';
         document.getElementById('rr-pallet-air').value = 'PALLETIZED';
         document.getElementById('rr-temp-air').value = 'NORMAL';
         // remarks already cleared
@@ -19376,6 +19597,20 @@ function getEndOfMonthDate() {
     const now = new Date();
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     return lastDay.toISOString().split('T')[0];
+}
+
+// Rate Request VALIDITY is calendar-based but MUST always resolve to the
+// month-end date of the month selected by the user.
+function setRateRequestMonthEnd(el) {
+    if (!el) return;
+    const value = String(el.value || '').trim();
+    if (!value) return;
+    const parts = value.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(n => !Number.isFinite(n))) return;
+    const year = parts[0], month = parts[1];
+    if (!year || month < 1 || month > 12) return;
+    const lastDay = new Date(year, month, 0).getDate();
+    el.value = `${year}-${String(month).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 }
 
 
@@ -19394,10 +19629,8 @@ function buildRateRequestPreviewHTML(data) {
             ['FORWARDER', data.forwarder || company],
             ['POL', data.pol || '-'],
             ['POD', data.pod || '-'],
-            ['INVENTORY', data.inventory || '-'],
             ['COMMODITY', data.commodity || '-'],
             ['GROSS WEIGHT', data.weight ? data.weight + ' Kgs' : '-'],
-            ['VALIDITY', data.validity || '-'],
             ['FREIGHT TERM', data.term || '-'],
             ['DEST. FREE TIME', data.freeTime || '-']
         ]);
@@ -19427,6 +19660,8 @@ function buildRateRequestPreviewHTML(data) {
             ['TEMP CARGO', data.temp || '-']
         ]);
     }
+
+    rows = dedupeRateRequestRows(rows);
 
     let rowsHtml = rows.map(([label, value]) => `
         <tr>
@@ -19499,7 +19734,6 @@ function buildRateRequestCompactEmailHTML(data) {
             ['FORWARDER', data.forwarder || company],
 			['POL', data.pol || '-'],         
             ['POD', data.pod || '-'],
-            ['INVENTORY', data.inventory || '-'],
             ['COMMODITY', data.commodity || '-'],
             ['GROSS WEIGHT', data.weight ? data.weight + ' Kgs' : '-'],
             ['VALIDITY', data.validity || '-'],
@@ -19532,6 +19766,8 @@ function buildRateRequestCompactEmailHTML(data) {
             ['TEMP CARGO', data.temp || '-']
         ]);
     }
+
+    rows = dedupeRateRequestRows(rows);
 
     let rowsHtml = rows.map(([label, value]) => `
         <tr>
@@ -19984,6 +20220,10 @@ function clearRRDraftsFilters() {
 }
 
 
+
+/* ===== END JS/17-backup-sync.js ===== */
+
+/* ===== BEGIN JS/18-quote-drafts-sync.js ===== */
 // ==================== RATE QUOTE FILTER HELPERS ====================
 function normalizeDateOnly(value) {
     if (!value) return null;
@@ -21344,6 +21584,10 @@ function refreshCurrentTab() {
 
 
 
+
+/* ===== END JS/18-quote-drafts-sync.js ===== */
+
+/* ===== BEGIN JS/19-rate-sheet-actions.js ===== */
 // ==================== RATE SHEET BULK ACTIONS ====================
 
 function toggleAllRatesheetCheckboxes() {
@@ -22109,7 +22353,14 @@ const buy = parseRateInput(
         const gridData = collectMultiCarrierGridData(mode);
         if (mode === 'sea' && getSeaComparisonMode() === 'container') {
             const baseCarrier = gridData.names[0] || '';
-            data.carrierRates = [0,1,2].map(idx => ({ carrier: baseCarrier, charges: gridData.arrays[idx] || {} })).filter(x => x.carrier);
+            const comparisonContainers = getSeaComparisonContainers();
+            data.carrierRates = [0,1,2]
+                .map(idx => ({
+                    carrier: baseCarrier,
+                    container: comparisonContainers[idx] || '',
+                    charges: gridData.arrays[idx] || {}
+                }))
+                .filter(x => x.carrier && x.container);
         } else {
             data.carrierRates = gridData.names.map((name, idx) => ({ carrier: name || '', charges: gridData.arrays[idx] || {} })).filter(x => x.carrier);
         }
@@ -22168,7 +22419,7 @@ const buy = parseRateInput(
             set('rr-shipper', rec.shipper);
             set('rr-forwarder-sea1', rec.forwarder || db.companyName || 'GATEWAY EXIM');
             set('rr-pol-sea1', rec.pol); set('rr-pod-sea1', rec.pod);
-            set('rr-commodity-sea1', rec.commodity || 'NON HAZ');
+            set('rr-commodity-sea1', rec.commodity || '');
             set('rr-inventory-sea1', rec.inventory || '');
             set('rr-weight-sea1', rec.weight || ''); set('rr-term-sea1', rec.term || 'PREPAID');
             set('rr-validity-sea1', rec.validity || ''); set('rr-freeTime-sea1', rec.freeTime || '14 Days');
@@ -22176,14 +22427,15 @@ const buy = parseRateInput(
         } else if (format === 'seaWithoutShipper') {
             set('rr-forwarder-sea2', rec.forwarder || db.companyName || 'GATEWAY EXIM');
             set('rr-pol-sea2', rec.pol); set('rr-pod-sea2', rec.pod);
-            set('rr-commodity-sea2', rec.commodity || 'NON HAZ');
+            set('rr-commodity-sea2', rec.commodity || '');
             set('rr-inventory-sea2', rec.inventory || '');
             set('rr-weight-sea2', rec.weight || ''); set('rr-term-sea2', rec.term || 'PREPAID');
             set('rr-validity-sea2', rec.validity || ''); set('rr-freeTime-sea2', rec.freeTime || '14 Days');
             set('rr-remarks-sea2', rec.remarks || '');
         } else {
             set('rr-shipper-air', rec.shipper); set('rr-pol-air', rec.pol); set('rr-pod-air', rec.pod);
-            set('rr-clearance-air', rec.clearance || 'INQUIRY'); set('rr-commodity-air', rec.commodity || 'NON HAZ');
+            set('rr-clearance-air', rec.clearance || 'INQUIRY'); set('rr-commodity-air', rec.commodity || '');
+            set('rr-inventory-air', rec.inventory || '20 GP & 40 HC'); set('rr-validity-air', rec.validity || getEndOfMonthDate()); set('rr-freeTime-air', rec.freeTime || '14 Days');
             set('rr-weight-air', rec.weight || ''); set('rr-packaging-air', rec.packaging || '');
             set('rr-pallet-air', rec.pallet || 'PALLETIZED'); set('rr-dimension-air', rec.dimension || '');
             set('rr-temp-air', rec.temp || 'NORMAL'); set('rr-remarks-air', rec.remarks || '');
@@ -22459,13 +22711,17 @@ function mcBuildCustomerShipmentHTML(data, mode, carriers, compact=false) {
         ? new Date(data.validityDate).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
         : '—';
     const transitDisplay = data.transit ? `${esc(data.transit)} Days` : '—';
-    const carrierNames = (mode==='sea' && data.comparisonMode==='container' && Array.isArray(data.comparisonContainers))
-        ? data.comparisonContainers.filter(Boolean).join(' / ')
-        : ((Array.isArray(carriers) && carriers.length)
-            ? carriers.map(c => c.carrier).filter(Boolean).join(' / ')
-            : (data.carrier || '—'));
+    const isSeaContainerMode = mode === 'sea' && data.comparisonMode === 'container' && Array.isArray(data.comparisonContainers);
+    const selectedContainers = isSeaContainerMode ? data.comparisonContainers.filter(Boolean).slice(0,3) : [];
+    const carrierNames = isSeaContainerMode && compact
+        ? (data.carrier || (Array.isArray(data.carrierRates) ? data.carrierRates[0]?.carrier : '') || '—')
+        : (isSeaContainerMode
+            ? data.comparisonContainers.filter(Boolean).join(' / ')
+            : ((Array.isArray(carriers) && carriers.length)
+                ? carriers.map(c => c.carrier).filter(Boolean).join(' / ')
+                : (data.carrier || '—')));
     const containerOrVolume = mode === 'sea'
-        ? (data.container || '—')
+        ? ((isSeaContainerMode && compact) ? (selectedContainers.join(' / ') || '—') : (data.container || '—'))
         : (data.volume !== undefined && data.volume !== '' ? data.volume : '—');
 
     // OLD Customer & Shipment Details visual template is intentionally preserved.
@@ -22670,25 +22926,53 @@ function mcChargeListForCategories(data, categories) {
 }
 
 function mcOutputCarriers(data, mode) {
-    if (Array.isArray(data.carrierRates) && data.carrierRates.length) {
-        if (mode === 'sea' && data.comparisonMode === 'container') {
-            const containers = Array.isArray(data.comparisonContainers) ? data.comparisonContainers : [];
-            const list = data.carrierRates.slice(0,3).map((x,i)=>({
-                carrier: containers[i] || '',
-                charges: x?.charges || {}
-            })).filter(x => x.carrier);
-            return list;
-        }
-        return data.carrierRates.slice(0,3)
-            .filter(x=>x && x.carrier)
-            .map(x=>({carrier:x.carrier,charges:x.charges||{}}));
+    // Canonical WhatsApp/Email carrier records. In SEA container-comparison
+    // mode, each slot is an OPTION tied to a specific container while the
+    // actual carrier remains the same base carrier.
+    const containerMode = mode === 'sea' && String(data?.comparisonMode || '').toLowerCase() === 'container';
+    const containers = containerMode && Array.isArray(data?.comparisonContainers)
+        ? data.comparisonContainers.slice(0,3)
+        : [];
+
+    if (Array.isArray(data?.carrierRates) && data.carrierRates.length) {
+        const out = data.carrierRates.slice(0,3)
+            .map((x, idx) => ({
+                carrier: String(x?.carrier || x?.name || '').trim(),
+                charges: x?.charges || {},
+                container: containerMode
+                    ? String(x?.container || containers[idx] || '').trim()
+                    : String(data?.container || '').trim(),
+                optionIndex: idx
+            }))
+            .filter(x => x.carrier && (!containerMode || x.container));
+        if (out.length) return out;
     }
-    if (mode === 'sea' && data.comparisonMode === 'container') {
-        const containers = Array.isArray(data.comparisonContainers) ? data.comparisonContainers : [];
-        const charges = data.charges || {};
-        return containers.slice(0,3).filter(Boolean).map(c => ({carrier:c,charges}));
+    if (Array.isArray(data?.carriers) && data.carriers.length) {
+        const charges = data?.charges || {};
+        return data.carriers.slice(0,3).map((c, idx) => ({
+            carrier: String(c || '').trim(), charges,
+            container: containerMode ? String(containers[idx] || '').trim() : String(data?.container || '').trim(),
+            optionIndex: idx
+        })).filter(x => x.carrier && (!containerMode || x.container));
     }
-    if (data.carrier) return [{carrier:data.carrier,charges:data.charges||{}}];
+    if (Array.isArray(data?.selectedCarriers) && data.selectedCarriers.length) {
+        const charges = data?.charges || {};
+        return data.selectedCarriers.slice(0,3).map((c, idx) => ({
+            carrier: String(c || '').trim(), charges,
+            container: containerMode ? String(containers[idx] || '').trim() : String(data?.container || '').trim(),
+            optionIndex: idx
+        })).filter(x => x.carrier && (!containerMode || x.container));
+    }
+    if (data?.carrier) {
+        const firstContainer = containerMode ? String(containers[0] || '').trim() : String(data?.container || '').trim();
+        if (containerMode && !firstContainer) return [];
+        return [{
+            carrier:String(data.carrier).trim(),
+            charges:data?.charges || {},
+            container: firstContainer,
+            optionIndex: 0
+        }];
+    }
     return [];
 }
 
@@ -22812,7 +23096,8 @@ function mcBuildSectionHTML(data, mode, section, carriers, srStart, compact=fals
     );
     if(!charges.length) return {html:'',nextSr:srStart,totals:carriers.map(()=>0)};
 
-    const multi = carriers.length > 1;
+    const isSeaContainerMode = mode === 'sea' && String(data?.comparisonMode || '').trim().toLowerCase() === 'container';
+    const multi = carriers.length > 1 || isSeaContainerMode;
     const airMulti = multi && mode === 'air';
     const baseFont = '15px';
     const tableRowFont = compact ? '15px' : '12px'; // Compact button only: match approved Preview charge-row size
@@ -22896,7 +23181,11 @@ function mcBuildSectionHTML(data, mode, section, carriers, srStart, compact=fals
         });
     } else if(multi){
         carriers.forEach(c => {
-            html += `<th style="${thBase}width:${carrierWidth};white-space:nowrap;">${mcEsc(c.carrier)}</th>`;
+            const displayHeading = isSeaContainerMode
+                ? String(c?.container || '').trim()
+                : String(c?.carrier || '').trim();
+            if(!displayHeading) return;
+            html += `<th style="${thBase}width:${carrierWidth};white-space:nowrap;">${mcEsc(displayHeading)}</th>`;
         });
     } else {
         html += `<th style="${thBase}text-align:right;width:${amountWidth};white-space:nowrap;">Amount</th>`+
@@ -23030,7 +23319,7 @@ function mcCalculateGrandTotals(data, mode, carriers) {
 function mcBuildGrandTotalHTML(carriers, totals, compact=false, mode="sea") {
     if(!Array.isArray(carriers) || !carriers.length) return '';
 
-    const baseFont = compact ? '16px' : '12px'; // Compact Grand Total = Subtotal font size
+    const baseFont = compact ? '16px' : '12px'; // Compact Grand Total font size
     const tdPadding = '4px 8px';
     const summaryLineHeight = '1.35';
     const summaryRowHeight = '29px';
@@ -23112,7 +23401,7 @@ function buildMultiCarrierChargeHTML(data,mode,compact=false){
 function mcStandardRemarks(mode, baseFont, headingSize, tdPadding, tableWidth='100%', specialRemark='') {
     const standard = mode==='air' ? [
         '1. Rate Subject To Booking Acceptance',
-        '2. 100% Of Total Freight Charges applicable if Shipments Cancelled Within 48 Hours Before The Delivery Cut-Off Time',
+        '2. 100% Of Total Freight Charges applicable if Shipments Cancelled Within 48HR Before Delivery Cut-Off Time',
         '3. GST At Actual',
         '4. Rest other charges if any at actual as per receipt.',
         '5. Above rates are valid for 3 days',
@@ -23197,24 +23486,6 @@ function mcStandardRemarks(mode, baseFont, headingSize, tdPadding, tableWidth='1
 }; })();
 
 /* SHAHID_FINAL_SIZE_CONSTANTS */
-/* SHAHID_FINAL_SIZE_CONSTANTS */
-const SHAHID_SIZE = Object.freeze({
-  rateRequestTable: '15cm',
-  rateRequestOuter: '17cm',
-  quote: '22cm',
-  previewQuote: '24cm',
-  pdfUsableWidth: '220mm',
-  pdfMargin: '5mm',
-  sectionGap: '10px'
-});
-function shahidQuoteTableStyle(extra=''){
-  return `width:100%;min-width:0;max-width:${SHAHID_SIZE.quote};box-sizing:border-box;margin-left:auto;margin-right:auto;${extra}`;
-}
-function shahidRateRequestTableStyle(extra=''){
-  return `width:${SHAHID_SIZE.rateRequestTable};min-width:${SHAHID_SIZE.rateRequestTable};max-width:${SHAHID_SIZE.rateRequestTable};box-sizing:border-box;margin-left:auto;margin-right:auto;${extra}`;
-}
-
-
 /* V20 — LEGACY SPECIAL REMARK */
 // Preview Special Remark: red header, pale-red body, uppercase content, separate table.
 function buildPreviewHTML(data,mode,maxWidth='100%',compact=false){
@@ -23753,6 +24024,10 @@ window.upsertCarrierCharges=upsertCarrierCharges;
     };
 })();
 
+
+/* ===== END JS/19-rate-sheet-actions.js ===== */
+
+/* ===== BEGIN JS/20-global-sync-calculators.js ===== */
 // ==================== GLOBAL CLEAR -> REFRESH SYNC ====================
 // After any Clear/Reset action, refresh the affected UI so stale rows, totals,
 // badges and lists are not left visible. This intentionally does not alter
@@ -28239,3 +28514,5 @@ function renderAirWeightRecordsEmbedded() {
     else render();
 })();
 
+
+/* ===== END JS/20-global-sync-calculators.js ===== */
