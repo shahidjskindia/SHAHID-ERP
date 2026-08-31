@@ -212,8 +212,14 @@ const SHAHID_SIZE = Object.freeze({
             }
 
             if(oldDeleted && !newDeleted){
-                // Keep a live incoming record when the current copy is deleted.
-                map.set(key, r);
+                // A newer/equal local tombstone must not be resurrected by an
+                // older backup/import copy. A genuinely newer incoming edit
+                // may revive the record.
+                if(oldTime >= newTime){
+                    map.set(key, old);
+                } else {
+                    map.set(key, r);
+                }
                 return;
             }
 
@@ -362,6 +368,36 @@ const SHAHID_SIZE = Object.freeze({
                 return `${prefix}:primitive:${index}`;
             }
 
+            // Local Charges use business keys first, even when an old record
+            // contains a generated/different id. This prevents duplicate
+            // records during Import → Merge.
+            const normKey = v => String(v ?? '').trim().replace(/\s+/g, ' ').toUpperCase();
+            const normMode = v => {
+                const x = normKey(v);
+                return x === 'SEALCL' ? 'SEA' : x;
+            };
+            const normContainer = v => {
+                const x = normKey(v);
+                if (!x || x === 'ALL' || x === 'ALL / GENERAL') return 'ALL';
+                if (/20\s*(GP|DV|DC)?/.test(x)) return '20 GP';
+                if (/40\s*(HC|HQ)/.test(x)) return '40 HC';
+                if (/40\s*(GP|DV|DC)?/.test(x)) return '40 GP';
+                return x;
+            };
+            if(['defaultSeaCharges','defaultAirCharges','defaultLclCharges'].includes(prefix)){
+                const mode = prefix === 'defaultSeaCharges' ? 'SEA' : prefix === 'defaultAirCharges' ? 'AIR' : 'LCL';
+                const container = mode === 'SEA' ? normContainer(record.container || 'ALL') : 'ALL';
+                return `localDefault:${mode}|${normKey(record.pol)}|${normKey(record.commodity)}|${container}`;
+            }
+            if(['carrierChargesSeaLcl','carrierChargesAir'].includes(prefix)){
+                const carrierMode = normMode(record.mode || (prefix === 'carrierChargesAir' ? 'air' : 'sea'));
+                const container = carrierMode === 'AIR' ? 'ALL' : normContainer(record.container || 'ALL');
+                return `localCarrier:${carrierMode}|${normKey(record.carrier)}|${normKey(record.pol)}|${normKey(record.commodity)}|${container}`;
+            }
+            if(prefix === 'seaTHCRates'){
+                return `seaTHC:SEA|${normKey(record.carrier)}|${normKey(record.pol)}|${normKey(record.commodity)}|${normKey(record.currency || '')}`;
+            }
+
             const direct = idOf(record);
             if(direct) return `id:${direct}`;
 
@@ -456,35 +492,9 @@ const SHAHID_SIZE = Object.freeze({
     // same function explicitly so the manual SQLite importer and local
     // SQLite adapter use the exact same canonical merge implementation.
     window.shahidMasterMergeDatabase = shahidMasterMergeDatabase;
+    window.mergeDatabase = shahidMasterMergeDatabase;
 
-    function mergeDatabase(current, incoming){
-        if(!isObject(current) || !isObject(incoming)){
-            return current;
-        }
 
-        const result = Array.isArray(current) ? current.slice() : {...current};
-
-        Object.keys(incoming).forEach(key => {
-            if(!(key in result)){
-                result[key] = incoming[key];
-                return;
-            }
-
-            if(Array.isArray(result[key]) && Array.isArray(incoming[key])){
-                result[key] = mergeRecordArrays(result[key], incoming[key]);
-                return;
-            }
-
-            if(isObject(result[key]) && isObject(incoming[key]) &&
-               !Array.isArray(result[key]) && !Array.isArray(incoming[key])){
-                result[key] = mergeDatabase(result[key], incoming[key]);
-            }
-            // Scalar values remain with the current working database.
-            // Record-level timestamps are used inside identifiable arrays.
-        });
-
-        return result;
-    }
 
     async function importCompleteSQLite(){
         if(typeof window.shahidMasterMergeDatabase !== 'function'){
@@ -1754,6 +1764,9 @@ const defaultDB = JSON.parse(JSON.stringify(EMBEDDED_BACKUP));
 let plannerCurrentDate = new Date();
 let plannerSelectedDate = new Date();
 let plannerEditingNote = null;
+let plannerSummaryFromDate = '';
+let plannerSummaryToDate = '';
+let plannerSummaryRangeActive = false;
 let currentRateRequestFormat = 'seaWithShipper';
 let _previewRRData = null;
 
@@ -1780,6 +1793,130 @@ function isDateInRange(dateKey, start, end) {
     const s = new Date(start + 'T00:00:00');
     const e = new Date(end + 'T00:00:00');
     return d >= s && d <= e;
+}
+
+// ---------- Planner Date-Wise Summary ----------
+function plannerNormalizeDateKey(value) {
+    if (!value) return '';
+    const raw = String(value).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    const dmy = raw.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})$/);
+    if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? '' : formatDateKey(d);
+}
+
+function plannerDateKeysInRange(start, end) {
+    const keys = [];
+    if (!start || !end || start > end) return keys;
+    const d = new Date(start + 'T00:00:00');
+    const e = new Date(end + 'T00:00:00');
+    while (d <= e) {
+        keys.push(formatDateKey(d));
+        d.setDate(d.getDate() + 1);
+    }
+    return keys;
+}
+
+function getPlannerDateWiseCounts(start, end) {
+    const allNotes = Array.isArray(db.plannerNotes) ? db.plannerNotes : [];
+    const allTasks = Array.isArray(db.plannerTasks) ? db.plannerTasks : [];
+    const allShipments = Array.isArray(db.shipments) ? db.shipments : [];
+    const allRates = Array.isArray(db.rateSheet) ? db.rateSheet : [];
+    const keys = plannerDateKeysInRange(start, end);
+    const keySet = new Set(keys);
+
+    if (!start && !end) {
+        let notes = allNotes.length, tasks = allTasks.filter(t => !!t).length, milestones = 0;
+        let quotes = 0, expiringQuotes = 0, expiringRates = 0, shipments = 0;
+        ['sea','air','lcl'].forEach(mode => {
+            (db.rates?.[mode] || []).forEach(q => {
+                quotes++;
+                if (q.validityDate) expiringQuotes++;
+            });
+        });
+        allShipments.forEach(s => {
+            if (s.etd) milestones++;
+            if (s.eta) milestones++;
+            if (['Booked','Confirmed','In Transit','Ready'].includes(s.cargoStatus)) shipments++;
+        });
+        expiringRates = allRates.filter(r => !!r.validTo).length;
+        return {notes, milestones, quotes, expiringQuotes, expiringRates, tasks, shipments};
+    }
+
+    const counts = {notes:0, milestones:0, quotes:0, expiringQuotes:0, expiringRates:0, tasks:0, shipments:0};
+    keys.forEach(key => {
+        counts.notes += getNotesForDate(key).length;
+        counts.milestones += getShipmentMilestonesForDate(key).length;
+        counts.quotes += getQuotesForDate(key).length;
+        counts.expiringQuotes += getExpiringQuotesForDate(key).length;
+        counts.expiringRates += getRatesExpiringOnDate(key).length;
+        counts.tasks += getTasksForDate(key).length;
+        counts.shipments += getShipmentsUnderProcessForDate(key).length;
+    });
+    return counts;
+}
+
+function updatePlannerDateWiseSummary() {
+    const fromEl = document.getElementById('planner-summary-from');
+    const toEl = document.getElementById('planner-summary-to');
+
+    const selectedKey = formatDateKey(plannerSelectedDate || new Date());
+    const rangeActive = plannerSummaryRangeActive && plannerSummaryFromDate && plannerSummaryToDate;
+    const from = rangeActive ? plannerSummaryFromDate : selectedKey;
+    const to = rangeActive ? plannerSummaryToDate : selectedKey;
+
+    if (fromEl) fromEl.value = rangeActive ? plannerSummaryFromDate : '';
+    if (toEl) toEl.value = rangeActive ? plannerSummaryToDate : '';
+
+    if (from && to && from > to) return false;
+
+    const counts = getPlannerDateWiseCounts(from, to);
+    const set = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = String(Number(value) || 0);
+    };
+    set('planner-summary-notes', counts.notes);
+    set('planner-summary-milestones', counts.milestones);
+    set('planner-summary-quotes', counts.quotes);
+    set('planner-summary-expiring-quotes', counts.expiringQuotes);
+    set('planner-summary-expiring-rates', counts.expiringRates);
+    set('planner-summary-tasks', counts.tasks);
+    set('planner-summary-shipments', counts.shipments);
+
+    const rangeEl = document.getElementById('planner-summary-range');
+    if (rangeEl) {
+        rangeEl.textContent = rangeActive
+            ? `(Showing data from ${from} to ${to})`
+            : `(Showing data for ${selectedKey})`;
+    }
+    return true;
+}
+
+function applyPlannerDateFilter() {
+    const from = document.getElementById('planner-summary-from')?.value || '';
+    const to = document.getElementById('planner-summary-to')?.value || '';
+    if ((from && !to) || (!from && to)) { alert('Please select both From Date and To Date.'); return; }
+    if (from && to && from > to) { alert('From Date cannot be later than To Date.'); return; }
+    plannerSummaryFromDate = from;
+    plannerSummaryToDate = to;
+    plannerSummaryRangeActive = !!(from && to);
+    updatePlannerDateWiseSummary();
+}
+
+function resetPlannerDateFilter() {
+    plannerSummaryFromDate = '';
+    plannerSummaryToDate = '';
+    plannerSummaryRangeActive = false;
+    updatePlannerDateWiseSummary();
+}
+
+function plannerSetDefaultSummaryRange() {
+    // Planner cards default to the currently selected calendar date (today on startup).
+    plannerSummaryFromDate = '';
+    plannerSummaryToDate = '';
+    plannerSummaryRangeActive = false;
+    updatePlannerDateWiseSummary();
 }
 
 // ---------- Get Notes for a Date (including recurring) ----------
@@ -2092,6 +2229,9 @@ function renderPlannerCalendar() {
         cell.style.cursor = 'pointer';
         cell.addEventListener('click', function() {
             plannerSelectedDate = new Date(dateKey + 'T00:00:00');
+            plannerSummaryFromDate = '';
+            plannerSummaryToDate = '';
+            plannerSummaryRangeActive = false;
             renderPlannerCalendar();
             loadPlannerDay(dateKey);
         });
@@ -2124,6 +2264,8 @@ function loadPlannerDay(dateKey) {
     const displayDate = new Date(dateKey + 'T00:00:00');
     document.getElementById('planner-selected-date').textContent =
         `📅 ${displayDate.toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long', year:'numeric' })}`;
+
+    renderIslamDailyTracker(dateKey);
 
     // ---- NOTES ----
     const notes = getNotesForDate(dateKey);
@@ -2256,6 +2398,8 @@ function loadPlannerDay(dateKey) {
         shipments: shipments.length
     });
 
+    // Keep the date-wise command-center totals synchronized with Planner data.
+    updatePlannerDateWiseSummary();
     // (No need to call updateExpiringToday() separately)
 }
 
@@ -2296,6 +2440,9 @@ function plannerChangeMonth(delta) {
 function plannerGoToday() {
     plannerCurrentDate = new Date();
     plannerSelectedDate = new Date();
+    plannerSummaryFromDate = '';
+    plannerSummaryToDate = '';
+    plannerSummaryRangeActive = false;
     renderPlannerCalendar();
     loadPlannerDay(formatDateKey(plannerSelectedDate));
 }
@@ -2388,6 +2535,161 @@ function plannerDeleteNote(id) {
     loadPlannerDay(formatDateKey(plannerSelectedDate));
     renderPlannerCalendar();
     autoBackup();
+}
+
+
+// ---------- Islam Daily Tracker (date-wise persistence) ----------
+function ensureIslamDailyTrackerStore() {
+    if (!db.islamDailyTracker || typeof db.islamDailyTracker !== 'object' || Array.isArray(db.islamDailyTracker)) {
+        db.islamDailyTracker = {};
+    }
+    return db.islamDailyTracker;
+}
+
+function normalizeIslamDateKey(dateKey) {
+    const v = String(dateKey || '').trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : formatDateKey(plannerSelectedDate || new Date());
+}
+
+function getIslamDailyEntry(dateKey) {
+    const store = ensureIslamDailyTrackerStore();
+    return store[normalizeIslamDateKey(dateKey)] || null;
+}
+
+function saveIslamDailyEntry(dateKey, entry) {
+    const key = normalizeIslamDateKey(dateKey);
+    const store = ensureIslamDailyTrackerStore();
+    store[key] = {
+        date: key,
+        prayers: {
+            fajar: { done: entry.prayers?.fajar?.done === true, rakat: Math.max(0, Number(entry.prayers?.fajar?.rakat) || 0) },
+            zuhar: { done: entry.prayers?.zuhar?.done === true, rakat: Math.max(0, Number(entry.prayers?.zuhar?.rakat) || 0) },
+            asr: { done: entry.prayers?.asr?.done === true, rakat: Math.max(0, Number(entry.prayers?.asr?.rakat) || 0) },
+            maghrib: { done: entry.prayers?.maghrib?.done === true, rakat: Math.max(0, Number(entry.prayers?.maghrib?.rakat) || 0) },
+            isha: { done: entry.prayers?.isha?.done === true, rakat: Math.max(0, Number(entry.prayers?.isha?.rakat) || 0) }
+        },
+        quranReading: entry.quranReading === true,
+        meditation: entry.meditation === true,
+        yesterdaySleep: String(entry.yesterdaySleep || ''),
+        todayWakeUp: String(entry.todayWakeUp || ''),
+        daroodCount: Math.max(0, Math.floor(Number(entry.daroodCount) || 0)),
+        updatedAt: new Date().toISOString()
+    };
+    saveDB();
+    return store[key];
+}
+
+function islamTrackerYesNo(done) {
+    return done ? '<span style="color:#059669;font-weight:700;">● Yes</span>' : '<span style="color:#dc2626;font-weight:700;">● No</span>';
+}
+
+function renderIslamDailyTracker(dateKey) {
+    const root = document.getElementById('islam-daily-tracker');
+    if (!root) return;
+    const key = normalizeIslamDateKey(dateKey);
+    const entry = getIslamDailyEntry(key) || {
+        prayers: { fajar:{done:false,rakat:0}, zuhar:{done:false,rakat:0}, asr:{done:false,rakat:0}, maghrib:{done:false,rakat:0}, isha:{done:false,rakat:0} },
+        quranReading:false, meditation:false, yesterdaySleep:'', todayWakeUp:'', daroodCount:0
+    };
+    const fmt = new Date(key + 'T00:00:00').toLocaleDateString('en-IN', {day:'2-digit', month:'2-digit', year:'numeric', weekday:'long'});
+    const rows = [
+        ['Fajar','fajar','2'], ['Zuhar','zuhar','4'], ['Asr','asr','4'], ['Maghrib','maghrib','3'], ['Isha','isha','4']
+    ];
+    root.innerHTML = `
+      <div class="islam-tracker-header"><span>🕌 Islam - Daily Tracker</span><span>📅 ${fmt}</span></div>
+      <div class="islam-tracker-body">
+        <table class="islam-tracker-table">
+          <thead><tr><th>DETAILS</th><th>TODAY</th></tr></thead>
+          <tbody>
+            <tr class="islam-group"><td colspan="2">1. All 5 Times Prayer (Mark Yes / No &amp; No. of Rakat)</td></tr>
+            ${rows.map(([label,keyName,defaultRakat]) => {
+                const pr = entry.prayers[keyName] || {done:false,rakat:0};
+                return `<tr><td>🕌 ${label}</td><td><span>${islamTrackerYesNo(pr.done)}</span> <span class="islam-rakat">${pr.rakat} Rakat</span></td></tr>`;
+            }).join('')}
+            <tr class="islam-group"><td colspan="2">2. Quran Reading <small>(Done or Not)</small></td></tr>
+            <tr><td>📖 Quran Reading</td><td>${islamTrackerYesNo(entry.quranReading)}</td></tr>
+            <tr class="islam-group"><td colspan="2">3. Meditation <small>(Done or Not)</small></td></tr>
+            <tr><td>🧘 Meditation</td><td>${islamTrackerYesNo(entry.meditation)}</td></tr>
+            <tr class="islam-group"><td colspan="2">4. Darood Counting</td></tr>
+            <tr><td>📿 DAROOD</td><td><div class="islam-darood-counter"><button type="button" class="islam-darood-btn" onclick="changeIslamDaroodCount('${key}',-1)" aria-label="Decrease Darood count">−</button><span id="islam-darood-count-${key}" class="islam-darood-count">${Math.max(0,Math.floor(Number(entry.daroodCount)||0))}</span><button type="button" class="islam-darood-btn" onclick="changeIslamDaroodCount('${key}',1)" aria-label="Increase Darood count">+</button></div></td></tr>
+            <tr class="islam-group"><td colspan="2">5. Sleep &amp; Wake Up</td></tr>
+            <tr><td>😴 Yesterday Sleep (Time)</td><td>${entry.yesterdaySleep ? '🕐 ' + escapeHtml(entry.yesterdaySleep) : '—'}</td></tr>
+            <tr><td>☀️ Today Wake Up (Time)</td><td>${entry.todayWakeUp ? '🕐 ' + escapeHtml(entry.todayWakeUp) : '—'}</td></tr>
+          </tbody>
+        </table>
+        <div class="islam-tracker-actions"><button class="btn btn-sm btn-success" type="button" onclick="openIslamDailyEditor('${key}')">✏️ ${getIslamDailyEntry(key) ? 'EDIT' : 'ADD TODAY\'S ENTRY'}</button></div>
+      </div>`;
+}
+
+function openIslamDailyEditor(dateKey) {
+    const key = normalizeIslamDateKey(dateKey);
+    const entry = getIslamDailyEntry(key) || { prayers:{}, quranReading:false, meditation:false, yesterdaySleep:'', todayWakeUp:'', daroodCount:0 };
+    const root = document.getElementById('islam-daily-tracker');
+    if (!root) return;
+    const p = entry.prayers || {};
+    const field = (name, val) => `<select id="islam-${name}" class="islam-input"><option value="no" ${val ? '' : 'selected'}>No</option><option value="yes" ${val ? 'selected' : ''}>Yes</option></select>`;
+    const rakat = (name, val) => `<input id="islam-${name}-rakat" class="islam-input islam-rakat-input" type="number" min="0" step="1" value="${Math.max(0,Number(val)||0)}">`;
+    root.innerHTML = `
+      <div class="islam-tracker-header"><span>🕌 Islam - Daily Tracker</span><span>📅 ${key}</span></div>
+      <div class="islam-tracker-body">
+        <table class="islam-tracker-table islam-editor-table"><thead><tr><th>DETAILS</th><th>TODAY</th></tr></thead><tbody>
+        <tr class="islam-group"><td colspan="2">1. All 5 Times Prayer (Mark Yes / No &amp; No. of Rakat)</td></tr>
+        <tr><td>🕌 Fajar</td><td>${field('fajar',p.fajar?.done)} ${rakat('fajar',p.fajar?.rakat)} <span>Rakat</span></td></tr>
+        <tr><td>🕌 Zuhar</td><td>${field('zuhar',p.zuhar?.done)} ${rakat('zuhar',p.zuhar?.rakat)} <span>Rakat</span></td></tr>
+        <tr><td>🕌 Asr</td><td>${field('asr',p.asr?.done)} ${rakat('asr',p.asr?.rakat)} <span>Rakat</span></td></tr>
+        <tr><td>🕌 Maghrib</td><td>${field('maghrib',p.maghrib?.done)} ${rakat('maghrib',p.maghrib?.rakat)} <span>Rakat</span></td></tr>
+        <tr><td>🕌 Isha</td><td>${field('isha',p.isha?.done)} ${rakat('isha',p.isha?.rakat)} <span>Rakat</span></td></tr>
+        <tr class="islam-group"><td colspan="2">2. Quran Reading <small>(Done or Not)</small></td></tr>
+        <tr><td>📖 Quran Reading</td><td>${field('quran',entry.quranReading)}</td></tr>
+        <tr class="islam-group"><td colspan="2">3. Meditation <small>(Done or Not)</small></td></tr>
+        <tr><td>🧘 Meditation</td><td>${field('meditation',entry.meditation)}</td></tr>
+        <tr class="islam-group"><td colspan="2">4. Darood Counting</td></tr>
+        <tr><td>📿 Darood</td><td><input id="islam-darood" class="islam-input" type="number" min="0" step="1" value="${Math.max(0,Number(entry.daroodCount)||0)}"></td></tr>
+        <tr class="islam-group"><td colspan="2">5. Sleep &amp; Wake Up</td></tr>
+        <tr><td>😴 Yesterday Sleep (Time)</td><td><input id="islam-sleep" class="islam-input" type="time" value="${escapeHtml(entry.yesterdaySleep || '')}"></td></tr>
+        <tr><td>☀️ Today Wake Up (Time)</td><td><input id="islam-wakeup" class="islam-input" type="time" value="${escapeHtml(entry.todayWakeUp || '')}"></td></tr>
+        </tbody></table>
+        <div class="islam-tracker-actions"><button class="btn btn-sm btn-success" type="button" onclick="saveIslamDailyEditor('${key}')">💾 SAVE</button><button class="btn btn-sm btn-clear" type="button" onclick="renderIslamDailyTracker('${key}')">CANCEL</button></div>
+      </div>`;
+}
+
+function saveIslamDailyEditor(dateKey) {
+    const key = normalizeIslamDateKey(dateKey);
+    const val = n => document.getElementById('islam-' + n)?.value === 'yes';
+    const num = n => Math.max(0, Math.floor(Number(document.getElementById('islam-' + n + '-rakat')?.value) || 0));
+    const entry = {
+        prayers: {
+            fajar:{done:val('fajar'),rakat:num('fajar')}, zuhar:{done:val('zuhar'),rakat:num('zuhar')}, asr:{done:val('asr'),rakat:num('asr')}, maghrib:{done:val('maghrib'),rakat:num('maghrib')}, isha:{done:val('isha'),rakat:num('isha')}
+        },
+        quranReading: val('quran'),
+        meditation: val('meditation'),
+        yesterdaySleep: document.getElementById('islam-sleep')?.value || '',
+        todayWakeUp: document.getElementById('islam-wakeup')?.value || '',
+        daroodCount: Math.max(0, Math.floor(Number(document.getElementById('islam-darood')?.value) || 0))
+    };
+    saveIslamDailyEntry(key, entry);
+    renderIslamDailyTracker(key);
+}
+
+// ---------- Darood Counting ----------
+function changeIslamDaroodCount(dateKey, delta) {
+    const key = normalizeIslamDateKey(dateKey);
+    const current = getIslamDailyEntry(key) || {
+        prayers: {
+            fajar:{done:false,rakat:0}, zuhar:{done:false,rakat:0},
+            asr:{done:false,rakat:0}, maghrib:{done:false,rakat:0}, isha:{done:false,rakat:0}
+        },
+        quranReading:false,
+        meditation:false,
+        yesterdaySleep:'',
+        todayWakeUp:'',
+        daroodCount:0
+    };
+    const currentCount = Math.max(0, Math.floor(Number(current.daroodCount) || 0));
+    const nextCount = Math.max(0, currentCount + (Number(delta) > 0 ? 1 : -1));
+    current.daroodCount = nextCount;
+    saveIslamDailyEntry(key, current);
+    renderIslamDailyTracker(key);
 }
 
 // ---------- Tasks CRUD ----------
@@ -2631,10 +2933,12 @@ function initPlanner() {
     // Ensure data structures exist
     if (!db.plannerNotes) db.plannerNotes = [];
     if (!db.plannerTasks) db.plannerTasks = [];
+    ensureIslamDailyTrackerStore();
     syncPlannerAutoTasks();
     saveDB();
     plannerGoToday();
     updateExpiringToday();
+    plannerSetDefaultSummaryRange();
 	// If planner tab is active on load (unlikely, but safe)
 	// No need to call initPlanner here; it will be called when tab is switched.
 
@@ -4766,6 +5070,87 @@ function setFollowUpStatus(target, mode, idx, status) {
 }
 
 
+// ==================== APPLICATION ZOOM CONTROLS ====================
+(function(){
+    const ZOOM_KEY='shahidERP_app_zoom';
+    const LEVELS=[70,80,90,100,110,120,130,140,150];
+
+    function read(){
+        try{
+            const n=Number(localStorage.getItem(ZOOM_KEY));
+            return LEVELS.includes(n)?n:100;
+        }catch(e){ return 100; }
+    }
+    function set(n){
+        const v=LEVELS.reduce((best,x)=>Math.abs(x-n)<Math.abs(best-n)?x:best,100);
+        // In Electron, prefer native webContents zoom when exposed by preload.
+        try{
+            if(window.shahidElectronZoom && typeof window.shahidElectronZoom.set==='function'){
+                window.shahidElectronZoom.set(v/100);
+            } else {
+                document.documentElement.style.zoom=String(v/100);
+            }
+        }catch(e){
+            document.documentElement.style.zoom=String(v/100);
+        }
+        try{localStorage.setItem(ZOOM_KEY,String(v));}catch(e){}
+        const el=document.getElementById('shahid-zoom-reset');
+        if(el)el.textContent=v+'%';
+        return v;
+    }
+    window.shahidZoomIn=function(){set(read()+10);};
+    window.shahidZoomOut=function(){set(read()-10);};
+    window.shahidZoomReset=function(){set(100);};
+    function init(){set(read());}
+    if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init,{once:true});
+    else init();
+})();
+
+// ==================== DATABASE MAINTENANCE (ELECTRON SAFE) ====================
+window.shahidDatabaseBackup = function(){
+    if(typeof exportData === 'function'){ exportData(); return; }
+    if(typeof exportToSQLite === 'function'){ exportToSQLite(); return; }
+    alert('Backup function is not available.');
+};
+window.shahidDatabaseRestore = function(){
+    const input=document.createElement('input');
+    input.type='file'; input.accept='.json,.sqlite';
+    input.onchange=function(){ if(!input.files?.length) return; const f=input.files[0];
+        if(f.name.toLowerCase().endsWith('.sqlite') && typeof importFromSQLite==='function') importFromSQLite(input);
+        else if(typeof importData==='function') importData(input);
+        else alert('Restore function is not available.');
+    };
+    input.click();
+};
+window.shahidClearCache = async function(){
+    if(!confirm('Clear application cache only? ERP database records will not be deleted. Continue?')) return;
+    try{
+        if(window.shahidElectronMaintenance?.clearCache) await window.shahidElectronMaintenance.clearCache();
+        alert('✅ Cache cleared successfully. Your ERP database was not deleted.');
+    }catch(e){ console.error(e); alert('❌ Unable to clear cache: '+e.message); }
+};
+window.shahidClearCookies = async function(){
+    if(!confirm('Clear cookies / session only? You may need to log in again. ERP database records will not be deleted. Continue?')) return;
+    try{
+        if(window.shahidElectronMaintenance?.clearCookies) await window.shahidElectronMaintenance.clearCookies();
+        else alert('Cookies/session clearing is available in the packaged EXE only.');
+        alert('✅ Cookies / Session cleared successfully.');
+    }catch(e){ console.error(e); alert('❌ Unable to clear cookies/session: '+e.message); }
+};
+window.shahidClearTemporary = async function(){
+    if(!confirm('Clear safe temporary application cache? ERP database records will not be deleted. Continue?')) return;
+    try{
+        if(window.shahidElectronMaintenance?.clearTemporary) await window.shahidElectronMaintenance.clearTemporary();
+        alert('✅ Temporary application data cleared. ERP database was not deleted.');
+    }catch(e){ console.error(e); alert('❌ Unable to clear temporary data: '+e.message); }
+};
+window.shahidReloadApplication = async function(){
+    try{
+        if(window.shahidElectronMaintenance?.reload) { await window.shahidElectronMaintenance.reload(); return; }
+    }catch(e){ console.error(e); }
+    location.reload();
+};
+
 /* ===== END JS/00-core.js ===== */
 
 /* ===== BEGIN JS/01-dashboard.js ===== */
@@ -5105,6 +5490,8 @@ function checkExpiryNotifications() {
 
 
 let rateSheetSearch = '';
+let rateSheetDateFrom = '';
+let rateSheetDateTo = '';
 
 function searchRateSheet(value) {
     rateSheetSearch = String(value || '').trim().toLowerCase();
@@ -5139,6 +5526,65 @@ function sortRateSheet(key) {
     rateSheetPage = 1; renderRateSheet();
 }
 
+function rateSheetDateInRange(value) {
+    if (!rateSheetDateFrom && !rateSheetDateTo) return true;
+    if (!value) return false;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return false;
+    const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    if (rateSheetDateFrom) {
+        const from = new Date(rateSheetDateFrom + 'T00:00:00');
+        if (day < from) return false;
+    }
+    if (rateSheetDateTo) {
+        const to = new Date(rateSheetDateTo + 'T00:00:00');
+        if (day > to) return false;
+    }
+    return true;
+}
+function applyRateSheetDateFilter() {
+    const from = document.getElementById('ratesheet-date-from')?.value || '';
+    const to = document.getElementById('ratesheet-date-to')?.value || '';
+    if (from && to && from > to) return alert('From Date cannot be later than To Date.');
+    rateSheetDateFrom = from;
+    rateSheetDateTo = to;
+    rateSheetPage = 1;
+    renderRateSheet();
+}
+function clearRateSheetDateFilter() {
+    rateSheetDateFrom = '';
+    rateSheetDateTo = '';
+    const from = document.getElementById('ratesheet-date-from');
+    const to = document.getElementById('ratesheet-date-to');
+    if (from) from.value = '';
+    if (to) to.value = '';
+    rateSheetPage = 1;
+    renderRateSheet();
+}
+function ensureRateSheetDateControls() {
+    let bar = document.querySelector('.ratesheet-date-filter-bar');
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.className = 'ratesheet-date-filter-bar';
+        bar.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0;padding:9px 10px;background:var(--card-bg,#fff);border:1px solid var(--border);border-radius:8px;';
+        bar.innerHTML = `
+            <span style="font-weight:600;color:var(--text-light);white-space:nowrap;">📅 Date:</span>
+            <label style="font-size:.78rem;font-weight:600;white-space:nowrap;">From <input id="ratesheet-date-from" type="date" value="${rateSheetDateFrom}" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;"></label>
+            <label style="font-size:.78rem;font-weight:600;white-space:nowrap;">To <input id="ratesheet-date-to" type="date" value="${rateSheetDateTo}" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;"></label>
+            <button class="btn btn-sm btn-info" type="button" onclick="applyRateSheetDateFilter()">🔍 Filter</button>
+            <button class="btn btn-sm btn-clear" type="button" onclick="clearRateSheetDateFilter()">↻ Reset</button>
+            <button class="btn btn-sm btn-export" type="button" onclick="exportRateSheetReport('excel')">📊 Excel</button>
+            <button class="btn btn-sm btn-pdf" type="button" onclick="exportRateSheetReport('pdf')">📄 PDF</button>`;
+        const tableWrap = document.querySelector('#ratesheet .table-wrap');
+        if (tableWrap) tableWrap.parentNode.insertBefore(bar, tableWrap);
+    } else {
+        const from = document.getElementById('ratesheet-date-from');
+        const to = document.getElementById('ratesheet-date-to');
+        if (from && document.activeElement !== from) from.value = rateSheetDateFrom;
+        if (to && document.activeElement !== to) to.value = rateSheetDateTo;
+    }
+}
+
 function getFilteredRateSheet() {
     let rates = [...(db.rateSheet || [])];
     const today = new Date();
@@ -5158,6 +5604,9 @@ function getFilteredRateSheet() {
             return searchable.toLowerCase().includes(rateSheetSearch);
         });
     }
+    // Apply the requested Valid From / Valid To date-range filter without altering stored data.
+    rates = rates.filter(r => rateSheetDateInRange(r.validFrom || r.validTo));
+
     today.setHours(0, 0, 0, 0);
 
     if (rateSheetFilter === 'active') {
@@ -5188,6 +5637,8 @@ function renderRateSheet() {
     const table = document.getElementById('ratesheet-table');
     const container = document.getElementById('ratesheet-table')?.parentElement;
     if (!tbody || !container) return;
+
+    ensureRateSheetDateControls();
 
     // --- Carrier name search bar ---
     let searchBar = document.querySelector('.ratesheet-search-bar');
@@ -5778,21 +6229,20 @@ function bulkImport() {
                 const chargeType = parts[2].trim().toUpperCase();
                 const amount = parseFloat(parts[3]);
                 const currency = parts[4].trim().toUpperCase() || 'INR';
-                if (carrier && pol && chargeType && amount) {
-                    const isAir = defaultCharges.air.includes(chargeType);
+                const container = (parts[5] || 'ALL').trim();
+                const commodity = (parts[6] || 'NON HAZ').trim().toUpperCase();
+                const modeHint = (parts[7] || '').trim().toLowerCase();
+                if (carrier && pol && chargeType && Number.isFinite(amount) && amount !== 0) {
+                    const isAir = modeHint === 'air' || (!modeHint && defaultCharges.air.includes(chargeType));
+                    const mode = isAir ? 'air' : (modeHint === 'lcl' ? 'lcl' : 'sea');
                     const listKey = isAir ? 'carrierChargesAir' : 'carrierChargesSeaLcl';
-                    const mode = isAir ? 'air' : 'sea';
-                    let entry;
-                    if (isAir) {
-                        entry = db[listKey].find(c => c.carrier === carrier && c.pol === pol);
-                        if (!entry) { entry = { carrier, pol, charges: {}, updated: new Date().toISOString() };
-                            db[listKey].push(entry); }
-                    } else {
-                        entry = db[listKey].find(c => c.mode === mode && c.carrier === carrier && c.pol === pol);
-                        if (!entry) { entry = { mode, carrier, pol, container: '', charges: {}, updated: new Date().toISOString() };
-                            db[listKey].push(entry); }
-                    }
+                    const normC = v => String(v || 'ALL').trim().replace(/\s+/g,' ').toUpperCase();
+                    const normalizedContainer = isAir ? 'ALL' : (normC(container).includes('20') ? '20 GP' : normC(container).includes('40 HC') ? '40 HC' : normC(container).includes('40 GP') ? '40 GP' : normC(container));
+                    const normalizedCommodity = commodity === 'HAZ' ? 'HAZ' : 'NON HAZ';
+                    let entry = db[listKey].find(c => !c.deleted && (isAir || c.mode === mode) && normC(c.carrier) === normC(carrier) && normC(c.pol) === normC(pol) && normC(c.commodity) === normalizedCommodity && (isAir || normC(c.container) === normalizedContainer));
+                    if (!entry) { entry = { mode, carrier, pol, commodity: normalizedCommodity, container: normalizedContainer, charges: {}, createdAt: new Date().toISOString(), updated: new Date().toISOString(), updatedAt: new Date().toISOString() }; db[listKey].push(entry); }
                     entry.charges[chargeType] = { amount, currency };
+                    entry.deleted = false; delete entry.deletedAt; entry.updated = new Date().toISOString(); entry.updatedAt = entry.updated;
                     imported++;
                 } else { skipped++; }
             } else { skipped++; }
@@ -5825,6 +6275,8 @@ function startAutoBackup() {
 // ==================== EXPORT/IMPORT ====================
 function exportToExcel() {
     const wb = XLSX.utils.book_new();
+
+    // Existing ERP datasets — preserved exactly as before.
     const sheets = {
         'Sea Quotes': db.rates.sea,
         'Air Quotes': db.rates.air,
@@ -5835,19 +6287,54 @@ function exportToExcel() {
         'Rate Sheet': db.rateSheet,
         'Shipments': db.shipments,
         'BL Drafts': db.bldrafts,
-        'POL': db.pol.map(p => ({ POL: p })),
-        'POD': db.pod.map(p => ({ POD: p })),
-        'Incoterms': db.incoterms.map(i => ({ Incoterm: i })),
-        'Containers': db.containers.map(c => ({ Container: c })),
-        'Carriers': db.carriers.map(c => ({ Carrier: c })),
-        'Exchange Rates': Object.entries(db.exchangeRates).map(([k, v]) => ({ Currency: k, Rate: v }))
+        'POL': (db.pol || []).map(p => ({ POL: p })),
+        'POD': (db.pod || []).map(p => ({ POD: p })),
+        'Incoterms': (db.incoterms || []).map(i => ({ Incoterm: i })),
+        'Containers': (db.containers || []).map(c => ({ Container: c })),
+        'Carriers': (db.carriers || []).map(c => ({ Carrier: c })),
+        'Exchange Rates': Object.entries(db.exchangeRates || {}).map(([k, v]) => ({ Currency: k, Rate: v }))
     };
+
     Object.entries(sheets).forEach(([name, data]) => {
-        const ws = XLSX.utils.json_to_sheet(data);
-        XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data || []), name.slice(0, 31));
     });
+
+    // Complete Local Charges backup sheets.
+    // DATA_JSON preserves nested charge objects without converting them to
+    // "[object Object]" and therefore allows lossless inspection/recovery.
+    const localBackupSheet = (name, key) => {
+        const records = Array.isArray(db[key]) ? db[key] : [];
+        const rows = records.map((record, index) => ({
+            SR: index + 1,
+            KEY: record.key || '',
+            MODE: record.mode || '',
+            CARRIER: record.carrier || '',
+            POL: record.pol || '',
+            POD: record.pod || '',
+            HAZ_NON_HAZ: record.commodity || '',
+            CONTAINER: record.container || '',
+            VALID_FROM: record.validFrom || '',
+            VALID_TO: record.validTo || '',
+            DELETED: record.deleted === true ? 'YES' : 'NO',
+            UPDATED_AT: record.updatedAt || record.updated || '',
+            DATA_JSON: JSON.stringify(record)
+        }));
+        XLSX.utils.book_append_sheet(
+            wb,
+            XLSX.utils.json_to_sheet(rows),
+            name.slice(0, 31)
+        );
+    };
+
+    localBackupSheet('LC Default SEA', 'defaultSeaCharges');
+    localBackupSheet('LC Default AIR', 'defaultAirCharges');
+    localBackupSheet('LC Default LCL', 'defaultLclCharges');
+    localBackupSheet('LC Carrier SEA LCL', 'carrierChargesSeaLcl');
+    localBackupSheet('LC Carrier AIR', 'carrierChargesAir');
+    localBackupSheet('LC SEA THC', 'seaTHCRates');
+
     XLSX.writeFile(wb, `Backup_${new Date().toISOString().split('T')[0]}.xlsx`);
-    alert('Excel file downloaded successfully!');
+    alert('Excel file downloaded successfully, including Local Charges, Carrier Charges and SEA THC data.');
 }
 
 function exportToJSON() {
@@ -5866,400 +6353,119 @@ function exportToJSON() {
 
 
 function importData(input) {
-    const file = input.files[0];
+    const file = input.files?.[0];
     if (!file) return;
+
+    const finish = () => { input.value = ''; };
+
+    const commitCanonicalMerge = (importedDb) => {
+        if (!importedDb || typeof importedDb !== 'object' || Array.isArray(importedDb)) {
+            throw new Error('Invalid database data.');
+        }
+        if (typeof window.shahidMasterMergeDatabase !== 'function') {
+            throw new Error('Canonical merge engine is not available.');
+        }
+        const merged = window.shahidMasterMergeDatabase(db, importedDb);
+        if (!merged || typeof merged !== 'object' || Array.isArray(merged)) {
+            throw new Error('Canonical merge returned an invalid database.');
+        }
+        Object.keys(db).forEach(k => delete db[k]);
+        Object.assign(db, merged);
+        saveDB();
+        if (typeof autoBackup === 'function') autoBackup();
+        return merged;
+    };
+
     const reader = new FileReader();
-    reader.onload = function(e) {
-        try {
-            if (file.name.endsWith('.json')) {
+
+    if (/\.json$/i.test(file.name)) {
+        reader.onload = function(e) {
+            try {
                 const imported = JSON.parse(e.target.result);
-                const importedDb = imported.data || imported;
-                
-                // Check if the imported data is valid
+                const importedDb = imported?.data || imported;
                 if (!importedDb || typeof importedDb !== 'object') {
-                    alert('Invalid JSON format. Please check the file.');
+                    throw new Error('Invalid JSON database format.');
+                }
+                if (!confirm('This will MERGE the imported data with your existing ERP database using the canonical merge engine.\\n\\nExisting records are matched by their configured business keys. Continue?')) {
                     return;
                 }
-                
-                if (confirm('This will MERGE the imported data with your existing data.\n\n• New quotes, drafts, and RR will be added\n• Duplicates (by Quote Number) will be skipped\n• Master data (POL, POD, Carriers) will be merged\n\nContinue?')) {
-                    const summary = mergeDatabase(importedDb);
-                    saveDB();
-                    alert(`✅ Data merged successfully!\n\n${summary}`);
-                    location.reload();
-                }
-            } else {
-                alert('Please select a JSON file (.json)');
+                commitCanonicalMerge(importedDb);
+                alert('✅ Database merge completed successfully.');
+                location.reload();
+            } catch (err) {
+                console.error(err);
+                alert('❌ Import/Merge failed: ' + err.message);
+            } finally {
+                finish();
             }
-        } catch (err) {
-            alert('Error importing file: ' + err.message);
-        }
-    };
-    reader.readAsText(file);
-    input.value = '';
+        };
+        reader.readAsText(file);
+        return;
+    }
+
+    if (/\.xlsx?$/i.test(file.name)) {
+        reader.onload = function(e) {
+            try {
+                if (typeof XLSX === 'undefined') throw new Error('Excel library is not available.');
+                const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+                const localSheetNames = [
+                    'LC Default SEA','LC Default AIR','LC Default LCL',
+                    'LC Carrier SEA LCL','LC Carrier AIR','LC SEA THC'
+                ];
+                const importedDb = {};
+                let found = 0;
+
+                localSheetNames.forEach(name => {
+                    const sheet = wb.Sheets[name];
+                    if (!sheet) return;
+                    const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
+                    rows.forEach(row => {
+                        if (!row.DATA_JSON) return;
+                        try {
+                            const record = JSON.parse(String(row.DATA_JSON));
+                            let key;
+                            if (name === 'LC Default SEA') key='defaultSeaCharges';
+                            else if (name === 'LC Default AIR') key='defaultAirCharges';
+                            else if (name === 'LC Default LCL') key='defaultLclCharges';
+                            else if (name === 'LC Carrier SEA LCL') key='carrierChargesSeaLcl';
+                            else if (name === 'LC Carrier AIR') key='carrierChargesAir';
+                            else key='seaTHCRates';
+                            (importedDb[key] ||= []).push(record);
+                            found++;
+                        } catch (_) {
+                            throw new Error(`${name}: invalid DATA_JSON.`);
+                        }
+                    });
+                });
+
+                if (!found) {
+                    throw new Error('No Local Charges DATA_JSON sheets were found in this workbook.');
+                }
+
+                if (!confirm('This Excel file contains Local Charges data. It will be MERGED with the existing database using the canonical merge engine. Continue?')) {
+                    return;
+                }
+                commitCanonicalMerge(importedDb);
+                alert(`✅ Local Charges Excel merge completed successfully.\\nRecords processed: ${found}`);
+                location.reload();
+            } catch (err) {
+                console.error(err);
+                alert('❌ Excel Import/Merge failed: ' + err.message);
+            } finally {
+                finish();
+            }
+        };
+        reader.readAsArrayBuffer(file);
+        return;
+    }
+
+    finish();
+    alert('Please select a JSON or Excel (.xlsx/.xls) file.');
 }
 
 
 
-function mergeDatabase(importedDb) {
-    let summary = [];
-    let added = { quotes: 0, drafts: 0, rr: 0, ratesheet: 0, shipments: 0, bldrafts: 0 };
-    let skipped = { quotes: 0, drafts: 0, rr: 0, ratesheet: 0, shipments: 0, bldrafts: 0 };
 
-    // ---- 1. MERGE QUOTES (SEA, AIR, LCL) ----
-    ['sea', 'air', 'lcl'].forEach(mode => {
-        if (!importedDb.rates || !importedDb.rates[mode]) return;
-        if (!db.rates[mode]) db.rates[mode] = [];
-        
-        importedDb.rates[mode].forEach(quote => {
-            if (!quote.quoteNumber) {
-                // If no quote number, just push it
-                db.rates[mode].push(quote);
-                added.quotes++;
-                return;
-            }
-            // Check if quote already exists by quoteNumber
-            const exists = db.rates[mode].some(existing => 
-                existing.quoteNumber === quote.quoteNumber
-            );
-            if (!exists) {
-                db.rates[mode].push(quote);
-                added.quotes++;
-            } else {
-                skipped.quotes++;
-            }
-        });
-    });
-
-    // ---- 2. MERGE DRAFTS (SEA, AIR, LCL) ----
-    ['sea', 'air', 'lcl'].forEach(mode => {
-        if (!importedDb.drafts || !importedDb.drafts[mode]) return;
-        if (!db.drafts[mode]) db.drafts[mode] = [];
-        
-        importedDb.drafts[mode].forEach(draft => {
-            if (!draft.quoteNumber) {
-                db.drafts[mode].push(draft);
-                added.drafts++;
-                return;
-            }
-            const exists = db.drafts[mode].some(existing => 
-                existing.quoteNumber === draft.quoteNumber
-            );
-            if (!exists) {
-                db.drafts[mode].push(draft);
-                added.drafts++;
-            } else {
-                skipped.drafts++;
-            }
-        });
-    });
-
-    // ---- 3. MERGE RR DRAFTS (Rate Requests) ----
-    if (importedDb.drafts && importedDb.drafts.rr) {
-        if (!db.drafts.rr) db.drafts.rr = [];
-        
-        importedDb.drafts.rr.forEach(rr => {
-            if (!rr.quoteNumber) {
-                db.drafts.rr.push(rr);
-                added.rr++;
-                return;
-            }
-            const exists = db.drafts.rr.some(existing => 
-                existing.quoteNumber === rr.quoteNumber
-            );
-            if (!exists) {
-                db.drafts.rr.push(rr);
-                added.rr++;
-            } else {
-                skipped.rr++;
-            }
-        });
-    }
-
-    // ---- 4. MERGE RATE SHEET ----
-    if (importedDb.rateSheet && importedDb.rateSheet.length > 0) {
-        if (!db.rateSheet) db.rateSheet = [];
-        
-        importedDb.rateSheet.forEach(rate => {
-            const exists = db.rateSheet.some(existing => 
-                existing.id === rate.id || 
-                (existing.carrierName === rate.carrierName && 
-                 existing.pol === rate.pol && 
-                 existing.pod === rate.pod && 
-                 existing.containerType === rate.containerType &&
-                 existing.freightAmount === rate.freightAmount)
-            );
-            if (!exists) {
-                // Ensure it has an ID
-                if (!rate.id) rate.id = 'RS-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substr(2, 4);
-                db.rateSheet.push(rate);
-                added.ratesheet++;
-            } else {
-                skipped.ratesheet++;
-            }
-        });
-    }
-
-    // ---- 5. MERGE SHIPMENTS ----
-    if (importedDb.shipments && importedDb.shipments.length > 0) {
-        if (!db.shipments) db.shipments = [];
-        
-        importedDb.shipments.forEach(ship => {
-            const exists = db.shipments.some(existing => 
-                existing.code === ship.code || 
-                (existing.jobNo === ship.jobNo && existing.mode === ship.mode)
-            );
-            if (!exists) {
-                db.shipments.push(ship);
-                added.shipments++;
-            } else {
-                skipped.shipments++;
-            }
-        });
-    }
-
-    // ---- 6. MERGE BL DRAFTS ----
-    if (importedDb.bldrafts && importedDb.bldrafts.length > 0) {
-        if (!db.bldrafts) db.bldrafts = [];
-        
-        importedDb.bldrafts.forEach(bl => {
-            const exists = db.bldrafts.some(existing => 
-                existing.blNumber === bl.blNumber
-            );
-            if (!exists) {
-                db.bldrafts.push(bl);
-                added.bldrafts++;
-            } else {
-                skipped.bldrafts++;
-            }
-        });
-    }
-
-    // ---- 7. MERGE MASTER DATA (POL, POD, CARRIERS, CONTAINERS, INCOTERMS) ----
-    const masterKeys = ['pol', 'pod', 'carriers', 'containers', 'incoterms'];
-    masterKeys.forEach(key => {
-        if (!importedDb[key] || !Array.isArray(importedDb[key])) return;
-        if (!db[key]) db[key] = [];
-        
-        importedDb[key].forEach(item => {
-            if (item && typeof item === 'string' && !db[key].includes(item)) {
-                db[key].push(item);
-            }
-        });
-    });
-
-    // ---- 8. MERGE EXCHANGE RATES ----
-    if (importedDb.exchangeRates && typeof importedDb.exchangeRates === 'object') {
-        if (!db.exchangeRates) db.exchangeRates = { INR: 1 };
-        Object.keys(importedDb.exchangeRates).forEach(currency => {
-            if (currency !== 'INR') {
-                db.exchangeRates[currency] = importedDb.exchangeRates[currency];
-            }
-        });
-    }
-
-    // ---- 9. MERGE USERS ----
-    if (importedDb.users && importedDb.users.length > 0) {
-        if (!db.users) db.users = [];
-        
-        importedDb.users.forEach(user => {
-            if (!user.id) return;
-            const exists = db.users.some(existing => existing.id === user.id);
-            if (!exists) {
-                db.users.push(user);
-            }
-        });
-    }
-
-    // ---- 10. MERGE DEFAULT CHARGES ----
-    ['defaultSeaCharges', 'defaultAirCharges', 'defaultLclCharges'].forEach(key => {
-        if (!importedDb[key] || !Array.isArray(importedDb[key])) return;
-        if (!db[key]) db[key] = [];
-        
-        importedDb[key].forEach(charge => {
-            // Check duplicate by pol + commodity
-            const exists = db[key].some(existing => 
-                existing.pol === charge.pol && 
-                existing.commodity === charge.commodity
-            );
-            if (!exists) {
-                db[key].push(charge);
-            }
-        });
-    });
-
-    // ---- 11. MERGE CARRIER CHARGES ----
-    ['carrierChargesSeaLcl', 'carrierChargesAir'].forEach(key => {
-        if (!importedDb[key] || !Array.isArray(importedDb[key])) return;
-        if (!db[key]) db[key] = [];
-        
-        importedDb[key].forEach(charge => {
-            // Check duplicate by carrier + pol + mode (for sea/lcl) or carrier + pol (for air)
-            let exists;
-            if (key === 'carrierChargesAir') {
-                exists = db[key].some(existing => 
-                    existing.carrier === charge.carrier && 
-                    existing.pol === charge.pol
-                );
-            } else {
-                exists = db[key].some(existing => 
-                    existing.mode === charge.mode &&
-                    existing.carrier === charge.carrier && 
-                    existing.pol === charge.pol
-                );
-            }
-            if (!exists) {
-                db[key].push(charge);
-            }
-        });
-    });
-
-    // ---- 12. MERGE CARGO STATUS & DOCS STATUS ----
-    ['cargoStatusMaster', 'docsStatusMaster'].forEach(key => {
-        if (!importedDb[key] || !Array.isArray(importedDb[key])) return;
-        if (!db[key]) db[key] = [];
-        
-        importedDb[key].forEach(item => {
-            if (item && typeof item === 'string' && !db[key].includes(item)) {
-                db[key].push(item);
-            }
-        });
-    });
-
-    // ---- 13. MERGE DETENTION LOTS & RECORDS ----
-    ['detentionLots', 'detentionRecords'].forEach(key => {
-        if (!importedDb[key] || !Array.isArray(importedDb[key])) return;
-        if (!db[key]) db[key] = [];
-        
-        importedDb[key].forEach(item => {
-            if (!item.id) return;
-            const exists = db[key].some(existing => existing.id === item.id);
-            if (!exists) {
-                db[key].push(item);
-            }
-        });
-    });
-
-    // ---- 14. MERGE TRUCKING SHIPMENTS ----
-    if (importedDb.truckingShipments && importedDb.truckingShipments.length > 0) {
-        if (!db.truckingShipments) db.truckingShipments = [];
-        
-        importedDb.truckingShipments.forEach(ship => {
-            const exists = db.truckingShipments.some(existing => existing.id === ship.id);
-            if (!exists) {
-                db.truckingShipments.push(ship);
-            }
-        });
-    }
-
-    // ---- 15. MERGE FREIGHT CALCULATIONS ----
-    if (importedDb.freightCalculations && importedDb.freightCalculations.length > 0) {
-        if (!db.freightCalculations) db.freightCalculations = [];
-        
-        importedDb.freightCalculations.forEach(calc => {
-            const exists = db.freightCalculations.some(existing => existing.id === calc.id);
-            if (!exists) {
-                db.freightCalculations.push(calc);
-            }
-        });
-    }
-
-    // ---- 16. MERGE PLANNER NOTES & TASKS ----
-    ['plannerNotes', 'plannerTasks'].forEach(key => {
-        if (!importedDb[key] || !Array.isArray(importedDb[key])) return;
-        if (!db[key]) db[key] = [];
-        
-        importedDb[key].forEach(item => {
-            if (!item.id) return;
-            const exists = db[key].some(existing => existing.id === item.id);
-            if (!exists) {
-                db[key].push(item);
-            }
-        });
-    });
-
-    // ---- 17. MERGE CBM & AIR WEIGHT RECORDS ----
-    ['cbmRecords', 'airWeightRecords'].forEach(key => {
-        if (!importedDb[key] || !Array.isArray(importedDb[key])) return;
-        if (!db[key]) db[key] = [];
-        
-        importedDb[key].forEach(item => {
-            if (!item.id) return;
-            const exists = db[key].some(existing => existing.id === item.id);
-            if (!exists) {
-                db[key].push(item);
-            }
-        });
-    });
-
-    // ---- 18. MERGE STUFFING DATA ----
-    if (importedDb.stuffing && importedDb.stuffing.length > 0) {
-        if (!db.stuffing) db.stuffing = [];
-        // Stuffing records don't have unique IDs, so we'll just append all
-        importedDb.stuffing.forEach(item => {
-            db.stuffing.push(item);
-        });
-    }
-
-    // ---- 19. MERGE HIDDEN ITEMS ----
-    if (importedDb.hiddenItems && typeof importedDb.hiddenItems === 'object') {
-        if (!db.hiddenItems) db.hiddenItems = { pol: [], pod: [], incoterms: [], containers: [], carriers: [] };
-        Object.keys(importedDb.hiddenItems).forEach(key => {
-            if (!db.hiddenItems[key]) db.hiddenItems[key] = [];
-            importedDb.hiddenItems[key].forEach(item => {
-                if (!db.hiddenItems[key].includes(item)) {
-                    db.hiddenItems[key].push(item);
-                }
-            });
-        });
-    }
-
-    // ---- 20. MERGE DSR COLUMNS ----
-    if (importedDb.dsrColumns && Array.isArray(importedDb.dsrColumns)) {
-        if (!db.dsrColumns) db.dsrColumns = ['code','shipper','pol','pod','liner','cargoStatus','docsStatus','actions'];
-        // Non-destructive import: never replace the existing column configuration.
-        // Imported columns are only added when they are missing.
-        if (importedDb.dsrColumns.length > 0) {
-            const existing = Array.isArray(db.dsrColumns) ? db.dsrColumns : [];
-            importedDb.dsrColumns.forEach(col => {
-                if (col && !existing.includes(col)) existing.push(col);
-            });
-            db.dsrColumns = existing;
-        }
-    }
-
-    // ---- 21. COMPANY INFO (only if not set) ----
-    if (importedDb.companyName && !db.companyName) {
-        db.companyName = importedDb.companyName;
-    }
-    if (importedDb.companyAddress && !db.companyAddress) {
-        db.companyAddress = importedDb.companyAddress;
-    }
-    if (importedDb.defaultUser && !db.defaultUser) {
-        db.defaultUser = importedDb.defaultUser;
-    }
-    if (importedDb.defaultCCEmailSea && !db.defaultCCEmailSea) {
-        db.defaultCCEmailSea = importedDb.defaultCCEmailSea;
-    }
-    if (importedDb.defaultCCEmailAir && !db.defaultCCEmailAir) {
-        db.defaultCCEmailAir = importedDb.defaultCCEmailAir;
-    }
-    if (importedDb.defaultCCEmailLcl && !db.defaultCCEmailLcl) {
-        db.defaultCCEmailLcl = importedDb.defaultCCEmailLcl;
-    }
-
-    // ---- BUILD SUMMARY ----
-    summary.push(`📊 MERGE SUMMARY:`);
-    summary.push(`  • Quotes: ${added.quotes} added, ${skipped.quotes} skipped (duplicates)`);
-    summary.push(`  • Drafts: ${added.drafts} added, ${skipped.drafts} skipped (duplicates)`);
-    summary.push(`  • Rate Requests: ${added.rr} added, ${skipped.rr} skipped (duplicates)`);
-    summary.push(`  • Rate Sheet: ${added.ratesheet} added, ${skipped.ratesheet} skipped (duplicates)`);
-    summary.push(`  • Shipments: ${added.shipments} added, ${skipped.shipments} skipped (duplicates)`);
-    summary.push(`  • BL Drafts: ${added.bldrafts} added, ${skipped.bldrafts} skipped (duplicates)`);
-    summary.push(`  • Master Data: Merged (POL, POD, Carriers, Containers, Incoterms)`);
-    summary.push(`  • Other Data: Users, Charges, Lots, Records merged`);
-
-    return summary.join('\n');
-}
 
 // ==================== RATE SHEET IMPORT ====================
 function importRateSheet(input) {
@@ -7399,7 +7605,7 @@ function legacy_buildPreviewHTML(data, mode, maxWidth = '100%', compact = false)
     if (mode === 'air') {
         standardRemarks = [
             "1. Rate Subject To Booking Acceptance",
-            "2. 100% Of Total Freight Charges applicable if Shipments Cancelled Within 48HR Before Delivery Cut-Off Time",
+            "2. 100% Of Total Freight Charges applicable if Shipments Cancelled Within 48 Hours Before The Delivery Cut-Off Time",
             "3. GST At Actual",
             "4. Rest other charges if any at actual as per receipt.",
             "5. Above rates are valid for 3 days",
@@ -10092,13 +10298,14 @@ function populateDropdowns() {
 // ==================== DEFAULT CHARGES MASTER ====================
 function renderDefaultChargesMaster(mode) {
     const search = (document.getElementById(`dc-${mode}-search`)?.value || '').toLowerCase();
-    let records = [];
-    if (mode === 'sea') records = db.defaultSeaCharges || [];
-    else if (mode === 'air') records = db.defaultAirCharges || [];
-    else records = db.defaultLclCharges || [];
+    const sourceRecords = mode === 'sea' ? (db.defaultSeaCharges || []) :
+        mode === 'air' ? (db.defaultAirCharges || []) : (db.defaultLclCharges || []);
+    const records = sourceRecords
+        .map((rec, originalIdx) => ({ rec, originalIdx }))
+        .filter(({ rec }) => !rec.deleted);
 
     const filterPol = document.getElementById(`dc-${mode}-filter-pol`)?.value || '';
-    const filtered = records.map((rec, originalIdx) => ({ rec, originalIdx }))
+    const filtered = records
         .filter(({ rec }) => {
             const text = `${rec.pol || ''} ${rec.commodity || ''}`.toLowerCase();
             if (search && !text.includes(search)) return false;
@@ -10168,7 +10375,7 @@ function renderSeaTHCMaster(){
     const disp=document.getElementById('sea-thc-master-table');
     if(!disp) return;
     const search=(document.getElementById('sea-thc-search')?.value||'').toLowerCase().trim();
-    const rows=(db.seaTHCRates||[]).map((rec,idx)=>({rec,idx})).filter(({rec})=>{
+    const rows=(db.seaTHCRates||[]).map((rec,idx)=>({rec,idx})).filter(({rec})=>!rec.deleted).filter(({rec})=>{
         const text=`${rec.carrier||''} ${rec.pol||''} ${rec.commodity||''} ${rec.currency||''}`.toLowerCase();
         return !search || text.includes(search);
     });
@@ -10229,7 +10436,7 @@ function saveSeaTHC(idx){
     saveDB(); closeModal('previewModal'); renderSeaTHCMaster(); autoBackup();
     alert(idx===null?'✅ SEA THC added.':'✅ SEA THC updated.');
 }
-function deleteSeaTHC(idx){ const rec=db.seaTHCRates?.[idx]; if(!rec)return alert('Record not found.'); if(!confirm(`Delete SEA THC rate for ${rec.carrier} / ${rec.pol} / ${rec.commodity} / ${rec.currency}?`))return; db.seaTHCRates.splice(idx,1); saveDB(); renderSeaTHCMaster(); autoBackup(); }
+function deleteSeaTHC(idx){ const rec=db.seaTHCRates?.[idx]; if(!rec||rec.deleted)return alert('Record not found.'); if(!confirm(`Delete SEA THC rate for ${rec.carrier} / ${rec.pol} / ${rec.commodity} / ${rec.currency}?`))return; markMasterChargeDeleted(db.seaTHCRates,idx); saveDB(); renderSeaTHCMaster(); autoBackup(); }
 function duplicateSeaTHC(idx){ const rec=db.seaTHCRates?.[idx]; if(!rec)return alert('Record not found.'); const copy={...rec,updated:new Date().toISOString()}; copy.carrier=rec.carrier+' (Copy)'; db.seaTHCRates.push(copy); saveDB(); renderSeaTHCMaster(); autoBackup(); }
 function previewSeaTHC(idx){ const r=db.seaTHCRates?.[idx]; if(!r)return alert('Record not found.'); document.getElementById('modal-title').textContent='SEA THC Rate Preview'; document.getElementById('previewBody').innerHTML=`<div class="preview-card"><h3>Dedicated SEA THC</h3><div class="preview-grid"><div class="item"><span class="label">Carrier</span><span class="value">${r.carrier}</span></div><div class="item"><span class="label">POL</span><span class="value">${r.pol}</span></div><div class="item"><span class="label">Cargo</span><span class="value">${r.commodity}</span></div><div class="item"><span class="label">Currency</span><span class="value">${r.currency}</span></div><div class="item"><span class="label">THC 20 GP</span><span class="value">${r.thc20??'—'}</span></div><div class="item"><span class="label">THC 40 HC</span><span class="value">${r.thc40??'—'}</span></div><div class="item"><span class="label">Valid From</span><span class="value">${r.validFrom||'—'}</span></div><div class="item"><span class="label">Valid To</span><span class="value">${r.validTo||'—'}</span></div></div></div>`; openModal('previewModal'); }
 
@@ -10250,6 +10457,7 @@ function renderCarrierChargesMaster(type) {
     }
 
     const filtered = records.map((rec, originalIdx) => ({ rec, originalIdx }))
+        .filter(({ rec }) => !rec.deleted)
         .filter(({ rec }) => {
             // Container no longer used for display, but we keep it in data for backward compatibility
             const text = `${rec.carrier} ${rec.pol}`.toLowerCase();
@@ -11187,10 +11395,22 @@ function deleteDefaultChargeEntry(mode, idx) {
         alert('Record already deleted.');
         return;
     }
-    arr.splice(idx, 1);
+    if (!markMasterChargeDeleted(arr, idx)) return alert('Record not found.');
     saveDB();
     renderDefaultChargesMaster(mode);
     autoBackup();
+}
+
+// Soft-delete master charge records so SQLite/backup merge cannot resurrect them.
+function markMasterChargeDeleted(arr, idx) {
+    const rec = arr?.[idx];
+    if (!rec) return false;
+    const now = new Date().toISOString();
+    rec.deleted = true;
+    rec.deletedAt = now;
+    rec.updatedAt = now;
+    rec.updated = now;
+    return true;
 }
 
 // ==================== PREVIEW FUNCTIONS ====================
@@ -11361,7 +11581,7 @@ function deleteCarrierChargeEntry(type, idx) {
         alert('Record already deleted.');
         return;
     }
-    arr.splice(idx, 1);
+    if (!markMasterChargeDeleted(arr, idx)) return alert('Record not found.');
     saveDB();
     renderCarrierChargesMaster(type);
     autoBackup();
@@ -15018,6 +15238,186 @@ window.saveStuffingData = saveStuffingData;
 window.initStuffingPlanning = initStuffingPlanning;
 
 
+
+// ============================================================
+// CUSTOMER FOLLOWUP — REPORTING COMMAND CENTER INNER TAB
+// ============================================================
+const CUSTOMER_FOLLOWUP_PAGE_KEY = 'customerFollowupPage';
+const CUSTOMER_FOLLOWUP_SIZE_KEY = 'customerFollowupPageSize';
+
+function ensureCustomerFollowupStore() {
+    if (!Array.isArray(db.customerFollowups)) db.customerFollowups = [];
+    return db.customerFollowups;
+}
+
+function customerFollowupEsc(v) {
+    return typeof escapeHtml === 'function' ? escapeHtml(v == null ? '' : String(v)) : String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function customerFollowupDateValue(v) {
+    if (!v) return '';
+    const d = String(v).slice(0,10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : '';
+}
+
+function customerFollowupStatusClass(status) {
+    return String(status || 'PENDING').toLowerCase().replace(/\s+/g,'-');
+}
+
+function openCustomerFollowupForm(index = -1) {
+    const form = document.getElementById('customer-followup-form');
+    if (!form) return;
+    const rows = ensureCustomerFollowupStore();
+    const rec = index >= 0 && rows[index] ? rows[index] : {};
+    const editing = index >= 0;
+    form.style.display = 'block';
+    form.innerHTML = `
+      <div class="customer-followup-form-head"><strong>${editing ? '✏️ Edit Customer Followup' : '＋ Add Customer Followup'}</strong><button class="btn btn-clear btn-sm" type="button" onclick="closeCustomerFollowupForm()">✕ Close</button></div>
+      <div class="customer-followup-form-grid">
+        <div class="form-group"><label>Customer Name *</label><input id="cf-form-customer" type="text" value="${customerFollowupEsc(rec.customerName || '')}"/></div>
+        <div class="form-group"><label>Contact Person</label><input id="cf-form-contact" type="text" value="${customerFollowupEsc(rec.contactPerson || '')}"/></div>
+        <div class="form-group"><label>Phone No.</label><input id="cf-form-phone" type="tel" value="${customerFollowupEsc(rec.phone || '')}"/></div>
+        <div class="form-group"><label>Email Id</label><input id="cf-form-email" type="email" value="${customerFollowupEsc(rec.email || '')}"/></div>
+        <div class="form-group"><label>Stuffing Date</label><input id="cf-form-stuffing" type="date" value="${customerFollowupDateValue(rec.stuffingDate)}"/></div>
+        <div class="form-group"><label>POL</label><input id="cf-form-pol" type="text" value="${customerFollowupEsc(rec.pol || '')}"/></div>
+        <div class="form-group"><label>POD</label><input id="cf-form-pod" type="text" value="${customerFollowupEsc(rec.pod || '')}"/></div>
+        <div class="form-group"><label>Cargo</label><input id="cf-form-cargo" type="text" value="${customerFollowupEsc(rec.cargo || '')}"/></div>
+        <div class="form-group"><label>Inventory</label><input id="cf-form-inventory" type="text" value="${customerFollowupEsc(rec.inventory || '')}"/></div>
+        <div class="form-group"><label>Call Time</label><input id="cf-form-calltime" type="time" value="${customerFollowupEsc(rec.callTime || '')}"/></div>
+        <div class="form-group"><label>Status</label><select id="cf-form-status"><option ${(!rec.status || rec.status==='FOLLOW UP')?'selected':''}>FOLLOW UP</option><option ${rec.status==='IN PROGRESS'?'selected':''}>IN PROGRESS</option><option ${rec.status==='PENDING'?'selected':''}>PENDING</option><option ${rec.status==='DONE'?'selected':''}>DONE</option></select></div>
+      </div>
+      <div class="customer-followup-form-actions"><button class="btn btn-success btn-sm" type="button" onclick="saveCustomerFollowup(${index})">💾 Save</button><button class="btn btn-clear btn-sm" type="button" onclick="closeCustomerFollowupForm()">Cancel</button></div>`;
+    form.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function closeCustomerFollowupForm() {
+    const form = document.getElementById('customer-followup-form');
+    if (form) { form.style.display='none'; form.innerHTML=''; }
+}
+
+function saveCustomerFollowup(index = -1) {
+    const rows = ensureCustomerFollowupStore();
+    const customerName = (document.getElementById('cf-form-customer')?.value || '').trim();
+    if (!customerName) return alert('Customer Name is required.');
+    const now = new Date().toISOString();
+    const rec = {
+        customerName,
+        contactPerson:(document.getElementById('cf-form-contact')?.value || '').trim(),
+        phone:(document.getElementById('cf-form-phone')?.value || '').trim(),
+        email:(document.getElementById('cf-form-email')?.value || '').trim(),
+        emptyColumn:'',
+        stuffingDate:document.getElementById('cf-form-stuffing')?.value || '',
+        pol:(document.getElementById('cf-form-pol')?.value || '').trim(),
+        pod:(document.getElementById('cf-form-pod')?.value || '').trim(),
+        cargo:(document.getElementById('cf-form-cargo')?.value || '').trim(),
+        inventory:(document.getElementById('cf-form-inventory')?.value || '').trim(),
+        callTime:document.getElementById('cf-form-calltime')?.value || '',
+        status:document.getElementById('cf-form-status')?.value || 'FOLLOW UP',
+        lastModified:now
+    };
+    if (index >= 0 && rows[index]) {
+        rows[index] = {...rows[index], ...rec};
+    } else {
+        rec.createdAt=now;
+        rows.push(rec);
+    }
+    saveDB();
+    closeCustomerFollowupForm();
+    renderCustomerFollowup();
+}
+
+function deleteCustomerFollowup(index) {
+    const rows=ensureCustomerFollowupStore();
+    if (!rows[index]) return;
+    if (!confirm(`Delete Customer Followup for ${rows[index].customerName || 'this customer'}?`)) return;
+    rows.splice(index,1);
+    saveDB();
+    renderCustomerFollowup();
+}
+
+function clearCustomerFollowupFilters() {
+    ['cf-search','cf-from','cf-to','cf-pol','cf-pod'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
+    const status=document.getElementById('cf-status'); if(status) status.value='';
+    sessionStorage.setItem(CUSTOMER_FOLLOWUP_PAGE_KEY,'1');
+    renderCustomerFollowup();
+}
+
+function setCustomerFollowupPageSize(value) {
+    const n=Math.max(1,Number(value)||15);
+    sessionStorage.setItem(CUSTOMER_FOLLOWUP_SIZE_KEY,String(n));
+    sessionStorage.setItem(CUSTOMER_FOLLOWUP_PAGE_KEY,'1');
+    renderCustomerFollowup();
+}
+
+function renderCustomerFollowup() {
+    const body=document.getElementById('customer-followup-detail');
+    if (!body) return;
+    const rows=ensureCustomerFollowupStore();
+    const search=(document.getElementById('cf-search')?.value||'').trim().toLowerCase();
+    const status=document.getElementById('cf-status')?.value||'';
+    const from=document.getElementById('cf-from')?.value||'';
+    const to=document.getElementById('cf-to')?.value||'';
+    const pol=(document.getElementById('cf-pol')?.value||'').trim().toLowerCase();
+    const pod=(document.getElementById('cf-pod')?.value||'').trim().toLowerCase();
+    const filtered=rows.filter(r=>{
+        const hay=[r.customerName,r.contactPerson,r.phone,r.email,r.cargo,r.inventory,r.pol,r.pod,r.callTime,r.status].join(' ').toLowerCase();
+        const date=customerFollowupDateValue(r.stuffingDate);
+        return (!search || hay.includes(search)) && (!status || (r.status||'PENDING')===status) && (!from || (date && date>=from)) && (!to || (date && date<=to)) && (!pol || String(r.pol||'').toLowerCase().includes(pol)) && (!pod || String(r.pod||'').toLowerCase().includes(pod));
+    });
+    const size=Math.max(1,Number(sessionStorage.getItem(CUSTOMER_FOLLOWUP_SIZE_KEY)||document.getElementById('customer-followup-page-size')?.value||15));
+    const totalPages=Math.max(1,Math.ceil(filtered.length/size));
+    let page=Math.max(1,Number(sessionStorage.getItem(CUSTOMER_FOLLOWUP_PAGE_KEY)||1));
+    if(page>totalPages) page=totalPages;
+    sessionStorage.setItem(CUSTOMER_FOLLOWUP_PAGE_KEY,String(page));
+    const start=(page-1)*size;
+    const view=filtered.slice(start,start+size);
+    body.innerHTML=view.length ? view.map((r,i)=>{
+        const idx=rows.indexOf(r);
+        const phone=r.phone ? `<a class="customer-followup-phone" href="tel:${customerFollowupEsc(r.phone)}">${customerFollowupEsc(r.phone)} ☎</a>` : '-';
+        const time=r.callTime ? customerFollowupEsc(r.callTime) : '-';
+        const date=r.stuffingDate ? customerFollowupEsc(r.stuffingDate) : '-';
+        const st=r.status||'PENDING';
+        return `<tr><td>${start+i+1}</td><td><strong>${customerFollowupEsc(r.customerName||'-')}</strong></td><td>${customerFollowupEsc(r.contactPerson||'-')}</td><td>${phone}</td><td>${date}</td><td>${customerFollowupEsc(r.pol||'-')}</td><td>${customerFollowupEsc(r.pod||'-')}</td><td>${customerFollowupEsc(r.cargo||'-')}</td><td>${customerFollowupEsc(r.inventory||'-')}</td><td>${time}</td><td><span class="customer-followup-status status-${customerFollowupStatusClass(st)}">${customerFollowupEsc(st)}</span></td><td><div class="customer-followup-actions"><button class="btn btn-info btn-sm" onclick="openCustomerFollowupForm(${idx})">✏️</button><button class="btn btn-clear btn-sm" onclick="deleteCustomerFollowup(${idx})">🗑️</button></div></td></tr>`;
+    }).join('') : '<tr><td colspan="14" class="report-empty">No Customer Followup records found.</td></tr>';
+    const count=document.getElementById('customer-followup-count');
+    if(count) count.textContent=filtered.length ? `Showing ${start+1} to ${Math.min(start+size,filtered.length)} of ${filtered.length} entries` : 'Showing 0 entries';
+    const sizeEl=document.getElementById('customer-followup-page-size'); if(sizeEl) sizeEl.value=String(size);
+    const pg=document.getElementById('customer-followup-pagination');
+    if(pg){
+        const btn=(label,p,disabled=false,active=false)=>`<button type="button" class="${active?'active':''}" ${disabled?'disabled':''} onclick="goCustomerFollowupPage(${p})">${label}</button>`;
+        let html=btn('‹',Math.max(1,page-1),page===1);
+        const maxButtons=5; let a=Math.max(1,page-2), b=Math.min(totalPages,a+maxButtons-1); a=Math.max(1,b-maxButtons+1);
+        for(let p=a;p<=b;p++) html+=btn(String(p),p,false,p===page);
+        html+=btn('›',Math.min(totalPages,page+1),page===totalPages); pg.innerHTML=html;
+    }
+}
+
+function goCustomerFollowupPage(page) {
+    sessionStorage.setItem(CUSTOMER_FOLLOWUP_PAGE_KEY,String(Math.max(1,Number(page)||1)));
+    renderCustomerFollowup();
+}
+
+function importCustomerFollowups(file) {
+    if(!file) return;
+    if(typeof XLSX==='undefined') return alert('Excel library is not loaded.');
+    const reader=new FileReader();
+    reader.onload=e=>{
+        try{
+            const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+            const ws=wb.Sheets[wb.SheetNames[0]];
+            const data=XLSX.utils.sheet_to_json(ws,{defval:''});
+            const rows=ensureCustomerFollowupStore(); const now=new Date().toISOString();
+            data.forEach(x=>{
+                const get=(...keys)=>{ for(const k of keys){ if(x[k]!==undefined && x[k]!==null) return String(x[k]).trim(); } return ''; };
+                const customer=get('Customer Name','Customer','customerName'); if(!customer) return;
+                rows.push({customerName:customer,contactPerson:get('Contact Person','contactPerson'),phone:get('Phone No.','Phone','phone'),email:get('Email Id','Email','email'),emptyColumn:'',stuffingDate:get('Stuffing Date','stuffingDate'),pol:get('POL','pol'),pod:get('POD','pod'),cargo:get('Cargo','cargo'),inventory:get('Inventory','inventory'),callTime:get('Call Time','callTime'),status:(get('Status','status')||'FOLLOW UP').toUpperCase(),createdAt:now,lastModified:now});
+            });
+            saveDB(); renderCustomerFollowup(); alert(`${data.length} row(s) imported.`);
+        }catch(err){ console.error(err); alert('Unable to import Customer Followup file.'); }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
 /* ===== END JS/09-measurement-tools.js ===== */
 
 /* ===== BEGIN JS/10-us-trucking.js ===== */
@@ -16983,7 +17383,7 @@ function legacy_buildCompactEmailHTML(data, mode) {
     if (mode === 'air') {
         standardRemarks = [
             "1. Rate Subject To Booking Acceptance",
-            "2. 100% Of Total Freight Charges applicable if Shipments Cancelled Within 48HR Before Delivery Cut-Off Time",
+            "2. 100% Of Total Freight Charges applicable if Shipments Cancelled Within 48 Hours Before The Delivery Cut-Off Time",
             "3. GST At Actual",
             "4. Rest other charges if any at actual as per receipt.",
             "5. Above rates are valid for 3 days",
@@ -18714,6 +19114,18 @@ function lcDefaultValue(rec, charge, container) {
 
 function lcContainerRowsForDefault(mode, rec) {
     if (mode !== 'sea') return [{ container: 'ALL', currency: null, charges: rec.charges || {} }];
+    const explicit = String(rec.container || '').trim().toUpperCase();
+    if (explicit && explicit !== 'ALL' && explicit !== 'ALL / GENERAL') {
+        const container = explicit.includes('20') ? '20 GP' : explicit.includes('40 HC') || explicit === '40HQ' ? '40 HC' : explicit.includes('40 GP') ? '40 GP' : explicit;
+        const charges = {};
+        lcDefaultColumns(mode).forEach(col => {
+            const direct = rec.charges?.[col];
+            const suffixed = container === '20 GP' ? rec.charges?.[col + '_20'] : (container === '40 GP' || container === '40 HC') ? rec.charges?.[col + '_40'] : null;
+            const v = direct || suffixed;
+            if (v) charges[col] = v;
+        });
+        return [{ container, charges }];
+    }
     const containers = [];
     const keys = Object.keys(rec.charges || {});
     if (keys.some(k => k.endsWith('_20'))) containers.push('20 GP');
@@ -18794,124 +19206,66 @@ function bulkExportDefaultCharges(){
 
 // ============================ DEFAULT IMPORT =============================
 function bulkImportDefaultCharges(input){
-    if(!input.files||!input.files[0]) return alert('Please select an Excel file.');
-    if(!lcEnsureXLSX()) return;
-    const file=input.files[0];
+    const file=input.files?.[0];
+    if(!file)return alert('Please select an Excel file.');
+    if(!lcEnsureXLSX())return;
     const reader=new FileReader();
     reader.onload=function(e){
         try{
             const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});
-            const errors=[],warnings=[];
-            const stats={new:0,merged:0,duplicates:0,values:0,skippedValues:0};
-            const sheetMap={sea:'SEA - DEFAULT CHARGES',air:'AIR - DEFAULT CHARGES',lcl:'LCL - DEFAULT CHARGES'};
-            let sheetsProcessed=0;
-
-            Object.entries(sheetMap).forEach(([mode,sheetName])=>{
-                const sheet=wb.Sheets[sheetName];
-                if(!sheet){ warnings.push(`Missing sheet: ${sheetName}`); return; }
-                sheetsProcessed++;
+            const sheetNames=['SEA - DEFAULT CHARGES','AIR - DEFAULT CHARGES','LCL - DEFAULT CHARGES'];
+            const plan=[];
+            const errors=[];
+            const seen=new Set();
+            sheetNames.forEach(sheetName=>{
+                const sheet=wb.Sheets[sheetName]; if(!sheet)return;
+                const mode=sheetName.startsWith('SEA')?'sea':sheetName.startsWith('AIR')?'air':'lcl';
                 const rows=XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false});
-                if(!rows.length){ warnings.push(`${sheetName}: no data rows.`); return; }
-
-                const required=['MODE','POL','HAZ / NON HAZ','CONTAINER'];
-                const headers=Object.keys(rows[0]);
-                required.filter(h=>!headers.includes(h)).forEach(h=>errors.push(`${sheetName}: missing column ${h}`));
-                if(required.some(h=>!headers.includes(h))) return;
-
-                const columns=lcDefaultColumns(mode);
-                const importedKeys=new Set();
-
+                const cols=lcDefaultColumns(mode);
                 rows.forEach((row,i)=>{
-                    const n=i+2;
-                    const rowMode=lcNormalize(row.MODE).toLowerCase();
-                    const pol=lcNormalize(row.POL);
-                    const haz=lcNormalize(row['HAZ / NON HAZ']);
-                    const raw=lcNormalize(row.CONTAINER);
-                    const container=mode==='sea'
-                        ?(raw==='20GP'||raw==='20 GP'?'20 GP':raw==='40GP'||raw==='40 GP'?'40 GP':raw==='40HC'||raw==='40 HC'?'40 HC':raw)
-                        :'ALL';
-
-                    lcValidateDates(row,n,errors,warnings);
-                    if(rowMode!==mode) errors.push(`${sheetName} Row ${n}: MODE must be ${mode.toUpperCase()}.`);
-                    if(!pol) errors.push(`${sheetName} Row ${n}: POL is missing.`);
-                    if(!['HAZ','NON HAZ'].includes(haz)) errors.push(`${sheetName} Row ${n}: HAZ / NON HAZ must be HAZ or NON HAZ.`);
-                    if(mode==='sea'&&!['20 GP','40 GP','40 HC','ALL'].includes(container)) errors.push(`${sheetName} Row ${n}: invalid CONTAINER ${raw}.`);
-
-                    const parsed={};
-                    columns.forEach(col=>{
-                        const rawCell=row[col];
-                        if(rawCell===undefined || rawCell===null || String(rawCell).trim()==='') return;
-                        const v=lcParseMoney(rawCell);
-                        if(!v){
-                            errors.push(`${sheetName} Row ${n}: invalid amount in ${col} (${rawCell}).`);
-                            return;
-                        }
-                        // Currency is determined independently from the cell itself.
-                        // '$' anywhere in the cell => USD; otherwise INR.
-                        parsed[col]=v;
-                        stats.values++;
-                    });
-                    if(!Object.keys(parsed).length) warnings.push(`${sheetName} Row ${n}: no charge values found.`);
-
-                    // IMPORTANT: Container is part of the imported row, but NOT the base
-                    // database record. SEA container-specific values are merged into the
-                    // same POL + HAZ/NON HAZ record using _20 / _40 suffixes.
-                    const logicalKey=`${mode}|${pol}|${haz}`;
-                    const rowKey=`${logicalKey}|${container}`;
-                    if(importedKeys.has(rowKey)) stats.duplicates++;
-                    importedKeys.add(rowKey);
-
-                    let arr=mode==='sea'?db.defaultSeaCharges:mode==='air'?db.defaultAirCharges:db.defaultLclCharges;
-                    let rec=arr.find(r=>lcNormalize(r.pol)===pol&&lcNormalize(r.commodity)===haz);
-
-                    if(!rec){
-                        rec={pol,commodity:haz,charges:{},createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
-                        arr.push(rec);
-                        stats.new++;
-                    }else{
-                        stats.merged++;
-                    }
-
-                    if(row['VALID FROM'] && !rec.validFrom) rec.validFrom=String(row['VALID FROM']).trim();
-                    if(row['VALID TO'] && !rec.validTo) rec.validTo=String(row['VALID TO']).trim();
-
-                    Object.entries(parsed).forEach(([charge,val])=>{
-                        if(mode==='sea'){
-                            const suffix=container==='20 GP'?'_20':(container==='40 GP'||container==='40 HC'?'_40':'');
-                            const key=charge+suffix;
-                            // Non-destructive: never overwrite an existing populated value.
-                            if(!rec.charges[key] || Number(rec.charges[key].amount||0)===0){
-                                rec.charges[key]={amount:val.amount,currency:val.currency,buyAmount:val.amount,buyCurrency:val.currency};
-                            }else{
-                                stats.skippedValues++;
-                            }
-                        }else{
-                            // AIR/LCL: preserve existing charge value; add only missing values.
-                            if(!rec.charges[charge] || Number(rec.charges[charge].amount||0)===0){
-                                rec.charges[charge]={amount:val.amount,currency:val.currency,buyAmount:val.amount,buyCurrency:val.currency};
-                            }else{
-                                stats.skippedValues++;
-                            }
+                    const n=i+2, pol=lcNormalize(row.POL), haz=lcNormalize(row['HAZ / NON HAZ']);
+                    const raw=lcNormalize(row.CONTAINER)||'ALL';
+                    const container=mode==='sea'?(raw==='20GP'?'20 GP':raw==='40GP'?'40 GP':raw==='40HC'?'40 HC':raw):'ALL';
+                    if(!pol||!['HAZ','NON HAZ'].includes(haz))return errors.push(`${sheetName} row ${n}: POL and HAZ/NON HAZ are required.`);
+                    const key=`${mode}|${pol}|${haz}|${container}`;
+                    if(seen.has(key))return errors.push(`${sheetName} row ${n}: duplicate key ${key}.`);
+                    seen.add(key);
+                    const charges={};
+                    cols.forEach(col=>{
+                        const rawVal=row[col];
+                        if(rawVal!==undefined&&String(rawVal).trim()!==''){
+                            const v=lcParseMoney(rawVal);
+                            if(!v)errors.push(`${sheetName} row ${n}: invalid amount in ${col}.`);
+                            else charges[col]=v;
                         }
                     });
-                    rec.updatedAt=new Date().toISOString();
+                    plan.push({mode,pol,haz,container,charges,validFrom:String(row['VALID FROM']||''),validTo:String(row['VALID TO']||'')});
                 });
             });
+            if(!plan.length)throw new Error('No supported Default Charges rows found.');
+            if(errors.length)throw new Error(errors.slice(0,30).join('\n'));
+            if(!confirm(`Import ${plan.length} Default Charges row(s) into Local Charges? Existing matching records will be updated/merged.`))return;
 
-            if(!sheetsProcessed) throw new Error('No recognized Default Charges sheets found.');
-            if(errors.length){
-                alert(`❌ Import Default validation failed.\n\n${errors.slice(0,25).join('\n')}${errors.length>25?'\n...more errors':''}`);
-                return;
-            }
-
-            saveDB();
-            renderDefaultChargesMaster(currentLocalTab||'sea');
-            autoBackup();
-            alert(`✅ Import Default completed.\nSheets processed: ${sheetsProcessed}/3\nNew records: ${stats.new}\nMerged existing records: ${stats.merged}\nDuplicate import rows: ${stats.duplicates}\nCharge values read: ${stats.values}\nExisting values preserved: ${stats.skippedValues}\nWarnings: ${warnings.length}${warnings.length?'\n\n'+warnings.slice(0,8).join('\n'):''}`);
-        }catch(err){
-            console.error(err);
-            alert('❌ Import Default failed: '+err.message);
-        }finally{input.value='';}
+            let added=0,updated=0;
+            plan.forEach(item=>{
+                const arr=item.mode==='sea'?db.defaultSeaCharges:item.mode==='air'?db.defaultAirCharges:db.defaultLclCharges;
+                const itemContainer=item.mode==='sea'?item.container:'ALL';
+                let rec=arr.find(r=>!r.deleted&&lcNormalize(r.pol)===item.pol&&lcNormalize(r.commodity)===item.haz&&lcNormalize(r.container||'ALL')===itemContainer);
+                if(!rec){rec={mode:item.mode,pol:item.pol,commodity:item.haz,container:itemContainer,charges:{},createdAt:new Date().toISOString()};arr.push(rec);added++;}
+                else updated++;
+                rec.charges=rec.charges||{};
+                Object.entries(item.charges).forEach(([k,v])=>{
+                    const suffix=item.mode==='sea'?(item.container==='20 GP'?'_20':item.container==='40 GP'||item.container==='40 HC'?'_40':''):'';
+                    rec.charges[k+suffix]={...v,buyAmount:v.amount,buyCurrency:v.currency};
+                });
+                if(item.validFrom)rec.validFrom=item.validFrom;
+                if(item.validTo)rec.validTo=item.validTo;
+                rec.deleted=false;delete rec.deletedAt;const now=new Date().toISOString();rec.updated=now;rec.updatedAt=now;
+            });
+            saveDB();renderDefaultChargesMaster(currentLocalTab||'sea');autoBackup();
+            alert(`✅ Default Charges imported successfully.\nAdded: ${added}\nUpdated/Merged: ${updated}`);
+        }catch(err){console.error(err);alert('❌ Default Charges import failed:\n'+err.message);}
+        finally{input.value='';}
     };
     reader.readAsArrayBuffer(file);
 }
@@ -18926,28 +19280,35 @@ function bulkExportCarrierCharges(){
         {mode:'lcl',sheet:'LCL - LOCAL CHARGES'}
     ];
     modes.forEach(({mode,sheet})=>{
-        const records=lcGetCarrierRecords(mode)||[];
+        const records=(lcGetCarrierRecords(mode)||[]).filter(r=>!r.deleted);
         const columns=lcCarrierColumns(mode);
-        const groups={};
+        const rows=[];
         records.forEach(rec=>{
-            const key=`${rec.carrier||''}|${rec.commodity||''}`;
-            if(!groups[key]) groups[key]={rec,charges:{}};
-            Object.entries(rec.charges||{}).forEach(([k,v])=>{if(/^THC(?:_|$)/i.test(k))return;groups[key].charges[k]=v;});
+            const row={
+                MODE:mode.toUpperCase(),
+                CARRIER:rec.carrier||'',
+                POL:rec.pol||'',
+                CARGO:rec.commodity||'',
+                CONTAINER:rec.container||'ALL',
+                KEY:rec.key||[rec.carrier||'',rec.pol||'',rec.commodity||'',rec.container||'ALL'].map(v=>String(v).trim().replace(/\s+/g,' ').toUpperCase()).join('|'),
+                'VALID FROM':rec.validFrom||'',
+                'VALID TO':rec.validTo||''
+            };
+            columns.forEach(col=>row[col]=rec.charges?.[col]?lcFormatMoney(rec.charges[col]):'');
+            rows.push(row);
         });
-        const rows=Object.values(groups).map(g=>{
-            const rec=g.rec;
-            const row={MODE:mode.toUpperCase(),CARRIER:rec.carrier||'',CARGO:rec.commodity||'','VALID FROM':rec.validFrom||'','VALID TO':rec.validTo||''};
-            columns.forEach(col=>row[col]=lcFormatMoney(g.charges[col]));
-            return row;
-        });
-        const fallback={MODE:mode.toUpperCase(),CARRIER:'',CARGO:'NON HAZ','VALID FROM':'','VALID TO':''};
+        const fallback={MODE:mode.toUpperCase(),CARRIER:'',POL:'',CARGO:'NON HAZ',CONTAINER:'ALL',KEY:'','VALID FROM':'','VALID TO':''};
         columns.forEach(c=>fallback[c]='');
         XLSX.utils.book_append_sheet(wb,lcCreateSheet(rows,fallback),sheet);
     });
-    const thcRows=(db.seaTHCRates||[]).map(r=>({MODE:'SEA',CARRIER:r.carrier||'',POL:r.pol||'',CARGO:r.commodity||'',CURRENCY:r.currency||'INR','THC 20 GP':r.thc20??'','THC 40 HC':r.thc40??'','VALID FROM':r.validFrom||'','VALID TO':r.validTo||''}));
-    XLSX.utils.book_append_sheet(wb,lcCreateSheet(thcRows,{MODE:'SEA',CARRIER:'',POL:'',CARGO:'HAZ',CURRENCY:'INR','THC 20 GP':'','THC 40 HC':'','VALID FROM':'','VALID TO':''}),'SEA - THC');
+    const thcRows=(db.seaTHCRates||[]).filter(r=>!r.deleted).map(r=>({
+        MODE:'SEA',CARRIER:r.carrier||'',POL:r.pol||'',CARGO:r.commodity||'',CONTAINER:r.container||'ALL',
+        KEY:[r.carrier||'',r.pol||'',r.commodity||'',r.container||'ALL'].map(v=>String(v).trim().replace(/\s+/g,' ').toUpperCase()).join('|'),
+        CURRENCY:r.currency||'INR','THC 20 GP':r.thc20??'','THC 40 HC':r.thc40??'','VALID FROM':r.validFrom||'','VALID TO':r.validTo||''
+    }));
+    XLSX.utils.book_append_sheet(wb,lcCreateSheet(thcRows,{MODE:'SEA',CARRIER:'',POL:'',CARGO:'HAZ',CONTAINER:'ALL',KEY:'',CURRENCY:'INR','THC 20 GP':'','THC 40 HC':'','VALID FROM':'','VALID TO':''}),'SEA - THC');
     XLSX.writeFile(wb,`LOCAL_CHARGES_CARRIER_${new Date().toISOString().slice(0,10)}.xlsx`);
-    alert('✅ Carrier/Local Charges exported with 4 separate sheets:\nSEA - LOCAL CHARGES\nSEA - THC\nAIR - LOCAL CHARGES\nLCL - LOCAL CHARGES\n\nThe same workbook can be imported directly with Import Carrier.');
+    alert('✅ Carrier/Local Charges exported. The same workbook can be imported directly with Import Carrier.');
 }
 
 // ============================ CARRIER IMPORT =============================
@@ -18958,46 +19319,60 @@ function bulkImportCarrierCharges(input){
     const reader=new FileReader();
     reader.onload=function(e){
         try{
-            const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
-            const errors=[],warnings=[],stats={new:0,updated:0,duplicates:0,values:0};
+            const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});
+            const errors=[],warnings=[],plan=[];
+            const stats={new:0,merged:0,duplicates:0,values:0};
             const modeSheets={sea:'SEA - LOCAL CHARGES',air:'AIR - LOCAL CHARGES',lcl:'LCL - LOCAL CHARGES'};
             let sheetsProcessed=0;
             Object.entries(modeSheets).forEach(([mode,sheetName])=>{
-                const sheet=wb.Sheets[sheetName]; if(!sheet){warnings.push(`Missing sheet: ${sheetName}`);return;}
-                sheetsProcessed++; const rows=XLSX.utils.sheet_to_json(sheet,{defval:''}); if(!rows.length){warnings.push(`${sheetName}: no data rows.`);return;}
-                const required=['MODE','CARRIER','CARGO']; const headers=Object.keys(rows[0]); required.filter(h=>!headers.includes(h)).forEach(h=>errors.push(`${sheetName}: missing column ${h}`));
+                const sheet=wb.Sheets[sheetName];
+                if(!sheet){warnings.push(`Missing sheet: ${sheetName}`);return;}
+                sheetsProcessed++;
+                const rows=XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false});
+                if(!rows.length){warnings.push(`${sheetName}: no data rows.`);return;}
+                const required=['MODE','CARRIER','POL','CARGO','CONTAINER'];
+                const headers=Object.keys(rows[0]);
+                required.filter(h=>!headers.includes(h)).forEach(h=>errors.push(`${sheetName}: missing column ${h}`));
                 if(required.some(h=>!headers.includes(h))) return;
-                const columns=lcCarrierColumns(mode); const seen=new Set();
+                const columns=lcCarrierColumns(mode), seen=new Set();
                 rows.forEach((row,i)=>{
-                    const n=i+2, rowMode=lcNormalize(row.MODE).toLowerCase(), carrier=lcNormalize(row.CARRIER), cargo=lcNormalize(row.CARGO);
-                    lcValidateDates(row,n,errors,warnings);
+                    const n=i+2, rowMode=lcNormalize(row.MODE).toLowerCase(), carrier=lcNormalize(row.CARRIER), pol=lcNormalize(row.POL), cargo=lcNormalize(row.CARGO), container=lcNormalize(row.CONTAINER)||'ALL';
                     if(rowMode!==mode) errors.push(`${sheetName} Row ${n}: MODE must be ${mode.toUpperCase()}.`);
                     if(!carrier) errors.push(`${sheetName} Row ${n}: CARRIER is missing.`);
                     if(!['HAZ','NON HAZ'].includes(cargo)) errors.push(`${sheetName} Row ${n}: CARGO must be HAZ or NON HAZ.`);
-                    const parsed={}; columns.forEach(col=>{const v=lcParseMoney(row[col]);if(v){parsed[col]=v;stats.values++;}});
-                    if(!Object.keys(parsed).length) warnings.push(`${sheetName} Row ${n}: no carrier charge values found.`);
-                    const key=`${mode}|${carrier}|${cargo}`; if(seen.has(key))stats.duplicates++; seen.add(key);
-                    const arr=mode==='air'?db.carrierChargesAir:(db.carrierChargesSeaLcl||(db.carrierChargesSeaLcl=[]));
-                    let rec=arr.find(r=>(mode==='air'||r.mode===mode)&&lcNormalize(r.carrier)===carrier&&lcNormalize(r.commodity)===cargo);
-                    if(!rec){rec={carrier,commodity:cargo,charges:{},updated:new Date().toISOString()};if(mode!=='air')rec.mode=mode;arr.push(rec);stats.new++;}else{stats.updated++;}
-                    // Carrier-specific charges are global across POL/locations. Remove legacy location/container keys.
-                    rec.pol=''; rec.container=''; rec.pod='';
-                    if(row['VALID FROM'])rec.validFrom=String(row['VALID FROM']).trim();
-                    if(row['VALID TO'])rec.validTo=String(row['VALID TO']).trim();
-                    Object.entries(parsed).forEach(([k,v])=>rec.charges[k]={amount:v.amount,currency:v.currency,buyAmount:v.amount,buyCurrency:v.currency});
-                    delete rec.charges.THC; delete rec.charges.THC_20; delete rec.charges.THC_40;
-                    rec.updated=new Date().toISOString();
+                    lcValidateDates(row,n,errors,warnings);
+                    const parsed={};
+                    columns.forEach(col=>{
+                        const cell=row[col];
+                        if(cell===undefined||cell===null||String(cell).trim()==='') return;
+                        const v=lcParseMoney(cell);
+                        if(!v) errors.push(`${sheetName} Row ${n}: invalid amount in ${col} (${cell}).`);
+                        else {parsed[col]=v;stats.values++;}
+                    });
+                    const key=[mode,carrier,pol,cargo,container].join('|');
+                    if(seen.has(key)) errors.push(`${sheetName} Row ${n}: duplicate import key ${key}.`);
+                    seen.add(key);
+                    const suppliedKey=String(row.KEY||'').trim();
+                    if(suppliedKey){
+                        const expected=[carrier,pol,cargo,container].join('|');
+                        if(suppliedKey.toUpperCase().replace(/\s+/g,' ')!==expected.toUpperCase().replace(/\s+/g,' '))
+                            errors.push(`${sheetName} Row ${n}: KEY does not match Carrier/POL/Cargo/Container.`);
+                    }
+                    plan.push({mode,carrier,pol,cargo,container,parsed,validFrom:String(row['VALID FROM']||'').trim(),validTo:String(row['VALID TO']||'').trim()});
                 });
             });
-            // Dedicated SEA THC sheet. THC remains the only carrier charge that uses POL.
+
             const thcSheet=wb.Sheets['SEA - THC'];
             if(thcSheet){
-                sheetsProcessed++; const rows=XLSX.utils.sheet_to_json(thcSheet,{defval:''});
+                sheetsProcessed++;
+                const rows=XLSX.utils.sheet_to_json(thcSheet,{defval:'',raw:false});
+                const seen=new Set();
                 if(rows.length){
-                    const required=['MODE','CARRIER','POL','CARGO','CURRENCY','THC 20 GP','THC 40 HC']; const headers=Object.keys(rows[0]); required.filter(h=>!headers.includes(h)).forEach(h=>errors.push(`SEA - THC: missing column ${h}`));
-                    const seen=new Set();
+                    const required=['MODE','CARRIER','POL','CARGO','CONTAINER','CURRENCY','THC 20 GP','THC 40 HC'];
+                    const headers=Object.keys(rows[0]);
+                    required.filter(h=>!headers.includes(h)).forEach(h=>errors.push(`SEA - THC: missing column ${h}`));
                     rows.forEach((row,i)=>{
-                        const n=i+2,mode=lcNormalize(row.MODE).toLowerCase(),carrier=lcNormalize(row.CARRIER),pol=lcNormalize(row.POL),cargo=lcNormalize(row.CARGO),currency=lcNormalize(row.CURRENCY);
+                        const n=i+2,mode=lcNormalize(row.MODE).toLowerCase(),carrier=lcNormalize(row.CARRIER),pol=lcNormalize(row.POL),cargo=lcNormalize(row.CARGO),container=lcNormalize(row.CONTAINER)||'ALL',currency=lcNormalize(row.CURRENCY);
                         if(mode!=='sea')errors.push(`SEA - THC Row ${n}: MODE must be SEA.`);
                         if(!carrier)errors.push(`SEA - THC Row ${n}: CARRIER is missing.`);
                         if(!pol)errors.push(`SEA - THC Row ${n}: POL is missing.`);
@@ -19005,25 +19380,54 @@ function bulkImportCarrierCharges(input){
                         if(!['INR','USD'].includes(currency))errors.push(`SEA - THC Row ${n}: CURRENCY must be INR or USD.`);
                         const v20=lcParseMoney(row['THC 20 GP']),v40=lcParseMoney(row['THC 40 HC']);
                         if(!v20&&!v40)warnings.push(`SEA - THC Row ${n}: no THC value found.`);
-                        if(v20&&v20.currency!==currency)errors.push(`SEA - THC Row ${n}: THC 20 GP currency does not match CURRENCY.`);
-                        if(v40&&v40.currency!==currency)errors.push(`SEA - THC Row ${n}: THC 40 HC currency does not match CURRENCY.`);
+                        if(v20&&v20.currency!==currency)errors.push(`SEA - THC Row ${n}: THC 20 GP currency mismatch.`);
+                        if(v40&&v40.currency!==currency)errors.push(`SEA - THC Row ${n}: THC 40 HC currency mismatch.`);
                         lcValidateDates(row,n,errors,warnings);
-                        const key=`${carrier}|${pol}|${cargo}|${currency}`;if(seen.has(key))stats.duplicates++;seen.add(key);
-                        let rec=(db.seaTHCRates||[]).find(r=>normSafe(r.carrier)===carrier&&normSafe(r.pol)===pol&&normSafe(r.commodity)===cargo&&normSafe(r.currency)===currency);
-                        if(!rec){rec={mode:'sea',carrier,pol,commodity:cargo,currency,thc20:null,thc40:null,validFrom:'',validTo:'',updated:new Date().toISOString()};(db.seaTHCRates||(db.seaTHCRates=[])).push(rec);stats.new++;}else stats.updated++;
-                        if(v20)rec.thc20=v20.amount;if(v40)rec.thc40=v40.amount;if(row['VALID FROM'])rec.validFrom=String(row['VALID FROM']).trim();if(row['VALID TO'])rec.validTo=String(row['VALID TO']).trim();rec.updated=new Date().toISOString();
+                        const key=[carrier,pol,cargo,container,currency].join('|');
+                        if(seen.has(key))errors.push(`SEA - THC Row ${n}: duplicate import key ${key}.`);
+                        seen.add(key);
+                        plan.push({thc:true,carrier,pol,cargo,container,currency,v20,v40,validFrom:String(row['VALID FROM']||'').trim(),validTo:String(row['VALID TO']||'').trim()});
                     });
                 }else warnings.push('SEA - THC: no data rows.');
             }else warnings.push('Missing sheet: SEA - THC');
+
             if(!sheetsProcessed)throw new Error('No recognized Carrier/Local Charge sheets found.');
             if(errors.length){alert(`❌ Import Carrier validation failed.\n\n${errors.slice(0,30).join('\n')}${errors.length>30?'\n...more errors':''}`);return;}
+
+            // Apply only after every sheet has validated successfully.
+            plan.forEach(item=>{
+                const now=new Date().toISOString();
+                if(item.thc){
+                    const arr=db.seaTHCRates||(db.seaTHCRates=[]);
+                    let rec=arr.find(r=>!r.deleted&&normSafe(r.carrier)===item.carrier&&normSafe(r.pol)===item.pol&&normSafe(r.commodity)===item.cargo&&normSafe(r.container||'ALL')===item.container&&normSafe(r.currency)===item.currency);
+                    if(!rec){rec={mode:'sea',carrier:item.carrier,pol:item.pol,commodity:item.cargo,container:item.container,currency:item.currency,thc20:null,thc40:null,validFrom:'',validTo:'',updated:now};arr.push(rec);stats.new++;}
+                    else stats.merged++;
+                    if(item.v20)rec.thc20=item.v20.amount;
+                    if(item.v40)rec.thc40=item.v40.amount;
+                    if(item.validFrom)rec.validFrom=item.validFrom;
+                    if(item.validTo)rec.validTo=item.validTo;
+                    rec.key=[item.carrier,item.pol,item.cargo,item.container].join('|');
+                    rec.deleted=false; delete rec.deletedAt; rec.updated=now; rec.updatedAt=now;
+                }else{
+                    const arr=item.mode==='air'?(db.carrierChargesAir||(db.carrierChargesAir=[])):(db.carrierChargesSeaLcl||(db.carrierChargesSeaLcl=[]));
+                    let rec=arr.find(r=>!r.deleted&&(item.mode==='air'||r.mode===item.mode)&&normSafe(r.carrier)===item.carrier&&normSafe(r.pol||'')===item.pol&&normSafe(r.commodity)===item.cargo&&normSafe(r.container||'ALL')===item.container);
+                    if(!rec){rec={carrier:item.carrier,pol:item.pol,commodity:item.cargo,container:item.container,charges:{},updated:now,updatedAt:now};if(item.mode!=='air')rec.mode=item.mode;arr.push(rec);stats.new++;}
+                    else stats.merged++;
+                    if(item.validFrom)rec.validFrom=item.validFrom;
+                    if(item.validTo)rec.validTo=item.validTo;
+                    Object.entries(item.parsed).forEach(([k,v])=>{rec.charges[k]={amount:v.amount,currency:v.currency,buyAmount:v.amount,buyCurrency:v.currency};});
+                    rec.key=[item.carrier,item.pol,item.cargo,item.container].join('|');
+                    rec.deleted=false; delete rec.deletedAt; rec.updated=now; rec.updatedAt=now;
+                }
+            });
             saveDB();
             if(typeof ensureSharedCarrierCharges==='function')ensureSharedCarrierCharges();
             renderCarrierChargesMaster(currentLocalTab==='sea'?'sealcl':currentLocalTab||'air');
             if(currentLocalTab==='sea')renderSeaTHCMaster();
             autoBackup();
-            alert(`✅ Import Carrier completed.\nSheets processed: ${sheetsProcessed}/4\nNew records: ${stats.new}\nUpdated/merged: ${stats.updated}\nDuplicate rows: ${stats.duplicates}\nCharge values: ${stats.values}\nWarnings: ${warnings.length}${warnings.length?'\n\n'+warnings.slice(0,10).join('\n'):''}`);
-        }catch(err){console.error(err);alert('❌ Import Carrier failed: '+err.message);}finally{input.value='';}
+            alert(`✅ Import Carrier completed.\nSheets processed: ${sheetsProcessed}/4\nNew records: ${stats.new}\nMerged/updated: ${stats.merged}\nCharge values: ${stats.values}\nWarnings: ${warnings.length}${warnings.length?'\n\n'+warnings.slice(0,10).join('\n'):''}`);
+        }catch(err){console.error(err);alert('❌ Import Carrier failed: '+err.message);}
+        finally{input.value='';}
     };
     reader.readAsArrayBuffer(file);
 }
@@ -19244,13 +19648,9 @@ async function fallbackBackupDownload() {
 
 // ==== REPLACE autoBackup (the manual trigger) ====
 async function autoBackup() {
+    // Auto-backup is optional. If the user has not selected a backup
+    // folder, silently skip the backup without affecting database operations.
     if (!backupFolderHandle) {
-        const statusEl = document.getElementById('backup-status');
-        if (statusEl) {
-            statusEl.textContent = '⚠️ No folder selected. Click "Browse Folder" to enable auto-backup.';
-            statusEl.className = 'backup-status error';
-        }
-        console.warn('Auto-backup skipped – no folder handle.');
         return false;
     }
 
@@ -19358,8 +19758,14 @@ function populateRateRequestDropdowns() {
     });
     const company = db.companyName || 'GATEWAY EXIM';
     ['rr-forwarder-sea1','rr-forwarder-sea2'].forEach(id => { const el=document.getElementById(id); if(el) el.value=company; });
+    // Set the default only when VALIDITY is empty.
+    // A manually selected date must never be overwritten during re-render,
+    // format switching, or dropdown population.
     const endOfMonth = getEndOfMonthDate();
-    ['rr-validity-sea1','rr-validity-sea2'].forEach(id => { const el=document.getElementById(id); if(el) el.value=endOfMonth; });
+    ['rr-validity-sea1','rr-validity-sea2'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && !el.value) el.value = endOfMonth;
+    });
     ['rr-commodity-sea1','rr-commodity-sea2','rr-commodity-air'].forEach(id => { const el=document.getElementById(id); if(el && !el.value) el.value=''; });
     ['rr-inventory-sea1','rr-inventory-sea2'].forEach(id => { const el=document.getElementById(id); if(el && !el.value) el.value='20 GP & 40 HC'; });
     ['rr-freeTime-sea1','rr-freeTime-sea2'].forEach(id => { const el=document.getElementById(id); if(el && !el.value) el.value='14 Days'; });
@@ -19410,7 +19816,6 @@ function getRateRequestData(format) {
         data.weight = getVal('rr-weight-sea1');
         data.term = getSel('rr-term-sea1');
         data.validity = getVal('rr-validity-sea1');
-        if (data.validity) { const el=document.getElementById('rr-validity-sea1'); setRateRequestMonthEnd(el); data.validity=el?.value||data.validity; }
         data.freeTime = getSel('rr-freeTime-sea1');
 		data.remarks = getVal('rr-remarks-sea1');
     } else if (format === 'seaWithoutShipper') {
@@ -19422,7 +19827,6 @@ function getRateRequestData(format) {
         data.weight = getVal('rr-weight-sea2');
         data.term = getSel('rr-term-sea2');
         data.validity = getVal('rr-validity-sea2');
-        if (data.validity) { const el=document.getElementById('rr-validity-sea2'); setRateRequestMonthEnd(el); data.validity=el?.value||data.validity; }
         data.freeTime = getSel('rr-freeTime-sea2');
 		data.remarks = getVal('rr-remarks-sea2');
     } else if (format === 'air') {
@@ -19434,7 +19838,6 @@ function getRateRequestData(format) {
         data.inventory = getVal('rr-inventory-air');
         data.weight = getVal('rr-weight-air');
         data.validity = getVal('rr-validity-air');
-        if (data.validity) { const el=document.getElementById('rr-validity-air'); setRateRequestMonthEnd(el); data.validity=el?.value||data.validity; }
         data.freeTime = getVal('rr-freeTime-air');
         data.packaging = getVal('rr-packaging-air');
         data.pallet = getSel('rr-pallet-air');
@@ -19588,6 +19991,8 @@ function clearRateRequestForm(format) {
         document.getElementById('rr-commodity-air').value = '';
         document.getElementById('rr-pallet-air').value = 'PALLETIZED';
         document.getElementById('rr-temp-air').value = 'NORMAL';
+        const airValidity = document.getElementById('rr-validity-air');
+        if (airValidity && !airValidity.value) airValidity.value = getEndOfMonthDate();
         // remarks already cleared
     }
 }
@@ -19599,18 +20004,12 @@ function getEndOfMonthDate() {
     return lastDay.toISOString().split('T')[0];
 }
 
-// Rate Request VALIDITY is calendar-based but MUST always resolve to the
-// month-end date of the month selected by the user.
+// Rate Request VALIDITY manual-date handler.
+// The browser date picker already provides date validation.
+// IMPORTANT: never convert the user's selected date to month-end.
 function setRateRequestMonthEnd(el) {
-    if (!el) return;
-    const value = String(el.value || '').trim();
-    if (!value) return;
-    const parts = value.split('-').map(Number);
-    if (parts.length !== 3 || parts.some(n => !Number.isFinite(n))) return;
-    const year = parts[0], month = parts[1];
-    if (!year || month < 1 || month > 12) return;
-    const lastDay = new Date(year, month, 0).getDate();
-    el.value = `${year}-${String(month).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+    if (!el) return '';
+    return String(el.value || '').trim();
 }
 
 
@@ -20225,6 +20624,73 @@ function clearRRDraftsFilters() {
 
 /* ===== BEGIN JS/18-quote-drafts-sync.js ===== */
 // ==================== RATE QUOTE FILTER HELPERS ====================
+// ==================== ALL QUOTE & RATE SHEET DATE/EXPORT HELPERS ====================
+function quoteTableDateOnly(value) {
+    if (!value) return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+function quoteTableDateInRange(value, fromValue, toValue) {
+    if (!fromValue && !toValue) return true;
+    const d = quoteTableDateOnly(value);
+    if (!d) return false;
+    if (fromValue) {
+        const from = quoteTableDateOnly(fromValue);
+        if (from && d < from) return false;
+    }
+    if (toValue) {
+        const to = quoteTableDateOnly(toValue);
+        if (to && d > to) return false;
+    }
+    return true;
+}
+function quoteTableDateControls(prefix, onFilter, onReset, onExcel, onPdf) {
+    return `
+        <span style="font-weight:600;font-size:0.8rem;color:var(--text-light);white-space:nowrap;">📅 Date:</span>
+        <label style="font-size:0.78rem;font-weight:600;white-space:nowrap;">From <input id="${prefix}-date-from" type="date" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;" /></label>
+        <label style="font-size:0.78rem;font-weight:600;white-space:nowrap;">To <input id="${prefix}-date-to" type="date" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;" /></label>
+        <button class="btn btn-sm btn-info" type="button" onclick="${onFilter}">🔍 Filter</button>
+        <button class="btn btn-sm btn-clear" type="button" onclick="${onReset}">↻ Reset</button>
+        <button class="btn btn-sm btn-export" type="button" onclick="${onExcel}">📊 Excel</button>
+        <button class="btn btn-sm btn-pdf" type="button" onclick="${onPdf}">📄 PDF</button>`;
+}
+function validateQuoteTableDateRange(prefix) {
+    const from = document.getElementById(`${prefix}-date-from`)?.value || '';
+    const to = document.getElementById(`${prefix}-date-to`)?.value || '';
+    if (from && to && from > to) {
+        alert('From Date cannot be later than To Date.');
+        return null;
+    }
+    return { from, to };
+}
+function quoteTableRowsToExcel(rows, columns, sheetName, fileName) {
+    if (typeof XLSX === 'undefined') return alert('Excel library is not loaded.');
+    if (!rows.length) return alert('No data to export for the selected filters.');
+    const out = rows.map(r => Object.fromEntries(columns.map(([header, getter]) => [header, getter(r)])));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(out), sheetName);
+    XLSX.writeFile(wb, `${fileName}_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+function quoteTableRowsToPDF(rows, columns, title, fileName) {
+    if (!rows.length) return alert('No data to export for the selected filters.');
+    if (!window.jspdf?.jsPDF) return alert('PDF library is not loaded.');
+    const doc = new window.jspdf.jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
+    doc.setFontSize(15); doc.text(title, 10, 12);
+    const from = document.getElementById(`${fileName}-date-from`)?.value || '';
+    const to = document.getElementById(`${fileName}-date-to`)?.value || '';
+    doc.setFontSize(8); doc.text(`Date Range: ${from || 'All'} to ${to || 'All'} | Records: ${rows.length}`, 10, 18);
+    doc.autoTable({
+        startY: 23,
+        head: [columns.map(c => c[0])],
+        body: rows.map(r => columns.map(c => c[1](r))),
+        styles: { fontSize: 7, cellPadding: 1.8, overflow: 'linebreak' },
+        headStyles: { fillColor: [30,58,138], textColor: 255 },
+        margin: { left: 8, right: 8 }
+    });
+    doc.save(`${fileName}_${new Date().toISOString().slice(0,10)}.pdf`);
+}
+
 function normalizeDateOnly(value) {
     if (!value) return null;
     const d = new Date(value);
@@ -20263,10 +20729,14 @@ function renderEnhancedRates() {
     const paginationEl = document.getElementById('rates-pagination');
     if (!container) return;
 
-    // ===== FIX: REMOVE all existing toolbars in the rates tab =====
-    document.querySelectorAll('#rates .rates-action-bar').forEach(el => el.remove());
+    // ===== Preserve the existing Rate Quotes toolbar/filter state =====
+    // Remove only duplicate/legacy action bars. Keep the live rates toolbar
+    // so From/To values are not destroyed when FILTER re-renders the table.
+    document.querySelectorAll('#rates .rates-action-bar').forEach(el => {
+        if (el.id !== 'rates-toolbar') el.remove();
+    });
 
-    // ===== Create the toolbar fresh (if not exists) =====
+    // ===== Create the toolbar only if it does not already exist =====
     let toolbarEl = document.getElementById('rates-toolbar');
     if (!toolbarEl) {
         toolbarEl = document.createElement('div');
@@ -20275,6 +20745,7 @@ function renderEnhancedRates() {
         toolbarEl.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; margin:8px 0; align-items:center;';
         toolbarEl.innerHTML = `
             <span style="font-weight:600; font-size:0.8rem; color:var(--text-light); margin-right:8px;">Actions:</span>
+            ${quoteTableDateControls('rates','applyRatesDateFilter()','resetRatesDateFilter()','exportRatesDateExcel()','exportRatesDatePDF()')}
             <button class="btn btn-sm btn-preview" onclick="ratesBulkAction('preview')">👁 Preview</button>
             <button class="btn btn-sm btn-pdf" onclick="ratesBulkAction('pdf')">📄 PDF</button>
             <button class="btn btn-sm btn-email" onclick="ratesBulkAction('email')">📧 Email</button>
@@ -20287,6 +20758,14 @@ function renderEnhancedRates() {
         const filterRow = document.querySelector('#rates .filter-row');
         if (filterRow) filterRow.after(toolbarEl);
         else container.before(toolbarEl);
+
+        // Restore the last applied date filter when the toolbar is recreated.
+        const savedFrom = sessionStorage.getItem('ratesDateFrom') || '';
+        const savedTo = sessionStorage.getItem('ratesDateTo') || '';
+        const fromEl = document.getElementById('rates-date-from');
+        const toEl = document.getElementById('rates-date-to');
+        if (fromEl) fromEl.value = savedFrom;
+        if (toEl) toEl.value = savedTo;
     }
 
     // ===== Get filter values =====
@@ -20331,6 +20810,7 @@ function renderEnhancedRates() {
             const d = new Date(q.timestamp).toISOString().split('T')[0];
             if (d !== searchDate) return false;
         }
+        if (!quoteTableDateInRange(q.timestamp, document.getElementById('rates-date-from')?.value || '', document.getElementById('rates-date-to')?.value || '')) return false;
         if (statusFilter && (q.followUpStatus || 'PENDING') !== statusFilter) return false;
         if (modeFilter && q._modeLabel !== modeFilter) return false;
         if (userFilter && (q.sales || q.createdBy || db.defaultUser) !== userFilter) return false;
@@ -20676,6 +21156,185 @@ function updateRatesCounters(allQuotes, filtered) {
     `;
 }
 
+// ==================== DATE FILTER / EXPORT ACTIONS ====================
+function applyRatesDateFilter() {
+    const r = validateQuoteTableDateRange('rates');
+    if (!r) return;
+
+    // Persist the active Rate Quotes date filter before re-rendering.
+    sessionStorage.setItem('ratesDateFrom', r.from);
+    sessionStorage.setItem('ratesDateTo', r.to);
+    sessionStorage.setItem('ratesPage', '1');
+
+    renderRecords('rates');
+}
+function resetRatesDateFilter() {
+    const a = document.getElementById('rates-date-from');
+    const b = document.getElementById('rates-date-to');
+    if (a) a.value = '';
+    if (b) b.value = '';
+    sessionStorage.removeItem('ratesDateFrom');
+    sessionStorage.removeItem('ratesDateTo');
+    sessionStorage.setItem('ratesPage', '1');
+    renderRecords('rates');
+}
+function applyDraftsDateFilter() { const r=validateQuoteTableDateRange('drafts'); if(!r) return; sessionStorage.setItem('draftsPage','1'); renderRecords('drafts'); }
+function resetDraftsDateFilter() { const a=document.getElementById('drafts-date-from'),b=document.getElementById('drafts-date-to'); if(a)a.value=''; if(b)b.value=''; sessionStorage.setItem('draftsPage','1'); renderRecords('drafts'); }
+function applyRRDateFilter() { const r=validateQuoteTableDateRange('rrdrafts'); if(!r) return; sessionStorage.setItem('rrPage','1'); renderRecords('rrdrafts'); }
+function resetRRDateFilter() { const a=document.getElementById('rrdrafts-date-from'),b=document.getElementById('rrdrafts-date-to'); if(a)a.value=''; if(b)b.value=''; sessionStorage.setItem('rrPage','1'); renderRecords('rrdrafts'); }
+function getRateQuotesExportRows() {
+    const r = validateQuoteTableDateRange('rates');
+    if (!r) return null;
+    const searchText = (document.getElementById('rates-search-text')?.value || '').toLowerCase();
+    const searchQN = (document.getElementById('rates-search-qn')?.value || '').toLowerCase();
+    const searchDate = document.getElementById('rates-search-date')?.value || '';
+    const statusFilter = document.getElementById('rates-status-filter')?.value || '';
+    const modeFilter = document.getElementById('rates-mode-filter')?.value || '';
+    const userFilter = document.getElementById('rates-user-filter')?.value || '';
+    const quickFilter = document.getElementById('rates-quick-filter')?.value || sessionStorage.getItem('ratesQuickFilter') || '';
+
+    const rows = [];
+    ['sea', 'air', 'lcl'].forEach(mode => {
+        (db.rates?.[mode] || []).forEach(q => {
+            const row = { ...q, _mode: mode.toUpperCase(), _modeRaw: mode };
+            if (searchText) {
+                const searchable = `${q.quoteNumber || ''} ${q.client || ''} ${q.pol || ''} ${q.pod || ''}`.toLowerCase();
+                if (!searchable.includes(searchText)) return;
+            }
+            if (searchQN && !(q.quoteNumber || '').toLowerCase().includes(searchQN)) return;
+            if (searchDate) {
+                const d = quoteTableDateOnly(q.timestamp);
+                if (!d || `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` !== searchDate) return;
+            }
+            if (!quoteTableDateInRange(q.timestamp, r.from, r.to)) return;
+            if (statusFilter && (q.followUpStatus || 'PENDING') !== statusFilter) return;
+            if (modeFilter && row._mode !== modeFilter) return;
+            if (userFilter && (q.sales || q.createdBy || db.defaultUser) !== userFilter) return;
+            if (quickFilter === 'converted' && !isQuoteConverted(q)) return;
+            if (quickFilter === 'expired' && !isQuoteExpired(q)) return;
+            if (quickFilter === 'sea' && mode !== 'sea') return;
+            if (quickFilter === 'air' && mode !== 'air') return;
+            if (quickFilter === 'lcl' && mode !== 'lcl') return;
+            rows.push(row);
+        });
+    });
+    return rows;
+}
+
+function getDraftsExportRows() {
+    const r = validateQuoteTableDateRange('drafts');
+    if (!r) return null;
+    const searchText = (document.getElementById('drafts-search-text')?.value || '').toLowerCase();
+    const searchQN = (document.getElementById('drafts-search-qn')?.value || '').toLowerCase();
+    const searchDate = document.getElementById('drafts-search-date')?.value || '';
+    const quickFilter = document.getElementById('drafts-quick-filter')?.value || sessionStorage.getItem('draftsQuickFilter') || '';
+
+    const rows = [];
+    ['sea', 'air', 'lcl'].forEach(mode => {
+        (db.drafts?.[mode] || []).forEach(d => {
+            const row = { ...d, _mode: mode, _modeLabel: mode.toUpperCase() };
+            if (searchText) {
+                const text = `${d.client || ''} ${d.pol || ''} ${d.pod || ''} ${d.carrier || ''} ${d.quoteNumber || ''}`.toLowerCase();
+                if (!text.includes(searchText)) return;
+            }
+            if (searchQN && !(d.quoteNumber || '').toLowerCase().includes(searchQN)) return;
+            if (searchDate) {
+                const dd = quoteTableDateOnly(d.timestamp);
+                if (!dd || `${dd.getFullYear()}-${String(dd.getMonth()+1).padStart(2,'0')}-${String(dd.getDate()).padStart(2,'0')}` !== searchDate) return;
+            }
+            if (!quoteTableDateInRange(d.timestamp, r.from, r.to)) return;
+            if (quickFilter === 'sea' && mode !== 'sea') return;
+            if (quickFilter === 'air' && mode !== 'air') return;
+            if (quickFilter === 'lcl' && mode !== 'lcl') return;
+            rows.push(row);
+        });
+    });
+    return rows;
+}
+
+function getRRExportRows() {
+    const r = validateQuoteTableDateRange('rrdrafts');
+    if (!r) return null;
+    const searchText = (document.getElementById('rrdrafts-search-text')?.value || '').toLowerCase();
+    const searchQN = (document.getElementById('rrdrafts-search-qn')?.value || '').toLowerCase();
+    const searchDate = document.getElementById('rrdrafts-search-date')?.value || '';
+    const modeFilter = rrModeFilter || sessionStorage.getItem('rrModeFilter') || '';
+
+    return (db.drafts?.rr || []).filter(rr => {
+        if (searchText) {
+            const text = `${rr.shipper || ''} ${rr.forwarder || ''} ${rr.pol || ''} ${rr.pod || ''} ${rr.quoteNumber || ''}`.toLowerCase();
+            if (!text.includes(searchText)) return false;
+        }
+        if (searchQN && !(rr.quoteNumber || '').toLowerCase().includes(searchQN)) return false;
+        if (searchDate) {
+            const d = quoteTableDateOnly(rr.timestamp);
+            if (!d || `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` !== searchDate) return false;
+        }
+        if (!quoteTableDateInRange(rr.timestamp, r.from, r.to)) return false;
+        if (modeFilter && getRRDisplayMode(rr) !== modeFilter) return false;
+        return true;
+    });
+}
+
+function exportRatesDateExcel() {
+    const rows = getRateQuotesExportRows();
+    if (!rows) return;
+    quoteTableRowsToExcel(rows, [
+        ['Quote Ref', x => x.quoteNumber || '-'], ['Customer', x => x.client || '-'],
+        ['Origin', x => x.pol || '-'], ['Destination', x => x.pod || '-'],
+        ['Service', x => x._mode], ['Status', x => x.followUpStatus || 'PENDING'],
+        ['Valid Till', x => x.validityDate || '-'], ['Created On', x => x.timestamp || '-']
+    ], 'Rate Quotes', 'Rate_Quotes');
+}
+function exportRatesDatePDF() {
+    const rows = getRateQuotesExportRows();
+    if (!rows) return;
+    quoteTableRowsToPDF(rows, [
+        ['Quote Ref', x => x.quoteNumber || '-'], ['Customer', x => x.client || '-'],
+        ['Origin', x => x.pol || '-'], ['Destination', x => x.pod || '-'],
+        ['Service', x => x._mode], ['Status', x => x.followUpStatus || 'PENDING'],
+        ['Valid Till', x => x.validityDate || '-'], ['Created On', x => x.timestamp || '-']
+    ], 'Rate Quotes', 'rates');
+}
+function exportDraftsDateExcel() {
+    const rows = getDraftsExportRows();
+    if (!rows) return;
+    quoteTableRowsToExcel(rows, [
+        ['Quote Ref', x => x.quoteNumber || '-'], ['Customer', x => x.client || '-'],
+        ['Origin', x => x.pol || '-'], ['Destination', x => x.pod || '-'],
+        ['Service', x => x._mode], ['Valid Till', x => x.validityDate || '-'],
+        ['Created On', x => x.timestamp || '-']
+    ], 'Draft Quotations', 'Draft_Quotations');
+}
+function exportDraftsDatePDF() {
+    const rows = getDraftsExportRows();
+    if (!rows) return;
+    quoteTableRowsToPDF(rows, [
+        ['Quote Ref', x => x.quoteNumber || '-'], ['Customer', x => x.client || '-'],
+        ['Origin', x => x.pol || '-'], ['Destination', x => x.pod || '-'],
+        ['Service', x => x._mode], ['Valid Till', x => x.validityDate || '-'],
+        ['Created On', x => x.timestamp || '-']
+    ], 'Draft Quotations', 'drafts');
+}
+function exportRRDateExcel() {
+    const rows = getRRExportRows();
+    if (!rows) return;
+    quoteTableRowsToExcel(rows, [
+        ['Quote Ref', x => x.quoteNumber || '-'], ['Shipper', x => x.shipper || x.forwarder || '-'],
+        ['POL', x => x.pol || '-'], ['POD', x => x.pod || '-'],
+        ['Mode', x => getRRDisplayMode(x)], ['Created On', x => x.timestamp || '-']
+    ], 'Rate Requested', 'Rate_Requested');
+}
+function exportRRDatePDF() {
+    const rows = getRRExportRows();
+    if (!rows) return;
+    quoteTableRowsToPDF(rows, [
+        ['Quote Ref', x => x.quoteNumber || '-'], ['Shipper', x => x.shipper || x.forwarder || '-'],
+        ['POL', x => x.pol || '-'], ['POD', x => x.pod || '-'],
+        ['Mode', x => getRRDisplayMode(x)], ['Created On', x => x.timestamp || '-']
+    ], 'Rate Requested', 'rrdrafts');
+}
+
 // ==================== ENHANCED DRAFTS VIEW ====================
 let draftsSortColumn = 'timestamp';
 let draftsSortOrder = 'desc';
@@ -20709,6 +21368,7 @@ function renderEnhancedDrafts() {
         toolbarEl.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; margin:8px 0; align-items:center;';
         toolbarEl.innerHTML = `
             <span style="font-weight:600; font-size:0.8rem; color:var(--text-light); margin-right:8px;">Actions:</span>
+            ${quoteTableDateControls('drafts','applyDraftsDateFilter()','resetDraftsDateFilter()','exportDraftsDateExcel()','exportDraftsDatePDF()')}
             <button class="btn btn-sm btn-preview" onclick="draftsBulkAction('preview')">👁 Preview</button>
             <button class="btn btn-sm btn-pdf" onclick="draftsBulkAction('pdf')">📄 PDF</button>
             <button class="btn btn-sm btn-email" onclick="draftsBulkAction('email')">📧 Email</button>
@@ -20756,6 +21416,7 @@ function renderEnhancedDrafts() {
             const dDate = new Date(d.timestamp).toISOString().split('T')[0];
             if (dDate !== searchDate) return false;
         }
+        if (!quoteTableDateInRange(d.timestamp, document.getElementById('drafts-date-from')?.value || '', document.getElementById('drafts-date-to')?.value || '')) return false;
         if (quickFilter === 'sea' && d._mode !== 'sea') return false;
         if (quickFilter === 'air' && d._mode !== 'air') return false;
         if (quickFilter === 'lcl' && d._mode !== 'lcl') return false;
@@ -21038,6 +21699,7 @@ function renderEnhancedRRDrafts() {
         toolbarEl.style.cssText = 'display:flex; gap:6px; flex-wrap:wrap; margin:8px 0; align-items:center;';
         toolbarEl.innerHTML = `
             <span style="font-weight:600; font-size:0.8rem; color:var(--text-light); margin-right:8px;">Actions:</span>
+            ${quoteTableDateControls('rrdrafts','applyRRDateFilter()','resetRRDateFilter()','exportRRDateExcel()','exportRRDatePDF()')}
             <button class="btn btn-sm btn-preview" onclick="rrBulkAction('preview')">👁 Preview</button>
             <button class="btn btn-sm btn-quoted" onclick="rrBulkAction('convert')">📤 Quote</button>
             <button class="btn btn-sm btn-duplicate" onclick="rrBulkAction('duplicate')">📋 Duplicate</button>
@@ -21071,6 +21733,7 @@ function renderEnhancedRRDrafts() {
             const dDate = new Date(rr.timestamp).toISOString().split('T')[0];
             if (dDate !== searchDate) return false;
         }
+        if (!quoteTableDateInRange(rr.timestamp, document.getElementById('rrdrafts-date-from')?.value || '', document.getElementById('rrdrafts-date-to')?.value || '')) return false;
         if (modeFilter && getRRDisplayMode(rr) !== modeFilter) return false;
         return true;
     });
@@ -21460,7 +22123,10 @@ function fetchAndMergeJSON() {
             if (!importedDb || typeof importedDb !== 'object') {
                 throw new Error('Invalid JSON format.');
             }
-            const summary = mergeDatabase(importedDb);
+            const merged = window.shahidMasterMergeDatabase(db, importedDb);
+            Object.keys(db).forEach(k => delete db[k]);
+            Object.assign(db, merged);
+            const summary = 'Canonical merge completed.';
             saveDB();
             msgEl.textContent = `✅ Merge successful! ${summary}`;
             msgEl.style.color = 'var(--success)';
@@ -21709,6 +22375,7 @@ function switchReportTab(reportId) {
         // Auto-render the report
         switch (reportId) {
             case 'salesreport': renderSalesReport(); break;
+            case 'customer-followup': renderCustomerFollowup(); break;
             case 'opsreport': renderOperationsReport(); break;
             case 'dashboard': renderDashboard(); break;
             case 'profitreport': renderProfitabilityReport(); break;
@@ -21735,45 +22402,24 @@ let currentLocalTab = 'sea';
 function bulkDeleteSelectedLocal(){
     const selected=[...document.querySelectorAll('.dc-checkbox:checked,.cc-checkbox:checked')];
     if(!selected.length) return alert('Please select at least one Local Charges record.');
-    if(!confirm(`Delete ${selected.length} selected Local Charges record(s)? This cannot be undone.`)) return;
-
-    const dcByMode={sea:[],air:[],lcl:[]};
-    selected.filter(x=>x.classList.contains('dc-checkbox')).forEach(x=>{
-        const mode=x.dataset.mode;
-        const idx=Number(x.dataset.idx);
-        if(dcByMode[mode] && Number.isInteger(idx)) dcByMode[mode].push(idx);
+    if(!confirm(`Delete ${selected.length} selected Local Charges record(s)?`)) return;
+    const now=new Date().toISOString();
+    selected.forEach(x=>{
+        const idx=Number(x.dataset.idx); if(!Number.isInteger(idx)||idx<0)return;
+        if(x.classList.contains('dc-checkbox')){
+            const mode=x.dataset.mode;
+            const arr=mode==='sea'?db.defaultSeaCharges:mode==='air'?db.defaultAirCharges:db.defaultLclCharges;
+            if(arr?.[idx]){arr[idx].deleted=true;arr[idx].deletedAt=now;arr[idx].updated=now;arr[idx].updatedAt=now;}
+        }else if(x.classList.contains('cc-checkbox')){
+            const mode=x.dataset.type || x.dataset.mode;
+            const arr=mode==='air'?db.carrierChargesAir:(mode==='sealcl'||mode==='lcl')?db.carrierChargesSeaLcl:(db.carrierSpecificCharges||[]);
+            if(arr?.[idx]){arr[idx].deleted=true;arr[idx].deletedAt=now;arr[idx].updated=now;arr[idx].updatedAt=now;}
+        }
     });
-    Object.entries(dcByMode).forEach(([mode,indices])=>{
-        const arr=mode==='sea'?db.defaultSeaCharges:mode==='air'?db.defaultAirCharges:db.defaultLclCharges;
-        const remove=new Set(indices);
-        const kept=arr.filter((_,i)=>!remove.has(i));
-        if(mode==='sea') db.defaultSeaCharges=kept;
-        else if(mode==='air') db.defaultAirCharges=kept;
-        else db.defaultLclCharges=kept;
-    });
-
-    // Dedicated SEA THC records use their own master array.
-    const thcIndices=[...new Set(selected.filter(x=>x.classList.contains('thc-checkbox')).map(x=>Number(x.dataset.idx)).filter(Number.isInteger))].sort((a,b)=>b-a);
-    if(thcIndices.length && Array.isArray(db.seaTHCRates)){
-        thcIndices.forEach(idx=>{ if(idx>=0 && idx<db.seaTHCRates.length) db.seaTHCRates.splice(idx,1); });
-    }
-
-    // Carrier-specific records are stored in the shared master.
-    const ccIndices=[...new Set(selected.filter(x=>x.classList.contains('cc-checkbox')).map(x=>Number(x.dataset.idx)).filter(Number.isInteger))].sort((a,b)=>b-a);
-    if(ccIndices.length && Array.isArray(db.carrierSpecificCharges)){
-        ccIndices.forEach(idx=>{
-            if(idx>=0 && idx<db.carrierSpecificCharges.length) db.carrierSpecificCharges.splice(idx,1);
-        });
-    }
-
     saveDB();
-    const mode=currentLocalTab||'sea';
-    renderDefaultChargesMaster(mode);
-    if(mode==='sea') renderSeaTHCMaster();
-    renderCarrierChargesMaster(mode==='sea'?'sealcl':mode);
-    updateSelectedCount();
+    renderDefaultChargesMaster(currentLocalTab||'sea');
+    renderCarrierChargesMaster(currentLocalTab==='sea'?'sealcl':currentLocalTab||'air');
     autoBackup();
-    alert(`✅ Deleted ${selected.length} selected Local Charges record(s).`);
 }
 
 
@@ -21815,18 +22461,24 @@ function localChargesAction(action, kind, mode) {
         const indices = [...new Set(selected.map(el => Number(el.dataset.idx)).filter(Number.isInteger))].sort((a,b)=>b-a);
         if (kind === 'dc') {
             const arr = mode === 'sea' ? db.defaultSeaCharges : mode === 'air' ? db.defaultAirCharges : db.defaultLclCharges;
-            indices.forEach(idx => { if (idx >= 0 && idx < arr.length) arr.splice(idx, 1); });
+            indices.forEach(idx => { if (idx >= 0 && idx < arr.length) markMasterChargeDeleted(arr, idx); });
             saveDB(); renderDefaultChargesMaster(mode); autoBackup();
         } else if (kind === 'thc') {
-            indices.forEach(idx => { if (idx >= 0 && idx < db.seaTHCRates.length) db.seaTHCRates.splice(idx, 1); });
+            indices.forEach(idx => { if (idx >= 0 && idx < db.seaTHCRates.length) markMasterChargeDeleted(db.seaTHCRates, idx); });
             saveDB(); renderSeaTHCMaster(); autoBackup();
         } else if (kind === 'cc') {
             if (mode === 'sealcl') {
-                indices.forEach(idx => { if (idx >= 0 && idx < (db.carrierChargesSeaLcl || []).length) db.carrierChargesSeaLcl.splice(idx, 1); });
+                indices.forEach(idx => { if (idx >= 0 && idx < (db.carrierChargesSeaLcl || []).length) markMasterChargeDeleted(db.carrierChargesSeaLcl, idx); });
                 saveDB(); renderCarrierChargesMaster(mode); autoBackup();
             } else {
-                const arr = db[SHARED_KEY] || db.carrierSpecificCharges || [];
-                indices.forEach(idx => { if (idx >= 0 && idx < arr.length) arr.splice(idx, 1); });
+                // AIR/LCL carrier tables render carrierChargesAir / carrierChargesSeaLcl.
+                // Delete the same backing array that the table actually displays.
+                const arr = mode === 'air'
+                    ? (db.carrierChargesAir || [])
+                    : (db.carrierChargesSeaLcl || []);
+                indices.forEach(idx => {
+                    if (idx >= 0 && idx < arr.length) markMasterChargeDeleted(arr, idx);
+                });
                 saveDB(); renderCarrierChargesMaster(mode); autoBackup();
             }
         }
@@ -23401,7 +24053,7 @@ function buildMultiCarrierChargeHTML(data,mode,compact=false){
 function mcStandardRemarks(mode, baseFont, headingSize, tdPadding, tableWidth='100%', specialRemark='') {
     const standard = mode==='air' ? [
         '1. Rate Subject To Booking Acceptance',
-        '2. 100% Of Total Freight Charges applicable if Shipments Cancelled Within 48HR Before Delivery Cut-Off Time',
+        '2. 100% Of Total Freight Charges applicable if Shipments Cancelled Within 48 Hours Before The Delivery Cut-Off Time',
         '3. GST At Actual',
         '4. Rest other charges if any at actual as per receipt.',
         '5. Above rates are valid for 3 days',
@@ -24214,8 +24866,9 @@ function shahidPreviewShell(innerHtml, mode='quote') {
         const carrier=norm(rec.carrier).replace(/\s+\(COPY\)$/,'');
         const cargo=norm(rec.commodity)||'NON HAZ';
         if(!carrier || !['HAZ','NON HAZ'].includes(cargo)) return;
-        const key=carrier+'|'+cargo;
-        if(!grouped.has(key)) grouped.set(key,{carrier:rec.carrier.replace(/\s+\(COPY\)$/,''),commodity:cargo,charges:{},validFrom:rec.validFrom||'',validTo:rec.validTo||'',updated:rec.updated||rec.updatedAt||''});
+        const container=norm(rec.container)||'ALL';
+        const key=carrier+'|'+cargo+'|'+container;
+        if(!grouped.has(key)) grouped.set(key,{carrier:rec.carrier.replace(/\s+\(COPY\)$/,''),pol:String(rec.pol||'').trim(),commodity:cargo,container,charges:{},validFrom:rec.validFrom||'',validTo:rec.validTo||'',updated:rec.updated||rec.updatedAt||''});
         const out=grouped.get(key);
         Object.entries(rec.charges||{}).forEach(([k,v])=>{
           if(/^THC(?:_|$)/i.test(k)) return;
@@ -24230,17 +24883,22 @@ function shahidPreviewShell(innerHtml, mode='quote') {
       };
       (db.carrierChargesSeaLcl||[]).forEach(add);
       (db.carrierChargesAir||[]).forEach(add);
-      grouped.forEach(r=>{ delete r.__stamps; const existing=db[SHARED_KEY].find(x=>norm(x.carrier)===norm(r.carrier)&&norm(x.commodity)===norm(r.commodity)); if(!existing) db[SHARED_KEY].push(r); });
+      grouped.forEach(r=>{ delete r.__stamps; const existing=db[SHARED_KEY].find(x=>norm(x.carrier)===norm(r.carrier)&&norm(x.pol)===norm(r.pol)&&norm(x.commodity)===norm(r.commodity)&&norm(x.container||'ALL')===norm(r.container||'ALL')); if(!existing) db[SHARED_KEY].push(r); });
       db.__sharedCarrierMigratedV1=true;
       try{ saveDB(); }catch(e){}
     }
     // Normalize and enforce HAZ/NON HAZ values.
-    db[SHARED_KEY]=db[SHARED_KEY].filter(r=>r&&r.carrier).map(r=>({...r,carrier:String(r.carrier).trim(),commodity:['HAZ','NON HAZ'].includes(norm(r.commodity))?norm(r.commodity):'NON HAZ',charges:r.charges||{}}));
+    db[SHARED_KEY]=db[SHARED_KEY].filter(r=>r&&r.carrier).map(r=>({...r,carrier:String(r.carrier).trim(),pol:String(r.pol||'').trim(),commodity:['HAZ','NON HAZ'].includes(norm(r.commodity))?norm(r.commodity):'NON HAZ',container:norm(r.container)||'ALL',charges:r.charges||{}}));
   }
 
-  function find(carrier,commodity){
+  function carrierKey(carrier,pol,commodity,container){
+    return [norm(carrier),norm(pol),norm(commodity)||'NON HAZ',norm(container)||'ALL'].join('|');
+  }
+  function find(carrier,commodity,pol='',container=''){
     ensure();
-    return db[SHARED_KEY].find(r=>norm(r.carrier)===norm(carrier)&&norm(r.commodity)===norm(commodity));
+    const target=carrierKey(carrier,pol,commodity,container);
+    return db[SHARED_KEY].find(r=>!r.deleted&&carrierKey(r.carrier,r.pol,r.commodity,r.container)===target)
+        || db[SHARED_KEY].find(r=>!r.deleted&&norm(r.carrier)===norm(carrier)&&norm(r.commodity)===norm(commodity)&&(!r.container||norm(r.container)==='ALL'));
   }
   function carrierOptions(selected=''){ return `<option value="">Select Carrier</option>`+(db.carriers||[]).map(c=>`<option value="${esc(c)}" ${norm(c)===norm(selected)?'selected':''}>${esc(c)}</option>`).join(''); }
   function cargoOptions(selected=''){ return `<option value="NON HAZ" ${norm(selected)==='NON HAZ'?'selected':''}>Non Haz</option><option value="HAZ" ${norm(selected)==='HAZ'?'selected':''}>Haz</option>`; }
@@ -24284,7 +24942,7 @@ function shahidPreviewShell(innerHtml, mode='quote') {
     const allowed=new Set(modeColumns(mode));
     const visibleKeys=keys.filter(k=>allowed.has(k)||mode==='sea'&&SEA_KEYS.includes(k));
     let html=`<h3 style="color:var(--primary);margin-bottom:12px;">${idx===null?'Add':'Edit'} Carrier-Specific Charge</h3>
-      <div class="form-grid-2col" style="gap:19px;"><div class="form-group"><label>Carrier</label><select id="shared-cc-carrier">${carrierOptions(rec?.carrier||'')}</select></div><div class="form-group"><label>Cargo</label><select id="shared-cc-cargo">${cargoOptions(rec?.commodity||'NON HAZ')}</select></div></div>
+      <div class="form-grid-2col" style="gap:19px;"><div class="form-group"><label>Carrier</label><select id="shared-cc-carrier">${carrierOptions(rec?.carrier||'')}</select></div><div class="form-group"><label>POL</label><select id="shared-cc-pol"><option value="">All POL / Locations</option>${(db.pol||[]).map(x=>`<option value="${esc(x)}" ${norm(x)===norm(rec?.pol)?'selected':''}>${esc(x)}</option>`).join('')}</select></div><div class="form-group"><label>HAZ / NON-HAZ</label><select id="shared-cc-cargo">${cargoOptions(rec?.commodity||'NON HAZ')}</select></div><div class="form-group"><label>Container Type</label><select id="shared-cc-container"><option value="ALL" ${norm(rec?.container||'ALL')==='ALL'?'selected':''}>ALL / GENERAL</option>${(db.containers||[]).map(x=>`<option value="${esc(x)}" ${norm(x)===norm(rec?.container)?'selected':''}>${esc(x)}</option>`).join('')}</select></div></div>
       <div style="margin:12px 0 8px;font-weight:700;color:var(--primary);">Other Charges <span style="font-weight:400;color:#64748b;">(same carrier rate applies across all POLs)</span></div>
       <div id="shared-cc-charges-list">${visibleKeys.map(k=>chargeRow(k,existing[k])).join('')}</div>
       <div style="margin-top:10px;display:flex;gap:19px;align-items:end;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px;">
@@ -24303,23 +24961,32 @@ function shahidPreviewShell(innerHtml, mode='quote') {
     list.insertAdjacentHTML('beforeend',chargeRow(key,null));
   };
   window.saveSharedCarrierCharge=function(type,idx){
-    ensure(); const carrier=norm(document.getElementById('shared-cc-carrier')?.value); const cargo=norm(document.getElementById('shared-cc-cargo')?.value);
-    if(!carrier)return alert('Carrier is required.'); if(!['HAZ','NON HAZ'].includes(cargo))return alert('Cargo must be HAZ or NON HAZ.');
-    const otherIdx=db[SHARED_KEY].findIndex((r,i)=>i!==idx&&norm(r.carrier)===carrier&&norm(r.commodity)===cargo);
-    if(otherIdx>=0)return alert(`Duplicate entry: ${carrier} / ${cargo}. One carrier can have only HAZ + NON HAZ records.`);
+    ensure(); const carrier=norm(document.getElementById('shared-cc-carrier')?.value); const pol=String(document.getElementById('shared-cc-pol')?.value||'').trim(); const cargo=norm(document.getElementById('shared-cc-cargo')?.value); const container=norm(document.getElementById('shared-cc-container')?.value)||'ALL';
+    if(!carrier)return alert('Carrier is required.'); if(!['HAZ','NON HAZ'].includes(cargo))return alert('HAZ / NON-HAZ is required.');
+    const uniqueKey=carrierKey(carrier,pol,cargo,container);
+    const otherIdx=db[SHARED_KEY].findIndex((r,i)=>!r.deleted&&i!==idx&&carrierKey(r.carrier,r.pol,r.commodity,r.container)===uniqueKey);
+    if(otherIdx>=0)return alert(`Duplicate Key: ${uniqueKey}`);
     const charges={}; document.querySelectorAll('#shared-cc-charges-list .shared-cc-row').forEach(row=>{const k=row.getAttribute('data-charge-key');const s=parseFloat(row.querySelector('.shared-cc-sell')?.value)||0;const b=parseFloat(row.querySelector('.shared-cc-buy')?.value)||0;const sc=row.querySelector('.shared-cc-sell-cur')?.value||'INR';const bc=row.querySelector('.shared-cc-buy-cur')?.value||sc;if(s>0||b>0)charges[k]={amount:s,currency:sc,buyAmount:b,buyCurrency:bc};});
     if(!Object.keys(charges).length)return alert('Please add at least one charge with a value.');
-    const now=new Date().toISOString(); const rec={carrier:document.getElementById('shared-cc-carrier').value.trim(),commodity:cargo,charges,updated:now,createdAt:idx===null?now:(db[SHARED_KEY][idx]?.createdAt||now)};
+    const now=new Date().toISOString(); const rec={carrier:document.getElementById('shared-cc-carrier').value.trim(),pol,commodity:cargo,container, key:uniqueKey,charges,updated:now,updatedAt:now,createdAt:idx===null?now:(db[SHARED_KEY][idx]?.createdAt||now)};
     if(idx===null)db[SHARED_KEY].push(rec);else db[SHARED_KEY][idx]=rec;
     saveDB(); closeModal('previewModal'); renderCarrierChargesMaster(type); autoBackup(); alert(idx===null?'✅ Carrier-specific charge added.':'✅ Carrier-specific charge updated.');
   };
-  window.deleteCarrierChargeEntry=function(type,idx){ ensure(); const rec=db[SHARED_KEY][idx]; if(!rec)return alert('Record not found.'); if(!confirm(`Delete ${rec.carrier} / ${rec.commodity} carrier-specific charges?`))return; db[SHARED_KEY].splice(idx,1); saveDB(); renderCarrierChargesMaster(type); autoBackup(); };
+  window.deleteCarrierChargeEntry=function(type,idx){
+    const arr=(type==='air')?(db.carrierChargesAir||[]):(type==='sealcl'||type==='lcl')?(db.carrierChargesSeaLcl||[]):(db.carrierSpecificCharges||[]);
+    const rec=arr[idx];
+    if(!rec||rec.deleted)return alert('Record not found.');
+    if(!confirm(`Delete ${rec.carrier||''} / ${rec.pol||'ALL POL'} / ${rec.commodity||''} / ${rec.container||'ALL'} carrier-specific charges?`))return;
+    const now=new Date().toISOString();
+    rec.deleted=true; rec.deletedAt=now; rec.updated=now; rec.updatedAt=now;
+    saveDB(); renderCarrierChargesMaster(type); autoBackup();
+};
   window.duplicateCarrierCharge=function(type,idx){ ensure(); const rec=db[SHARED_KEY][idx]; if(!rec)return alert('Record not found.'); let carrier=rec.carrier+' (Copy)'; let n=1; while(db[SHARED_KEY].some(r=>norm(r.carrier)===norm(carrier)&&norm(r.commodity)===norm(rec.commodity))){carrier=rec.carrier+' (Copy '+(++n)+')';} db[SHARED_KEY].push({...JSON.parse(JSON.stringify(rec)),carrier,updated:new Date().toISOString(),createdAt:new Date().toISOString()}); saveDB(); renderCarrierChargesMaster(type); autoBackup(); };
   window.previewCarrierCharge=function(type,idx){ ensure(); const r=db[SHARED_KEY][idx]; if(!r)return alert('Record not found.'); let rows='';Object.entries(r.charges||{}).forEach(([k,v])=>{if(/^THC(?:_|$)/i.test(k))return;rows+=`<tr><td>${esc(k)}</td><td>${v.amount??'—'}</td><td>${v.currency||'INR'}</td><td>${v.buyAmount??'—'}</td><td>${v.buyCurrency||v.currency||'INR'}</td></tr>`;});document.getElementById('modal-title').textContent='Preview Carrier-Specific Charge';document.getElementById('previewBody').innerHTML=`<div class="preview-card"><h3>Carrier-Specific Charges</h3><div class="preview-grid"><div class="item"><span class="label">Carrier</span><span class="value">${esc(r.carrier)}</span></div><div class="item"><span class="label">Cargo</span><span class="value">${esc(r.commodity)}</span></div><div class="item"><span class="label">Coverage</span><span class="value">All POL / Locations</span></div></div></div><div class="preview-card"><table class="preview-charges-table"><thead><tr><th>Charge</th><th>Sell</th><th>Currency</th><th>Buy</th><th>Currency</th></tr></thead><tbody>${rows||'<tr><td colspan="5">No charges</td></tr>'}</tbody></table></div>`;openModal('previewModal'); };
 
   // Unified quote lookup. Default charges remain mode/POL/Haz-specific; carrier-specific charges are shared.
   function getSharedCarrierCharges(carrier,commodity,mode){
-    const rec=find(carrier,commodity); if(!rec)return {};
+    const pol=document.getElementById(`${mode}-pol`)?.value||''; const container=document.getElementById(`${mode}-container`)?.value||''; const rec=find(carrier,commodity,pol,container); if(!rec)return {};
     const allowed=new Set(modeColumns(mode)); const out={};
     Object.entries(rec.charges||{}).forEach(([k,v])=>{if(/^THC(?:_|$)/i.test(k))return;if(allowed.has(k))out[k]={...v};});
     return out;
@@ -28361,7 +29028,7 @@ document.addEventListener('DOMContentLoaded', maskProductKeyInputs);
             bldraft:['renderBLDrafts','bldraftBulkAction','exportBLDraftsToExcel'],
             invoice:['renderInvoiceTab','invoiceActionPreview','invoiceActionEdit','invoiceActionCopyCompact','invoiceActionEmail','invoiceActionPDF','invoiceActionWhatsApp','invoiceActionDelete'],
             planner:['initPlanner','refreshPlanner','plannerAddTaskModal','plannerAddNote','plannerSaveNote'],
-            reporting:['showReportingMenu','switchReportTab','renderSalesReport','renderOperationsReport','renderProfitabilityReport','renderCustomer360','renderDSRExceptions','renderCutoffCalendar','renderContainerTracker','renderCarrierPerformance','renderReceivables'],
+            reporting:['showReportingMenu','switchReportTab','renderSalesReport','renderCustomerFollowup','renderOperationsReport','renderProfitabilityReport','renderCustomer360','renderDSRExceptions','renderCutoffCalendar','renderContainerTracker','renderCarrierPerformance','renderReceivables'],
             measurement:['showMeasurementMenu','switchCalcTab','calcDuty','calcProduct','calcInsurance','calcUSDuty','renderFreightRecords'],
             database:['renderDatabase','saveCompanyInfo','saveDefaultCC','saveDefaultUser','exportToSQLite','importFromSQLite'],
             localcharges:['switchLocalTab','renderDefaultChargesMaster','renderCarrierChargesMaster','localChargesAction']
@@ -28514,5 +29181,497 @@ function renderAirWeightRecordsEmbedded() {
     else render();
 })();
 
+
+// ============================================================
+// LOCAL CHARGES — CANONICAL DATA-INTEGRITY PATCH
+// ============================================================
+(function(){
+  'use strict';
+  const LC_MODES = new Set(['sea','air','lcl']);
+  const norm = v => String(v ?? '').trim().replace(/\s+/g,' ').toUpperCase();
+  const modeNorm = v => { const x=norm(v); return x==='SEALCL'?'SEA':x.toLowerCase(); };
+  const commodityNorm = v => {
+    const x=norm(v);
+    if(x==='HAZ' || x==='HAZARDOUS') return 'HAZ';
+    return 'NON HAZ';
+  };
+  const containerNorm = v => {
+    const x=norm(v);
+    if(!x || x==='ALL' || x==='ALL / GENERAL') return 'ALL';
+    if(/^20\s*(GP|DV|DC)?$/.test(x) || x.includes('20 GP')) return '20 GP';
+    if(/^40\s*(HC|HQ)$/.test(x) || x.includes('40 HC')) return '40 HC';
+    if(/^40\s*(GP|DV|DC)?$/.test(x) || x.includes('40 GP')) return '40 GP';
+    return x;
+  };
+  const stamp = () => new Date().toISOString();
+  const ensureArrays = () => {
+    db.defaultSeaCharges ||= []; db.defaultAirCharges ||= []; db.defaultLclCharges ||= [];
+    db.carrierChargesSeaLcl ||= []; db.carrierChargesAir ||= []; db.seaTHCRates ||= [];
+  };
+  const defaultKey = (mode,r) => {
+    const m=modeNorm(mode);
+    return `D|${m}|${norm(r.pol)}|${commodityNorm(r.commodity)}|${m==='sea'?containerNorm(r.container):'ALL'}`;
+  };
+  const carrierKey = (type,r) => {
+    const m=type==='air'?'air':type==='lcl'?'lcl':'sea';
+    return `C|${m}|${norm(r.carrier)}|${norm(r.pol)}|${commodityNorm(r.commodity)}|${m==='air'?'ALL':containerNorm(r.container)}`;
+  };
+  const thcKey = r => `T|SEA|${norm(r.carrier)}|${norm(r.pol)}|${commodityNorm(r.commodity)}|${norm(r.currency||'')}`;
+  const active = r => r && r.deleted !== true;
+  const markDeleted = r => { if(!r)return false; const t=stamp(); r.deleted=true; r.deletedAt=t; r.updated=t; r.updatedAt=t; return true; };
+  const findIndexByKey = (arr,keyFn,rec,exclude=-1) => arr.findIndex((r,i)=>i!==exclude && active(r) && keyFn(r)===keyFn(rec));
+  const reactivateIfFreshIncoming = (existing,incoming) => {
+    if(existing?.deleted && incoming && incoming.deleted !== true){
+      const eDel=Date.parse(existing.deletedAt||existing.updatedAt||existing.updated||0)||0;
+      const iTime=Date.parse(incoming.updatedAt||incoming.updated||incoming.createdAt||0)||0;
+      if(iTime >= eDel || !eDel) return true;
+    }
+    return false;
+  };
+
+  // Repair legacy records in-place without changing unrelated data.
+  window.normalizeLocalChargesData = function(){
+    ensureArrays();
+    db.defaultSeaCharges.forEach(r=>{ r.mode='sea'; r.commodity=commodityNorm(r.commodity); r.container=containerNorm(r.container); r.updatedAt ||= r.updated || r.createdAt || stamp(); });
+    db.defaultAirCharges.forEach(r=>{ r.mode='air'; r.commodity=commodityNorm(r.commodity); r.container='ALL'; r.updatedAt ||= r.updated || r.createdAt || stamp(); });
+    db.defaultLclCharges.forEach(r=>{ r.mode='lcl'; r.commodity=commodityNorm(r.commodity); r.container='ALL'; r.updatedAt ||= r.updated || r.createdAt || stamp(); });
+    db.carrierChargesSeaLcl.forEach(r=>{ r.mode=modeNorm(r.mode||'sea'); r.commodity=commodityNorm(r.commodity); r.container=containerNorm(r.container); r.updatedAt ||= r.updated || r.createdAt || stamp(); });
+    db.carrierChargesAir.forEach(r=>{ r.mode='air'; r.commodity=commodityNorm(r.commodity); r.container='ALL'; r.updatedAt ||= r.updated || r.createdAt || stamp(); });
+    db.seaTHCRates.forEach(r=>{ r.mode='sea'; r.commodity=commodityNorm(r.commodity); r.updatedAt ||= r.updated || r.createdAt || stamp(); });
+    return db;
+  };
+
+  window.getLocalChargeBusinessKey = function(kind,type,record){
+    if(kind==='default') return defaultKey(type,record);
+    if(kind==='carrier') return carrierKey(type,record);
+    if(kind==='thc') return thcKey(record);
+    return '';
+  };
+
+  window.findDefaultChargeDuplicate = function(mode,record,excludeIndex){
+    ensureArrays(); const arr=mode==='sea'?db.defaultSeaCharges:mode==='air'?db.defaultAirCharges:db.defaultLclCharges;
+    return findIndexByKey(arr,r=>defaultKey(mode,r),record,excludeIndex)>=0;
+  };
+  window.findCarrierChargeDuplicate = function(type,record,excludeIndex){
+    ensureArrays(); const arr=type==='air'?db.carrierChargesAir:db.carrierChargesSeaLcl;
+    return findIndexByKey(arr,r=>carrierKey(type,r),record,excludeIndex)>=0;
+  };
+
+  window.deleteLocalChargeByKey = function(kind,type,key){
+    ensureArrays(); let arr,keyFn;
+    if(kind==='default'){ arr=type==='sea'?db.defaultSeaCharges:type==='air'?db.defaultAirCharges:db.defaultLclCharges; keyFn=r=>defaultKey(type,r); }
+    else if(kind==='carrier'){ arr=type==='air'?db.carrierChargesAir:db.carrierChargesSeaLcl; keyFn=r=>carrierKey(type,r); }
+    else { arr=db.seaTHCRates; keyFn=thcKey; }
+    const idx=arr.findIndex(r=>active(r)&&keyFn(r)===key); if(idx<0)return false;
+    markDeleted(arr[idx]); saveDB(); return true;
+  };
+
+  window.bulkDeleteSelectedLocal = function(){
+    ensureArrays();
+    const selected=[...document.querySelectorAll('.dc-checkbox:checked,.cc-checkbox:checked,.thc-checkbox:checked')];
+    if(!selected.length) return alert('Please select at least one Local Charges record.');
+    if(!confirm(`Delete ${selected.length} selected Local Charges record(s)?`)) return;
+    let deleted=0;
+    selected.forEach(el=>{
+      const idx=Number(el.dataset.idx); if(!Number.isInteger(idx)||idx<0)return;
+      let arr=null;
+      if(el.classList.contains('dc-checkbox')){ const m=el.dataset.mode; arr=m==='sea'?db.defaultSeaCharges:m==='air'?db.defaultAirCharges:db.defaultLclCharges; }
+      else if(el.classList.contains('cc-checkbox')){ const t=el.dataset.type||el.dataset.mode; arr=t==='air'?db.carrierChargesAir:db.carrierChargesSeaLcl; }
+      else arr=db.seaTHCRates;
+      if(arr?.[idx] && markDeleted(arr[idx])) deleted++;
+    });
+    saveDB();
+    if(typeof renderDefaultChargesMaster==='function') renderDefaultChargesMaster(currentLocalTab||'sea');
+    if(typeof renderCarrierChargesMaster==='function') renderCarrierChargesMaster(currentLocalTab==='sea'?'sealcl':currentLocalTab||'air');
+    if(typeof renderSeaTHCMaster==='function') renderSeaTHCMaster();
+    autoBackup();
+    alert(`✅ Deleted ${deleted} Local Charges record(s).`);
+  };
+
+  // Canonical Local Charges merge: exact business key only; deleted records are
+  // not allowed to block a genuinely new active import.
+  const originalMerge = window.shahidMasterMergeDatabase;
+  if(typeof originalMerge==='function'){
+    window.shahidMasterMergeDatabase = function(current,incoming){
+      const merged=originalMerge(current,incoming);
+      // Reconcile critical Local Charges collections again using the canonical
+      // keys, correcting legacy-key collisions from the older merge engine.
+      const collections=[
+        ['defaultSeaCharges','default','sea'],['defaultAirCharges','default','air'],['defaultLclCharges','default','lcl'],
+        ['carrierChargesSeaLcl','carrier','sea'],['carrierChargesAir','carrier','air'],['seaTHCRates','thc','sea']
+      ];
+      const sourceCurrent=current||{}, sourceIncoming=incoming||{};
+      collections.forEach(([name,kind,type])=>{
+        const a=Array.isArray(sourceCurrent[name])?sourceCurrent[name]:[];
+        const b=Array.isArray(sourceIncoming[name])?sourceIncoming[name]:[];
+        const out=[]; const pos=new Map();
+        const keyFn=kind==='default'?(r=>defaultKey(type,r)):kind==='carrier'?(r=>carrierKey(type==='air'?'air':type==='lcl'?'lcl':'sealcl',r)):thcKey;
+        const put=(r,preferIncoming)=>{
+          if(!r || typeof r!=='object')return;
+          const x={...r};
+          if(kind==='default'){x.mode=type;x.commodity=commodityNorm(x.commodity);x.container=type==='sea'?containerNorm(x.container):'ALL';}
+          if(kind==='carrier'){x.mode=type;x.commodity=commodityNorm(x.commodity);x.container=type==='air'?'ALL':containerNorm(x.container);}
+          const k=keyFn(x); if(!k || k.endsWith('|ALL') && kind==='default' && type!=='sea'){}
+          const p=pos.get(k);
+          if(p===undefined){pos.set(k,out.length);out.push(x);return;}
+          const ex=out[p];
+          if(reactivateIfFreshIncoming(ex,x)){ out[p]={...ex,...x,deleted:false,deletedAt:undefined}; return; }
+          const et=Date.parse(ex.updatedAt||ex.updated||ex.createdAt||0)||0;
+          const xt=Date.parse(x.updatedAt||x.updated||x.createdAt||0)||0;
+          if(preferIncoming && xt>=et) out[p]={...ex,...x};
+        };
+        a.forEach(r=>put(r,false)); b.forEach(r=>put(r,true));
+        merged[name]=out;
+      });
+      return merged;
+    };
+  }
+
+  // Normalize once after all original scripts have loaded.
+  setTimeout(()=>{ try{ window.normalizeLocalChargesData(); saveDB(); }catch(e){ console.error('Local Charges normalization failed',e); } },0);
+})();
+
+// ============================================================
+// LOCAL CHARGES — MASTER UI SAVE / IMPORT OVERRIDES
+// ============================================================
+(function(){
+  'use strict';
+  const N=v=>String(v??'').trim().replace(/\s+/g,' ').toUpperCase();
+  const C=v=>{const x=N(v);return x==='HAZ'||x==='HAZARDOUS'?'HAZ':'NON HAZ';};
+  const CN=v=>{const x=N(v);if(!x||x==='ALL'||x==='ALL / GENERAL')return 'ALL';if(x.includes('20 GP')||x==='20GP')return '20 GP';if(x.includes('40 HC')||x==='40HC'||x==='40HQ')return '40 HC';if(x.includes('40 GP')||x==='40GP')return '40 GP';return x;};
+  const now=()=>new Date().toISOString();
+  const arrDefault=m=>m==='sea'?db.defaultSeaCharges:m==='air'?db.defaultAirCharges:db.defaultLclCharges;
+  const arrCarrier=t=>t==='air'?db.carrierChargesAir:db.carrierChargesSeaLcl;
+  const dKey=(m,r)=>`D|${N(m)}|${N(r.pol)}|${C(r.commodity)}|${m==='sea'?CN(r.container):'ALL'}`;
+  const cKey=(t,r)=>`C|${N(t)}|${N(r.carrier)}|${N(r.pol)}|${C(r.commodity)}|${t==='air'?'ALL':CN(r.container)}`;
+  const active=r=>r&&!r.deleted;
+  const touch=r=>{const t=now();r.updated=t;r.updatedAt=t;if(!r.createdAt)r.createdAt=t;};
+  const clearDeleted=r=>{r.deleted=false;delete r.deletedAt;};
+
+  function collectDefaultCharges(mode){
+    const charges={}; const rows=document.querySelectorAll('#modal-dc-charges-list [data-charge-key]');
+    rows.forEach(row=>{
+      const base=row.getAttribute('data-charge-key'); if(!base)return;
+      if(mode==='sea'){
+        const a20=parseFloat(row.querySelector('.modal-chg-amt20')?.value)||0,b20=parseFloat(row.querySelector('.modal-chg-buy20')?.value)||0,a40=parseFloat(row.querySelector('.modal-chg-amt40')?.value)||0,b40=parseFloat(row.querySelector('.modal-chg-buy40')?.value)||0,cur=row.querySelector('.modal-chg-cur')?.value||'INR';
+        if(a20>0||b20>0)charges[base+'_20']={amount:a20,buyAmount:b20,currency:cur};
+        if(a40>0||b40>0)charges[base+'_40']={amount:a40,buyAmount:b40,currency:cur};
+      }else{
+        const s=parseFloat(row.querySelector('.modal-chg-single-sell')?.value)||0,b=parseFloat(row.querySelector('.modal-chg-single-buy')?.value)||0,cur=row.querySelector('.modal-chg-cur')?.value||'INR';
+        if(s>0||b>0)charges[base]={amount:s,buyAmount:b,currency:cur};
+      }
+    });
+    return charges;
+  }
+
+  window.saveNewDefaultCharge=function(mode){
+    const pol=document.getElementById('modal-dc-pol')?.value.trim()||'';
+    const commodity=C(document.getElementById('modal-dc-commodity')?.value);
+    if(!pol)return alert('POL is required.');
+    const charges=collectDefaultCharges(mode); if(!Object.keys(charges).length)return alert('Please add at least one charge with a value.');
+    const rec={mode,pol,commodity,container:'ALL',charges,createdAt:now(),updatedAt:now(),updated:now()};
+    const arr=arrDefault(mode);
+    if(arr.some(r=>active(r)&&dKey(mode,r)===dKey(mode,rec)))return alert(`Duplicate entry: ${dKey(mode,rec)}`);
+    arr.push(rec); saveDB(); closeModal('previewModal'); renderDefaultChargesMaster(mode); autoBackup(); alert('✅ Default charge added successfully!');
+  };
+
+  window.saveEditDefaultCharge=function(mode,idx){
+    const arr=arrDefault(mode), rec=arr?.[idx]; if(!rec)return alert('Record not found.');
+    const pol=document.getElementById('modal-dc-pol-edit')?.value.trim()||''; if(!pol)return alert('POL is required.');
+    const commodity=C(document.getElementById('modal-dc-commodity-edit')?.value);
+    const charges=collectDefaultCharges(mode); if(!Object.keys(charges).length)return alert('Please add at least one charge with a value.');
+    const candidate={...rec,mode,pol,commodity,container:mode==='sea'?CN(rec.container):'ALL',charges};
+    const dup=arr.findIndex((r,i)=>i!==idx&&active(r)&&dKey(mode,r)===dKey(mode,candidate));
+    if(dup>=0)return alert(`Duplicate entry: ${dKey(mode,candidate)}`);
+    arr[idx]=candidate; clearDeleted(arr[idx]); touch(arr[idx]); saveDB(); closeModal('previewModal'); renderDefaultChargesMaster(mode); autoBackup(); alert('✅ Default charge updated successfully!');
+  };
+
+  function collectCarrierCharges(){
+    const charges={};
+    document.querySelectorAll('#modal-cc-charges-list [data-charge-key]').forEach(row=>{
+      const key=row.getAttribute('data-charge-key'); if(!key)return;
+      const s=parseFloat(row.querySelector('.modal-cc-sell-amt')?.value)||0,b=parseFloat(row.querySelector('.modal-cc-buy-amt')?.value)||0,sc=row.querySelector('.modal-cc-sell-cur')?.value||'INR',bc=row.querySelector('.modal-cc-buy-cur')?.value||sc;
+      if(s>0||b>0)charges[key]={amount:s,currency:sc,buyAmount:b,buyCurrency:bc};
+    }); return charges;
+  }
+  function carrierForm(type){
+    const carrier=document.getElementById('modal-cc-carrier')?.value.trim()||'';
+    const pol=document.getElementById('modal-cc-pol')?.value.trim()||'';
+    const commodity=C(document.getElementById('modal-cc-commodity')?.value);
+    const mode=type==='air'?'air':type==='lcl'?'lcl':'sea';
+    return {mode,carrier,pol,commodity,container:mode==='air'?'ALL':CN(document.getElementById('modal-cc-container')?.value||'ALL')};
+  }
+  function carrierEditForm(type){
+    const carrier=document.getElementById('modal-cc-carrier-edit')?.value.trim()||'';
+    const pol=document.getElementById('modal-cc-pol-edit')?.value.trim()||'';
+    const commodity=C(document.getElementById('modal-cc-commodity-edit')?.value);
+    const mode=type==='air'?'air':type==='lcl'?'lcl':'sea';
+    return {mode,carrier,pol,commodity,container:mode==='air'?'ALL':CN(document.getElementById('modal-cc-container-edit')?.value||'ALL')};
+  }
+
+  // Backward-compatible add: if old modal has no container selector, ALL is used.
+  window.saveNewCarrierCharge=function(type){
+    const f=carrierForm(type); if(!f.carrier||!f.pol)return alert('Carrier and POL are required');
+    const charges=collectCarrierCharges(); if(!Object.keys(charges).length)return alert('Please add at least one charge with a value.');
+    const rec={...f,charges,createdAt:now(),updated:now(),updatedAt:now()}; const arr=arrCarrier(type);
+    if(arr.some(r=>active(r)&&cKey(type,r)===cKey(type,rec)))return alert(`Duplicate entry: ${cKey(type,rec)}`);
+    arr.push(rec); saveDB(); closeModal('previewModal'); renderCarrierChargesMaster(type==='sea'?'sealcl':type); autoBackup(); alert('✅ Carrier charge added successfully.');
+  };
+
+  window.saveEditCarrierCharge=function(type,idx){
+    const arr=arrCarrier(type), rec=arr?.[idx]; if(!rec)return alert('Record not found.');
+    const f=carrierEditForm(type); if(!f.carrier||!f.pol)return alert('Carrier and POL are required.');
+    const charges=collectCarrierCharges(); if(!Object.keys(charges).length)return alert('Please add at least one charge with a value.');
+    const candidate={...rec,...f,charges}; const dup=arr.findIndex((r,i)=>i!==idx&&active(r)&&cKey(type,r)===cKey(type,candidate));
+    if(dup>=0)return alert(`Duplicate entry: ${cKey(type,candidate)}`);
+    arr[idx]=candidate;clearDeleted(arr[idx]);touch(arr[idx]);saveDB();closeModal('previewModal');renderCarrierChargesMaster(type==='sea'?'sealcl':type);autoBackup();alert('✅ Carrier charge updated.');
+  };
+
+  // Combined legacy Local Charges workbook importer. It now uses the same keys as
+  // the dedicated importers and supports new records instead of only merging values.
+  window.bulkImportLocalCharges=function(input){
+    const file=input?.files?.[0]; if(!file)return;
+    if(typeof XLSX==='undefined')return alert('XLSX library not loaded.');
+    const reader=new FileReader();
+    reader.onload=function(e){
+      try{
+        const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});
+        const plans=[]; const errors=[];
+        const parseRows=(sheetName,mode,fields)=>{
+          const sh=wb.Sheets[sheetName];if(!sh)return;
+          const rows=XLSX.utils.sheet_to_json(sh,{defval:'',raw:false});
+          const groups=new Map();
+          rows.forEach((row,i)=>{
+            const pol=N(row.POL),commodity=C(row.Commodity||row.CARGO),container=mode==='sea'?CN(row.Container||'ALL'):'ALL';
+            if(!pol||!['HAZ','NON HAZ'].includes(commodity))return errors.push(`${sheetName} row ${i+2}: POL and HAZ/NON HAZ are required.`);
+            const base={pol,commodity,container};
+            if(mode!=='air'&&row.Carrier!==undefined)base.carrier=N(row.Carrier); else if(mode==='sea')base.carrier='ALL';
+            const key=fields.map(k=>N(base[k])).join('|');
+            if(!groups.has(key))groups.set(key,{...base,charges:{}});
+            const ch=row['Charge Name']; if(ch){const amount=parseFloat(String(row['Sell Amount']||'').replace(/[^\d.-]/g,''))||0;const buy=parseFloat(String(row['Buy Amount']||'').replace(/[^\d.-]/g,''))||0;if(amount||buy)groups.get(key).charges[N(ch)]={amount,currency:N(row['Sell Currency'])||'INR',buyAmount:buy,buyCurrency:N(row['Buy Currency'])||N(row['Sell Currency'])||'INR',basis:row.Basis||'Normal'};}
+          });
+          groups.forEach(g=>plans.push({mode,default:true,...g}));
+        };
+        parseRows('Sea Default','sea',['carrier','pol','container','commodity']);
+        parseRows('Air Default','air',['pol','commodity']);
+        parseRows('Lcl Default','lcl',['pol','commodity']);
+        const csl=wb.Sheets['Carrier Sea/Lcl']; if(csl){
+          const groups=new Map(); XLSX.utils.sheet_to_json(csl,{defval:'',raw:false}).forEach((row,i)=>{const mode=N(row.Mode).toLowerCase()==='lcl'?'lcl':'sea',carrier=N(row.Carrier),pol=N(row.POL),commodity=C(row.Commodity),container=CN(row.Container||'ALL');if(!carrier||!pol)return errors.push(`Carrier Sea/Lcl row ${i+2}: Carrier and POL are required.`);const key=[mode,carrier,pol,container,commodity].join('|');if(!groups.has(key))groups.set(key,{mode,carrier,pol,commodity,container,charges:{}});const ch=row['Charge Name'];if(ch){const a=parseFloat(row['Sell Amount'])||0,b=parseFloat(row['Buy Amount'])||0;if(a||b)groups.get(key).charges[N(ch)]={amount:a,currency:N(row['Sell Currency'])||'INR',buyAmount:b,buyCurrency:N(row['Buy Currency'])||N(row['Sell Currency'])||'INR',basis:row.Basis||'Normal'};}});groups.forEach(g=>plans.push({carrier:true,...g}));
+        }
+        const ca=wb.Sheets['Carrier Air']; if(ca){const groups=new Map();XLSX.utils.sheet_to_json(ca,{defval:'',raw:false}).forEach((row,i)=>{const carrier=N(row.Carrier),pol=N(row.POL),commodity=C(row.Commodity);if(!carrier||!pol)return errors.push(`Carrier Air row ${i+2}: Carrier and POL are required.`);const key=[carrier,pol,commodity].join('|');if(!groups.has(key))groups.set(key,{mode:'air',carrier,pol,commodity,container:'ALL',charges:{}});const ch=row['Charge Name'];if(ch){const a=parseFloat(row['Sell Amount'])||0,b=parseFloat(row['Buy Amount'])||0;if(a||b)groups.get(key).charges[N(ch)]={amount:a,currency:N(row['Sell Currency'])||'INR',buyAmount:b,buyCurrency:N(row['Buy Currency'])||N(row['Sell Currency'])||'INR',basis:row.Basis||'Normal'};}});groups.forEach(g=>plans.push({carrier:true,...g}));}
+        if(errors.length)return alert('❌ Import validation failed:\n\n'+errors.slice(0,30).join('\n'));
+        if(!plans.length)return alert('No supported Local Charges records found.');
+        if(!confirm(`Import ${plans.length} Local Charges record group(s)? Existing exact matches will be updated; new business keys will be added.`))return;
+        let added=0,updated=0;
+        plans.forEach(x=>{
+          if(x.carrier){const arr=arrCarrier(x.mode);let idx=arr.findIndex(r=>active(r)&&cKey(x.mode,r)===cKey(x.mode,x));if(idx<0){arr.push({mode:x.mode,carrier:x.carrier,pol:x.pol,commodity:x.commodity,container:x.container,charges:{},createdAt:now()});idx=arr.length-1;added++;}else updated++;const r=arr[idx];Object.assign(r,{mode:x.mode,carrier:x.carrier,pol:x.pol,commodity:x.commodity,container:x.container});r.charges={...(r.charges||{}),...x.charges};clearDeleted(r);touch(r);
+          }else{const m=x.mode,arr=arrDefault(m);let idx=arr.findIndex(r=>active(r)&&dKey(m,r)===dKey(m,x));if(idx<0){arr.push({mode:m,pol:x.pol,commodity:x.commodity,container:x.container,charges:{},createdAt:now()});idx=arr.length-1;added++;}else updated++;const r=arr[idx];Object.assign(r,{mode:m,pol:x.pol,commodity:x.commodity,container:x.container});r.charges={...(r.charges||{}),...x.charges};clearDeleted(r);touch(r);}
+        });
+        saveDB();renderDefaultChargesMaster(currentLocalTab||'sea');renderCarrierChargesMaster(currentLocalTab==='sea'?'sealcl':currentLocalTab||'air');autoBackup();alert(`✅ Local Charges import completed.\nNew records: ${added}\nUpdated records: ${updated}`);
+      }catch(err){console.error(err);alert('❌ Local Charges import failed: '+err.message);}finally{input.value='';}
+    };reader.readAsArrayBuffer(file);
+  };
+})();
+
+// ============================================================
+// FINAL LOCAL CHARGES CARRIER IMPORT/RENDER FIX
+// Scope: Carrier-Specific Charges + Dedicated SEA THC + Import Carrier only
+// Uses legacy persisted arrays as the single active UI source of truth.
+// ============================================================
+(function(){
+  'use strict';
+  const U=v=>String(v??'').trim().replace(/\s+/g,' ').toUpperCase();
+  const cargo=v=>{const x=U(v); return x==='HAZ'||x==='HAZARDOUS'?'HAZ':'NON HAZ';};
+  const cont=v=>{let x=U(v); if(!x||x==='ALL'||x==='ALL / GENERAL')return 'ALL'; if(/20\s*(GP|DV|DC)?/.test(x))return '20 GP'; if(/40\s*(HC|HQ)/.test(x))return '40 HC'; if(/40\s*(GP|DV|DC)?/.test(x))return '40 GP'; return x;};
+  const mode=v=>{const x=U(v); return x==='LCL'?'lcl':x==='AIR'?'air':'sea';};
+  const active=r=>r&&!r.deleted;
+  const stamp=()=>new Date().toISOString();
+  const esc2=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  const arrFor=t=>t==='air'?(db.carrierChargesAir||(db.carrierChargesAir=[])):(db.carrierChargesSeaLcl||(db.carrierChargesSeaLcl=[]));
+  const carrierKey2=(m,r)=>['C',m,U(r.carrier),U(r.pol),cargo(r.commodity),m==='air'?'ALL':cont(r.container)].join('|');
+  const thcKey2=r=>['T','SEA',U(r.carrier),U(r.pol),cargo(r.commodity),U(r.currency)].join('|');
+  const sheetByName=(wb,names)=>{const wanted=names.map(U); const k=Object.keys(wb.Sheets||{}).find(s=>wanted.includes(U(s))); return k?wb.Sheets[k]:null;};
+  const parseNum=v=>{if(v===null||v===undefined||String(v).trim()==='')return null; const n=Number(String(v).replace(/,/g,'').replace(/[^0-9.+-]/g,'')); return Number.isFinite(n)?n:null;};
+  const money=(amount,currency,buyAmount,buyCurrency,basis)=>({amount:Number(amount)||0,currency:U(currency)||'INR',buyAmount:Number(buyAmount)||0,buyCurrency:U(buyCurrency)||U(currency)||'INR',basis:basis||'Normal'});
+
+  function normalizeCarrierRecord(r,m){
+    r.mode=m; r.carrier=U(r.carrier); r.pol=String(r.pol??'').trim(); r.commodity=cargo(r.commodity); r.container=m==='air'?'ALL':cont(r.container); r.charges=r.charges||{}; r.updatedAt=r.updatedAt||r.updated||r.createdAt||stamp(); r.updated=r.updated||r.updatedAt; return r;
+  }
+  function normalizeTHCRecord(r){
+    r.mode='sea'; r.carrier=U(r.carrier); r.pol=String(r.pol??'').trim(); r.commodity=cargo(r.commodity); r.container='ALL'; r.currency=U(r.currency)||'INR'; r.updatedAt=r.updatedAt||r.updated||r.createdAt||stamp(); r.updated=r.updated||r.updatedAt; return r;
+  }
+  function touch2(r){const t=stamp();r.updated=t;r.updatedAt=t;if(!r.createdAt)r.createdAt=t;}
+
+  // Render every Carrier table from the same persisted arrays used by Import/Save.
+  window.renderCarrierChargesMaster=function(type){
+    const t=type==='sealcl'?'sea':type==='lcl'?'lcl':'air';
+    const el=document.getElementById(`cc-${type}-master-table`); if(!el)return;
+    const search=U(document.getElementById(`cc-${type}-search`)?.value||'');
+    const arr=arrFor(t).map((r,i)=>({r,i})).filter(x=>active(x.r)).filter(x=>{
+      const r=x.r; const text=[r.carrier,r.pol,r.commodity,r.container].map(U).join(' '); return !search||text.includes(search);
+    });
+    let html=`<table class="master-table"><thead><tr><th style="width:42px;text-align:center;"><input type="checkbox" class="select-all-cc" data-type="${type}" title="Select all"></th><th>Carrier</th><th>POL</th><th>HAZ / NON HAZ</th><th>Container</th><th>Charges</th><th>Updated</th></tr></thead><tbody>`;
+    if(!arr.length) html+=`<tr><td colspan="7" style="text-align:center;padding:16px;color:var(--text-light);">No carrier-specific records.</td></tr>`;
+    arr.forEach(({r,i})=>{
+      const count=Object.keys(r.charges||{}).filter(k=>!/^THC(?:_|$)/i.test(k)).length;
+      html+=`<tr><td style="text-align:center;"><input type="checkbox" class="cc-checkbox" data-type="${type}" data-idx="${i}"></td><td><strong>${esc2(r.carrier)}</strong></td><td>${esc2(r.pol)}</td><td>${esc2(r.commodity)}</td><td>${esc2(r.container)}</td><td style="text-align:center"><strong>${count}</strong></td><td>${r.updated?new Date(r.updated).toLocaleDateString('en-IN'):'—'}</td></tr>`;
+    });
+    html+='</tbody></table>'; el.innerHTML=html;
+    el.querySelectorAll('.select-all-cc').forEach(cb=>cb.addEventListener('change',function(){el.querySelectorAll('.cc-checkbox').forEach(c=>c.checked=this.checked);if(typeof updateSelectedCount==='function')updateSelectedCount();}));
+    el.querySelectorAll('.cc-checkbox').forEach(cb=>cb.addEventListener('change',()=>{if(typeof updateSelectedCount==='function')updateSelectedCount();}));
+    if(typeof updateLocalChargeToolbar==='function')updateLocalChargeToolbar('cc',type,arr.length);
+  };
+
+  window.findCarrierChargeDuplicate=function(type,record,excludeIndex){
+    const t=type==='sealcl'?'sea':type==='lcl'?'lcl':'air'; const arr=arrFor(t); const key=carrierKey2(t,record);
+    return arr.findIndex((r,i)=>i!==excludeIndex&&active(r)&&carrierKey2(t,r)===key)>=0;
+  };
+  window.getLocalChargeBusinessKey=function(kind,type,record){
+    if(kind==='carrier')return carrierKey2(type==='sealcl'?'sea':type==='lcl'?'lcl':'air',record);
+    if(kind==='thc')return thcKey2(record);
+    if(typeof window.__getPreviousLocalChargeBusinessKey==='function')return window.__getPreviousLocalChargeBusinessKey(kind,type,record);
+    return '';
+  };
+
+  // Robust Import Carrier. Supports the current exported workbook and legacy
+  // sheet names, and always creates a new record when the exact business key is absent.
+  window.bulkImportCarrierCharges=function(input){
+    const file=input?.files?.[0]; if(!file)return alert('Please select an Excel file.');
+    if(typeof XLSX==='undefined')return alert('XLSX library not loaded.');
+    const reader=new FileReader();
+    reader.onload=function(e){
+      try{
+        const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});
+        const plans=[]; const errors=[]; const warnings=[]; let sheets=0;
+        const longRows=(sh)=>XLSX.utils.sheet_to_json(sh,{defval:'',raw:false});
+        const findCol=(row,names)=>{const keys=Object.keys(row);const wants=names.map(U);return keys.find(k=>wants.includes(U(k)));};
+        const addCharge=(obj,row)=>{
+          const chargeCol=findCol(row,['Charge Name','Charge','CHARGE']);
+          if(!chargeCol)return;
+          const name=U(row[chargeCol]); if(!name||/^THC(?:_|$)/i.test(name))return;
+          const sellAmtCol=findCol(row,['Sell Amount','SELL AMOUNT','Amount','AMOUNT']);
+          const buyAmtCol=findCol(row,['Buy Amount','BUY AMOUNT']);
+          const sellCurCol=findCol(row,['Sell Currency','SELL CURRENCY','Currency','CURRENCY']);
+          const buyCurCol=findCol(row,['Buy Currency','BUY CURRENCY']);
+          const a=parseNum(row[sellAmtCol]); const b=parseNum(row[buyAmtCol]);
+          if(a===null&&b===null)return;
+          obj.charges[name]=money(a??0,row[sellCurCol]||'INR',b??a??0,row[buyCurCol]||row[sellCurCol]||'INR',row.Basis||row.BASIS||'Normal');
+        };
+        function processCarrierSheet(names,fixedMode){
+          const sh=sheetByName(wb,names); if(!sh)return; sheets++;
+          const rows=longRows(sh); if(!rows.length){warnings.push(`${names[0]}: no data rows.`);return;}
+          const groups=new Map();
+          rows.forEach((row,i)=>{
+            const m=fixedMode||mode(row[findCol(row,['MODE','Mode'])]||'SEA');
+            const carrier=U(row[findCol(row,['CARRIER','Carrier'])]||'');
+            const pol=String(row[findCol(row,['POL'])]??'').trim();
+            const haz=cargo(row[findCol(row,['CARGO','Commodity'])]||'NON HAZ');
+            const container=m==='air'?'ALL':cont(row[findCol(row,['CONTAINER','Container'])]||'ALL');
+            if(!carrier||!pol){errors.push(`${names[0]} row ${i+2}: Carrier and POL are required.`);return;}
+            if(!['HAZ','NON HAZ'].includes(haz)){errors.push(`${names[0]} row ${i+2}: CARGO must be HAZ or NON HAZ.`);return;}
+            const base={mode:m,carrier,pol,commodity:haz,container,charges:{}};
+            const key=carrierKey2(m,base);
+            if(!groups.has(key))groups.set(key,base);
+            addCharge(groups.get(key),row);
+          });
+          groups.forEach(g=>plans.push({kind:'carrier',...g}));
+        }
+        processCarrierSheet(['SEA - LOCAL CHARGES'],'sea');
+        processCarrierSheet(['AIR - LOCAL CHARGES'],'air');
+        processCarrierSheet(['LCL - LOCAL CHARGES'],'lcl');
+        processCarrierSheet(['Carrier Sea/Lcl'],'');
+        processCarrierSheet(['Carrier Air'],'air');
+
+        const thc=sheetByName(wb,['SEA - THC','LC SEA THC']);
+        if(thc){
+          sheets++; const rows=longRows(thc); const groups=new Map();
+          rows.forEach((row,i)=>{
+            const carrier=U(row[findCol(row,['CARRIER','Carrier'])]||'');
+            const pol=String(row[findCol(row,['POL'])]??'').trim();
+            const haz=cargo(row[findCol(row,['CARGO','Commodity'])]||'NON HAZ');
+            const currency=U(row[findCol(row,['CURRENCY','Currency'])]||'INR');
+            if(!carrier||!pol){errors.push(`SEA - THC row ${i+2}: Carrier and POL are required.`);return;}
+            if(!['HAZ','NON HAZ'].includes(haz)){errors.push(`SEA - THC row ${i+2}: CARGO must be HAZ or NON HAZ.`);return;}
+            if(!['INR','USD'].includes(currency)){errors.push(`SEA - THC row ${i+2}: CURRENCY must be INR or USD.`);return;}
+            const base={carrier,pol,commodity:haz,currency,thc20:null,thc40:null,validFrom:String(row['VALID FROM']||'').trim(),validTo:String(row['VALID TO']||'').trim()};
+            const key=thcKey2(base); if(!groups.has(key))groups.set(key,base); const g=groups.get(key);
+            const v20=parseNum(row['THC 20 GP']); const v40=parseNum(row['THC 40 HC']);
+            if(v20!==null)g.thc20=v20; if(v40!==null)g.thc40=v40;
+            if(row['VALID FROM'])g.validFrom=String(row['VALID FROM']).trim(); if(row['VALID TO'])g.validTo=String(row['VALID TO']).trim();
+          });
+          groups.forEach(g=>plans.push({kind:'thc',...g}));
+        }
+        if(!sheets)throw new Error('No recognized Carrier/Local Charges sheets found.');
+        if(errors.length)return alert(`❌ Import Carrier validation failed.\n\n${errors.slice(0,30).join('\n')}${errors.length>30?'\n...more errors':''}`);
+        if(!plans.length)return alert('No supported Carrier records found in the selected workbook.');
+        if(!confirm(`Import ${plans.length} Carrier/THC record group(s)?\n\nExact matching keys will be updated. New keys will be added.`))return;
+
+        let added=0,updated=0,values=0;
+        plans.forEach(p=>{
+          const t=stamp();
+          if(p.kind==='thc'){
+            db.seaTHCRates ||= [];
+            let rec=db.seaTHCRates.find(r=>thcKey2(r)===thcKey2(p));
+            if(!rec){rec={mode:'sea',carrier:p.carrier,pol:p.pol,commodity:p.commodity,container:'ALL',currency:p.currency,thc20:null,thc40:null,validFrom:'',validTo:'',createdAt:t,updated:t,updatedAt:t};db.seaTHCRates.push(rec);added++;}
+            else updated++;
+            Object.assign(rec,{mode:'sea',carrier:p.carrier,pol:p.pol,commodity:p.commodity,container:'ALL',currency:p.currency});
+            if(p.thc20!==null){rec.thc20=p.thc20;values++;} if(p.thc40!==null){rec.thc40=p.thc40;values++;}
+            if(p.validFrom)rec.validFrom=p.validFrom; if(p.validTo)rec.validTo=p.validTo;
+            rec.deleted=false; delete rec.deletedAt; rec.updated=t; rec.updatedAt=t;
+          }else{
+            const arr=arrFor(p.mode); let rec=arr.find(r=>carrierKey2(p.mode,r)===carrierKey2(p.mode,p));
+            if(!rec){rec={mode:p.mode,carrier:p.carrier,pol:p.pol,commodity:p.commodity,container:p.container,charges:{},createdAt:t,updated:t,updatedAt:t};arr.push(rec);added++;}
+            else updated++;
+            Object.assign(rec,{mode:p.mode,carrier:p.carrier,pol:p.pol,commodity:p.commodity,container:p.container});
+            rec.charges ||= {};
+            Object.entries(p.charges||{}).forEach(([k,v])=>{rec.charges[k]=v;values++;});
+            rec.deleted=false; delete rec.deletedAt; rec.updated=t; rec.updatedAt=t;
+          }
+        });
+        // Keep the old shared cache from becoming a competing source. It is rebuilt
+        // only as a compatibility mirror; UI and quote lookup remain on legacy arrays.
+        try{if(typeof window.normalizeLocalChargesData==='function')window.normalizeLocalChargesData();}catch(_e){}
+        saveDB();
+        const tab=currentLocalTab||'sea';
+        renderCarrierChargesMaster(tab==='sea'?'sealcl':tab);
+        if(tab==='sea'&&typeof renderSeaTHCMaster==='function')renderSeaTHCMaster();
+        autoBackup();
+        alert(`✅ Import Carrier completed.\nSheets processed: ${sheets}\nNew records: ${added}\nUpdated records: ${updated}\nCharge/THC values imported: ${values}${warnings.length?'\n\nWarnings:\n'+warnings.slice(0,10).join('\n'):''}`);
+      }catch(err){console.error('Final Carrier Import Error:',err);alert('❌ Import Carrier failed: '+(err?.message||err));}
+      finally{try{input.value='';}catch(_e){}}
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  // Make bulk delete use the same actual persisted index and ignore deleted rows.
+  window.bulkDeleteSelectedLocal=function(){
+    const selected=[...document.querySelectorAll('.dc-checkbox:checked,.cc-checkbox:checked,.thc-checkbox:checked')];
+    if(!selected.length)return alert('Please select at least one Local Charges record.');
+    if(!confirm(`Delete ${selected.length} selected Local Charges record(s)?`))return;
+    let deleted=0;
+    selected.forEach(el=>{
+      const idx=Number(el.dataset.idx);if(!Number.isInteger(idx))return;
+      let arr;
+      if(el.classList.contains('cc-checkbox')){const t=el.dataset.type||el.dataset.mode;arr=t==='air'?db.carrierChargesAir:db.carrierChargesSeaLcl;}
+      else if(el.classList.contains('thc-checkbox'))arr=db.seaTHCRates;
+      else {const m=el.dataset.mode;arr=m==='air'?db.defaultAirCharges:m==='lcl'?db.defaultLclCharges:db.defaultSeaCharges;}
+      if(arr?.[idx]&&!arr[idx].deleted){arr[idx].deleted=true;arr[idx].deletedAt=stamp();arr[idx].updated=stamp();arr[idx].updatedAt=arr[idx].updated;deleted++;}
+    });
+    saveDB();
+    const tab=currentLocalTab||'sea';
+    if(typeof renderDefaultChargesMaster==='function')renderDefaultChargesMaster(tab);
+    renderCarrierChargesMaster(tab==='sea'?'sealcl':tab);
+    if(tab==='sea'&&typeof renderSeaTHCMaster==='function')renderSeaTHCMaster();
+    if(typeof autoBackup==='function')autoBackup();
+    alert(`✅ Deleted ${deleted} Local Charges record(s).`);
+  };
+
+  // Normalize the legacy carrier collections on load without collapsing different keys.
+  try{
+    (db.carrierChargesSeaLcl||[]).forEach(r=>normalizeCarrierRecord(r,r.mode==='lcl'?'lcl':'sea'));
+    (db.carrierChargesAir||[]).forEach(r=>normalizeCarrierRecord(r,'air'));
+    (db.seaTHCRates||[]).forEach(normalizeTHCRecord);
+  }catch(e){console.error('Carrier Local Charges normalization failed:',e);}
+})();
 
 /* ===== END JS/20-global-sync-calculators.js ===== */
