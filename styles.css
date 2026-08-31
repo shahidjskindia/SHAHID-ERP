@@ -344,3 +344,85 @@ body.uiux-standardized textarea:focus {
     transform: translateY(0);
 }
 
+
+/* Planner date-wise command center summary */
+.planner-date-summary{margin:10px 0 14px;background:var(--card-bg);border:1px solid var(--border);border-radius:10px;padding:12px;box-shadow:0 4px 14px rgba(15,23,42,.06)}
+.planner-date-summary-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.planner-summary-title{font-weight:800;color:var(--primary);font-size:1rem;margin-right:auto;white-space:nowrap}.planner-summary-title span{font-weight:600;color:var(--text-light)}
+.planner-date-filters{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.planner-date-filters label{font-size:.75rem;font-weight:700;color:var(--text-light);display:flex;align-items:center;gap:5px}.planner-date-filters input{min-height:34px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--card-bg);color:var(--text);font-size:.8rem}
+.planner-summary-range{font-size:.7rem;color:var(--text-light);margin-left:auto}.planner-summary-cards{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;padding-top:12px}.planner-summary-card{width:100%;justify-self:stretch;display:flex;align-items:center;gap:10px;min-height:88px;padding:12px;border:1px solid var(--border);border-left:4px solid var(--primary);border-radius:9px;background:var(--card-bg);box-shadow:0 3px 10px rgba(15,23,42,.05);transition:transform .16s ease,box-shadow .16s ease}.planner-summary-card:hover{transform:translateY(-2px);box-shadow:0 7px 16px rgba(15,23,42,.09)}.planner-summary-icon{width:42px;height:42px;display:flex;align-items:center;justify-content:center;border-radius:9px;background:var(--primary);font-size:1.35rem;flex:0 0 42px}.planner-summary-label{font-size:.68rem;font-weight:800;color:var(--text-light);line-height:1.15}.planner-summary-value{font-size:1.55rem;font-weight:800;line-height:1.15;color:var(--primary)}.planner-summary-card small{font-size:.65rem;color:var(--text-light)}.planner-summary-card.milestones{border-left-color:#e8107b}.planner-summary-card.milestones .planner-summary-icon{background:#e8107b}.planner-summary-card.quotes{border-left-color:#018056}.planner-summary-card.quotes .planner-summary-icon{background:#018056}.planner-summary-card.expiring-quotes,.planner-summary-card.expiring-rates{border-left-color:#ff1808}.planner-summary-card.expiring-quotes .planner-summary-icon,.planner-summary-card.expiring-rates .planner-summary-icon{background:#ff1808}.planner-summary-card.tasks{border-left-color:#5007f5}.planner-summary-card.tasks .planner-summary-icon{background:#5007f5}.planner-summary-card.shipments{border-left-color:#ef4444}.planner-summary-card.shipments .planner-summary-icon{background:#ef4444}.planner-summary-card.all-total{border-left-color:#7c3aed}.planner-summary-card.all-total .planner-summary-icon{background:#7c3aed}
+@media (max-width:1100px){.planner-summary-cards{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media (max-width:760px){.planner-summary-cards{grid-template-columns:repeat(2,minmax(135px,1fr))}.planner-summary-title{width:100%;margin-right:0}.planner-summary-range{width:100%;margin-left:0}.planner-date-filters{width:100%}.planner-date-filters label{flex:1}.planner-date-filters input{width:100%;min-width:0}}
+@media (max-width:480px){.planner-summary-cards{grid-template-columns:1fr}.planner-date-filters label{width:100%}.planner-date-filters button{flex:1}}
+
+/* Islam Daily Tracker — scoped UI */
+.islam-tracker-panel{border:1px solid #7c3aed;border-radius:8px;overflow:hidden;background:var(--card-bg);}
+.islam-tracker-header{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#7c3aed;color:#fff;padding:8px 12px;font-weight:700;font-size:.9rem;}
+.islam-tracker-body{padding:0;background:var(--bg);}
+.islam-tracker-table{width:100%;border-collapse:collapse;background:var(--card-bg);font-size:18px;font-weight:700;text-transform:uppercase;}
+.islam-tracker-table th,.islam-tracker-table td{border:1px solid var(--border);padding:7px 9px;text-align:left;vertical-align:middle;font-weight:700;font-size:18px;line-height:1.25;text-transform:uppercase;}
+.islam-tracker-table th:last-child,.islam-tracker-table td:last-child{text-align:center;}
+.islam-tracker-table th{font-size:.936rem;letter-spacing:.02em;font-weight:700;}
+.islam-group td{font-weight:700;color:var(--primary);background:var(--bg);}
+.islam-rakat{display:inline-block;margin-left:10px;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);font-weight:700;}
+.islam-tracker-actions{display:flex;justify-content:center;gap:8px;padding:10px;flex-wrap:wrap;}
+.islam-input{padding:5px 7px;border:1px solid var(--border);border-radius:5px;background:var(--card-bg);color:var(--text);min-width:78px;}
+.islam-rakat-input{width:68px;min-width:68px;text-align:center;}
+@media(max-width:700px){.islam-tracker-header{align-items:flex-start;flex-direction:column}.islam-tracker-table{font-size:18px;font-weight:700;text-transform:uppercase}.islam-tracker-table th,.islam-tracker-table td{padding:6px;font-size:18px;line-height:1.2;text-transform:uppercase}.islam-input{min-width:70px}}
+
+
+
+
+
+/* FINAL ISLAM DAILY TRACKER — MATCH RATES EXPIRING TEXT */
+.islam-tracker-table,
+.islam-tracker-table th,
+.islam-tracker-table td,
+.islam-tracker-table th *,
+.islam-tracker-table td *,
+.islam-tracker-table .islam-group,
+.islam-tracker-table .islam-group *,
+.islam-tracker-table .islam-row,
+.islam-tracker-table .islam-row *,
+.islam-tracker-table .islam-label,
+.islam-tracker-table .islam-value,
+.islam-tracker-table .islam-input,
+.islam-tracker-table button,
+.islam-tracker-table select,
+.islam-tracker-table input {
+  font-size: 0.8rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+}
+
+/* ============================================================
+   SHAHID ERP — CUSTOMER FOLLOWUP (LIGHT / REGULAR UI)
+   ============================================================ */
+#report-panel-customer-followup .customer-followup-section{padding:0;overflow:hidden;background:var(--card-bg);}
+#report-panel-customer-followup .customer-followup-table-wrap{width:100%;overflow:auto;border:1px solid var(--border);border-radius:10px;background:#fff;}
+#report-panel-customer-followup .customer-followup-table{width:100%;min-width:1180px;border-collapse:separate;border-spacing:0;background:#fff;font-size:.78rem;}
+#report-panel-customer-followup .customer-followup-table th{position:sticky;top:0;z-index:2;background:var(--primary);color:#fff;border-right:1px solid rgba(255,255,255,.16);padding:10px 8px;white-space:nowrap;font-size:.7rem;letter-spacing:.1px;}
+#report-panel-customer-followup .customer-followup-table td{padding:9px 8px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);background:#fff;color:var(--text);vertical-align:middle;white-space:nowrap;}
+#report-panel-customer-followup .customer-followup-table tbody tr:nth-child(even) td{background:#f8fbff;}
+#report-panel-customer-followup .customer-followup-table tbody tr:hover td{background:#eef6ff;}
+#report-panel-customer-followup .customer-followup-table th:nth-child(1),#report-panel-customer-followup .customer-followup-table td:nth-child(1){width:48px;text-align:center;}
+#report-panel-customer-followup .customer-followup-table th:nth-child(2){min-width:150px;}#report-panel-customer-followup .customer-followup-table th:nth-child(3){min-width:135px;}#report-panel-customer-followup .customer-followup-table th:nth-child(4){min-width:125px;}#report-panel-customer-followup .customer-followup-table th:nth-child(5){min-width:120px;}#report-panel-customer-followup .customer-followup-table th:nth-child(6),#report-panel-customer-followup .customer-followup-table th:nth-child(7){min-width:105px;}#report-panel-customer-followup .customer-followup-table th:nth-child(8){min-width:125px;}#report-panel-customer-followup .customer-followup-table th:nth-child(9){min-width:105px;}#report-panel-customer-followup .customer-followup-table th:nth-child(10){min-width:95px;}#report-panel-customer-followup .customer-followup-table th:nth-child(11){min-width:115px;}#report-panel-customer-followup .customer-followup-table th:nth-child(12){min-width:92px;}
+#report-panel-customer-followup .customer-followup-table a{color:var(--primary);font-weight:600;text-decoration:none;}#report-panel-customer-followup .customer-followup-table a:hover{text-decoration:underline;}
+.customer-followup-status{display:inline-flex;align-items:center;justify-content:center;min-width:84px;padding:5px 8px;border-radius:7px;font-weight:800;font-size:.68rem;line-height:1;border:1px solid transparent;}
+.customer-followup-status.status-follow-up{background:#fff4d6;color:#a16207;border-color:#f6d78a}.customer-followup-status.status-in-progress{background:#e4f0ff;color:#1d4ed8;border-color:#bfdbfe}.customer-followup-status.status-pending{background:#fff1e6;color:#c2410c;border-color:#fed7aa}.customer-followup-status.status-done{background:#dcfce7;color:#15803d;border-color:#bbf7d0}
+.customer-followup-actions{display:flex;gap:5px;justify-content:center}.customer-followup-actions .btn{min-width:34px;padding:6px 7px;}
+.customer-followup-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 4px;color:var(--text-light);font-size:.76rem;flex-wrap:wrap}.customer-followup-footer>label{display:flex;align-items:center;gap:5px}.customer-followup-footer select{height:32px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--text);padding:4px 8px}.customer-followup-pagination{display:flex;gap:4px;align-items:center}.customer-followup-pagination button{min-width:31px;height:31px;border:1px solid var(--border);background:#fff;color:var(--text);border-radius:6px;cursor:pointer;font-weight:700}.customer-followup-pagination button.active{background:var(--primary);color:#fff;border-color:var(--primary)}.customer-followup-pagination button:disabled{opacity:.45;cursor:not-allowed}
+.customer-followup-form{margin-bottom:12px;border:1px solid var(--border);border-radius:10px;background:#f8fbff;padding:12px}.customer-followup-form-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;color:var(--primary)}.customer-followup-form-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.customer-followup-form-grid .form-group label{display:block;margin-bottom:5px;font-size:.72rem;font-weight:800;color:var(--text-light)}.customer-followup-form-grid input,.customer-followup-form-grid select{width:100%;height:38px;border:1px solid var(--border);border-radius:7px;background:#fff;color:var(--text);padding:7px 9px;font-size:.8rem}.customer-followup-form-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+@media(max-width:900px){.customer-followup-form-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.customer-followup-footer{justify-content:center;}}
+@media(max-width:600px){.customer-followup-form-grid{grid-template-columns:1fr;}.customer-followup-footer{font-size:.7rem;}.customer-followup-table{font-size:.72rem!important;}}
+
+
+.db-maintenance-grid{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.db-maintenance-note{font-size:.72rem;color:var(--text-light);margin-top:8px}
+.db-zoom-control{display:flex;align-items:center;gap:4px}
+.db-zoom-control #shahid-zoom-reset{min-width:64px}
+
+.islam-darood-counter{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.islam-darood-btn{width:32px;height:30px;min-width:32px;padding:0;border:1px solid #d1d5db;border-radius:6px;background:#fff;color:#111827;font-size:18px;font-weight:700;line-height:28px;cursor:pointer}
+.islam-darood-btn:hover{background:#f3f4f6}
+.islam-darood-count{min-width:42px;text-align:center;font-weight:700;font-size:15px;line-height:30px}
