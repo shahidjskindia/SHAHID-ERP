@@ -1,0 +1,221 @@
+  // Carrier names are discovered from ALL matching SEA Rate Sheet records
+  // (historical + current + future), while the actual rate used/displayed
+  // by Routing & Rates comes ONLY from the future/target-valid Rate Sheet set.
+  function rateSheetMatches(r,c){
+    return norm(r.freightType||'SEA')==='SEA' &&
+      norm(r.pol)===norm(c.pol) && norm(r.pod)===norm(c.pod) &&
+      (!c.container || containerNorm(r.containerType)===containerNorm(c.container)) &&
+      (!c.commodity || !r.commodity || norm(r.commodity)===norm(c.commodity));
+  }
+  function allRateSheetCarrierNames(c){
+    const rates=Array.isArray(dbReady().rateSheet)?dbReady().rateSheet:[];
+    return [...new Set(rates.filter(r=>rateSheetMatches(r,c)).map(r=>String(r.carrierName||'').trim()).filter(Boolean))];
+  }
+  function futureRateRows(carrier,c){
+    const rates=Array.isArray(dbReady().rateSheet)?dbReady().rateSheet:[];
+    const todayDate=today();
+    const target=c.targetDate||todayDate;
+    const rows=rates.filter(r=>{
+      if(!rateSheetMatches(r,c) || norm(r.carrierName)!==norm(carrier)) return false;
+      const from=parseDate(r.validFrom);
+      const to=parseDate(r.validTo);
+      // Future/usable rate: not expired as of the requested target date,
+      // and its validity starts today or later.
+      if(to && target && to < parseDate(target)) return false;
+      if(from && from < parseDate(todayDate)) return false;
+      return true;
+    });
+    return rows.sort((a,b)=>String(a.validFrom||'').localeCompare(String(b.validFrom||'')));
+  }
+  function rateRows(carrier,c){return futureRateRows(carrier,c);}
+  function bestRate(carrier,c){return rateRows(carrier,c)[0]||null;}
+  function freightBuyState(carrier,c){
+    const rate=bestRate(carrier,c);
+    const base=rate?Number(rate.freightAmount)||0:Math.max(0,Number(state.freightManualBuy)||0);
+    const currency=norm(rate?.currency||state.freightManualCurrency||'USD')||'USD';
+    const additional=Math.max(0,Number(state.freightAdditionalBuy)||0);
+    return {rate,base,currency,additional,total:base+additional,fromRateSheet:!!rate};
+  }
+  function rateStatus(carrier,c){
+    const rows=rateRows(carrier,c);
+    if(!rows.length){
+      const all=allRateSheetCarrierNames(c).some(x=>norm(x)===norm(carrier));
+      return all?{type:'warn',text:'Future Rate Not Available'}:{type:'none',text:'No Rate'};
+    }
+    const calc=calculate(c,carrier);
+    return calc.lines.length>1?{type:'ok',text:'Complete Future Rate'}:{type:'warn',text:'Freight Only / Partial'};
+  }
+  function getFx(cur){cur=norm(cur||'INR'); if(cur==='INR')return 1; const v=Number(dbReady().exchangeRates?.[cur]); return Number.isFinite(v)&&v>0?v:null;}
+  function toINRStrict(amount,cur){const fx=getFx(cur); return fx==null?null:Number(amount||0)*fx;}
+  function chargeMap(carrier,c){
+    const out=[];
+    const finalDefault=window.__finalSeaDefault;
+    const finalLocal=window.__finalSeaLocal;
+    const finalTHC=window.__finalSeaTHC;
+    const defaults=typeof finalDefault==='function' ? finalDefault(c.pol,c.commodity,c.container) : {};
+    const locals=typeof finalLocal==='function' ? finalLocal(carrier,c.pol,c.commodity,c.container) : {};
+    const merged={...(defaults||{}),...(locals||{})};
+    Object.keys(merged).forEach(k=>{
+      if(/^THC(?:_|$)/i.test(k))return;
+      const v=merged[k]||{};
+      const buy=Number(v.buyAmount); const amount=Number(v.amount);
+      const useBuy=Number.isFinite(buy)&&buy>0?buy:(Number.isFinite(amount)&&amount>0?amount:0);
+      const cur=norm(v.buyCurrency||v.currency||'INR')||'INR';
+      if(useBuy>0) out.push({name:k,amount:useBuy,currency:cur,source:locals&&locals[k]?'Carrier Local Charges':'Default Charges'});
+    });
+    if(!out.some(x=>norm(x.name)==='THC') && typeof finalTHC==='function'){
+      const t=finalTHC(carrier,c.commodity,c.container,c.pol);
+      if(t&&Number(t.amount)>0)out.push({name:'THC',amount:Number(t.amount),currency:norm(t.currency||t.buyCurrency||'INR'),source:'SEA THC'});
+    }
+    return out;
+  }
+  function calculate(c,carrier){
+    const fs=freightBuyState(carrier,c); const charges=chargeMap(carrier,c); const lines=[]; let total=0; let missingFx=false;
+    const pushLine=(x,isFreight=false)=>{
+      const amount=Number(x.amount)||0; const currency=norm(x.currency||'INR')||'INR';
+      const inr=toINRStrict(amount,currency);
+      if(inr==null){missingFx=true;return;}
+      const key=norm(x.name);
+      let sellInr=inr;
+      if(isFreight){
+        const margin=Math.max(0,Math.min(99.99,Number(state.margin)||0));
+        const manual=state.sellOverrides[key];
+        if(manual!==undefined && Number.isFinite(Number(manual))){
+          const manualInr=toINRStrict(Number(manual),currency);
+          if(manualInr!=null) sellInr=manualInr; else missingFx=true;
+        } else if(margin<100){
+          sellInr=inr/(1-margin/100);
+        }
+      } else if(state.sellOverrides[key]!==undefined){
+        const manualInr=toINRStrict(Number(state.sellOverrides[key]),currency);
+        if(manualInr!=null)sellInr=manualInr; else missingFx=true;
+      }
+      lines.push({...x,amount,currency,inr,sellInr,isFreight,sellAmount: currency==='INR'?sellInr:(getFx(currency)?sellInr/getFx(currency):null)});
+      total+=inr;
+    };
+    // Always expose Ocean Freight as a calculation line. If no valid Rate Sheet
+    // rate exists, the line starts at 0 and is completed from Manual Buy + Additional Buy.
+    pushLine({name:'Ocean Freight',amount:fs.total,currency:fs.currency,source:fs.fromRateSheet?'Admin Rate Sheet':'Manual Buy'},true);
+    charges.forEach(x=>pushLine(x,false));
+    const freight=lines.find(x=>x.isFreight);
+    const otherSell=lines.filter(x=>!x.isFreight).reduce((a,x)=>a+(Number(x.sellInr)||0),0);
+    const finalSell=missingFx||!freight?null:(Number(freight.sellInr)||0)+otherSell;
+    const marginAmount=freight?((Number(freight.sellInr)||0)-freight.inr):0;
+    const marginPct=(freight&&freight.sellInr>0)?(marginAmount/freight.sellInr)*100:0;
+    return {rate:fs.rate,freightBuy:fs,lines,total,margin:marginPct,finalSell,missingFx,freight,marginAmount};
+  }
+  function serviceRows(c){
+    const routes=getRoutes(c);
+    const routeByCarrier=new Map();
+    routes.forEach(r=>{
+      const key=norm(r.carrier);
+      if(!routeByCarrier.has(key)) routeByCarrier.set(key,r);
+    });
+    // Carrier names come ONLY from matching Rate Sheet data, including old + future.
+    // Routing Master enriches the row when a matching service exists.
+    // Transit Time is taken from the selected/future Rate Sheet record when available.
+    const carriers=allRateSheetCarrierNames(c);
+    return carriers.map(carrier=>{
+      const route=routeByCarrier.get(norm(carrier));
+      const rate=bestRate(carrier,c);
+      const rateTransit=rate?.transitTime ?? rate?.transit ?? rate?.tt ?? '';
+      const r=route?{...route}:{
+        carrier, mode:'SEA', shipmentType:c.shipmentType||'EXPORT', pol:c.pol,
+        pod:c.pod, viaPort:c.via.join('>'), serviceName:'-', transitDays:'-',
+        frequency:'-', directTs:'-', effectiveFrom:'-', effectiveUntil:'-', status:'RATE SHEET'
+      };
+      const rs=rateStatus(carrier,c);
+      return {...r,carrier,__rateStatus:rs,__rate:rate,__rateTransit:rateTransit||r.transitDays,__calc:calculate(c,carrier)};
+    }).sort((a,b)=>norm(a.carrier).localeCompare(norm(b.carrier)));
+  }
+  function render(){
+    const root=document.getElementById('routing-suggestion-popup'); if(!root)return;
+    const c={pol:state.pol,pod:state.pod,via:state.via,container:state.container,commodity:state.commodity,shipmentType:state.shipmentType,targetDate:state.targetDate};
+    state.rows=serviceRows(c); const rowKey=r=>r?(r.carrier+'|'+(r.serviceName||r.serviceId||'SERVICE')+'|'+routeNorm(r.viaPort||'')):'';
+    if(state.selected && !state.rows.some(r=>rowKey(r)===state.selected))state.selected=null;
+    if(!state.selected&&state.rows[0])state.selected=rowKey(state.rows[0]);
+    const selected=state.rows.find(r=>rowKey(r)===state.selected)||null;
+    state.draft=selected?selected.__calc: {rate:null,lines:[],total:0,margin:state.margin,finalSell:null,missingFx:false};
+    root.innerHTML=popupHTML(c,selected);
+    bindPopup(c,selected);
+  }
+  function statusBadge(s){return `<span class="routing-status ${s.type}">${s.type==='ok'?'● ':s.type==='warn'?'⚠ ':'✕ '}${esc(s.text)}</span>`;}
+  function popupHTML(c,selected){
+    const calc=selected?.__calc||{lines:[],total:0,finalSell:null,margin:state.margin,missingFx:false};
+    // Use the SAME editable input+datalist pattern and the SAME master values as SEA Quote.
+    // SEA Quote uses editable text inputs backed by datalists, not native <select> controls.
+    const masters=typeof getMasterDropdownLists==='function'?getMasterDropdownLists():{carriers:dbReady().carriers||[],pol:dbReady().pol||[],pod:dbReady().pod||[],containers:dbReady().containers||[],incoterms:dbReady().incoterms||[]};
+    const unique=(arr,current)=>[...new Set([...(Array.isArray(arr)?arr:[]),current].map(x=>String(x??'').trim()).filter(Boolean))];
+    const listOptions=(arr,current)=>unique(arr,current).map(x=>`<option value="${esc(x)}">`).join('');
+    const shipmentTypes=['EXPORT','IMPORT'];
+    const viaList=unique([...(masters.pol||[]),...(masters.pod||[])],c.via?.[0]||'');
+    const viaOptions=listOptions(viaList,'');
+    const containerList=unique(masters.containers||[],c.container);
+    const cargoList=['NON HAZ','HAZ'];
+    const serviceKey=selected?(selected.carrier+'|'+(selected.serviceName||selected.serviceId||'SERVICE')+'|'+routeNorm(selected.viaPort||'')):'';
+    const via=c.via.length?c.via:[];
+    const routePath=[c.pol,...via,c.pod].filter(Boolean);
+    const rows=state.rows;
+    const routeRows=rows.length?rows.map((r,i)=>{const key=r.carrier+'|'+(r.serviceName||r.serviceId||'SERVICE')+'|'+routeNorm(r.viaPort||'');const active=key===serviceKey;return `<tr class="${active?'selected':''}" data-route-key="${esc(key)}"><td><input type="radio" name="routing-service" ${active?'checked':''} data-route-key="${esc(key)}"></td><td><strong>${esc(r.carrier||'-')}</strong><small class="routing-muted">${esc(r.serviceName||r.serviceId||'-')}</small></td><td>${esc(r.__rateTransit||r.transitDays||'-')} ${String(r.__rateTransit||r.transitDays||'').match(/days?$/i)?'':'Days'}</td><td>${esc(r.frequency||'-')}</td><td>${esc(r.directTs||'-')}</td><td>${statusBadge(r.__rateStatus)}</td><td>${r.__rate?`${dateText(r.__rate.validFrom)} → ${dateText(r.__rate.validTo)}`:'-'}</td><td><button class="btn btn-sm btn-preview routing-view-btn" data-route-key="${esc(key)}">View</button></td></tr>`}).join(''):`<tr><td colspan="8" class="routing-empty-state">No exact routing found for this route.</td></tr>`;
+    const lineRows=calc.lines.length?calc.lines.map(x=>{
+      const sellDisplay=x.sellAmount==null?'':Number(x.sellAmount).toFixed(2);
+      const buyDisplay=x.isFreight?Number(calc.freightBuy?.total||0):Number(x.amount||0);
+      const buyInrDisplay=x.isFreight?toINRStrict(buyDisplay,x.currency):x.inr;
+      const freightNote=x.isFreight?`<small class="routing-muted">${calc.freightBuy?.fromRateSheet?'Rate Sheet '+money(calc.freightBuy.base):'Manual Buy'} + Additional ${money(calc.freightBuy?.additional||0)} = Total ${money(calc.freightBuy?.total||0)}</small>`:'';
+      return `<tr><td><strong>${esc(x.name)}</strong>${freightNote}</td><td>${money(buyDisplay)}</td><td>${esc(x.currency)}</td><td>${buyInrDisplay==null?'—':fmtINR(buyInrDisplay)}</td><td><input class="routing-sell-input" data-sell-charge="${esc(norm(x.name))}" type="number" min="0" step="0.01" value="${esc(sellDisplay)}"></td></tr>`;
+    }).join(''):`<tr><td colspan="5" class="routing-empty-state">No applicable charges found in Admin database.</td></tr>`;
+    const fs=calc.freightBuy||{base:0,additional:0,total:0,currency:'USD',fromRateSheet:false};
+    const freightCurrency=esc(fs.currency||'USD');
+    const baseBuyValue=Number(fs.base||0).toFixed(2);
+    const addBuyValue=Number(fs.additional||0).toFixed(2);
+    const freightTotalValue=Number(fs.total||0).toFixed(2);
+    const freightTotalInr=toINRStrict(Number(fs.total||0),fs.currency||'USD');
+    const routeBoxes=routePath.map((p,i)=>`<div class="routing-path-node"><span>${i===0?'POL':i===routePath.length-1?'POD':'VIA'}</span><strong>${esc(p)}</strong></div>${i<routePath.length-1?'<b class="routing-path-arrow">→</b>':''}`).join('');
+    return `<div class="routing-popup">
+      <div class="routing-popup-head"><div><h3>🧭 Routing &amp; Carrier Suggestion</h3><small>Routing, future SEA freight rates, validity, INR cost and selling preview</small></div><div class="routing-popup-head-actions"><button class="btn btn-success btn-sm" id="routing-add-new">＋ Add New Routing</button><button class="btn btn-info btn-sm" id="routing-open-master">View in Routing Master</button><button class="routing-popup-close" id="routing-close">×</button></div></div>
+      <div class="routing-popup-editbar">
+        <div><label>Shipment Type</label><input id="rp-shipment" list="rp-shipment-list" autocomplete="off" value="${esc(c.shipmentType||'EXPORT')}" placeholder="Type or select Shipment Type..."><datalist id="rp-shipment-list"><option value="EXPORT"><option value="IMPORT"></datalist></div>
+        <div><label>POL (India)</label><input id="rp-pol" list="rp-pol-list" autocomplete="off" value="${esc(c.pol||'')}" placeholder="Type POL..."><datalist id="rp-pol-list">${listOptions(masters.pol,c.pol)}</datalist></div>
+        <div class="routing-via-editor"><label>Via Port(s)</label><div class="routing-via-chips" id="rp-via-chips">${via.map((x,i)=>`<span>${esc(x)} <button type="button" data-via-index="${i}">×</button></span>`).join('')}</div><input id="rp-via-add" list="rp-via-list" autocomplete="off" placeholder="Type or select Via Port..."><datalist id="rp-via-list">${viaOptions}</datalist></div>
+        <div><label>POD</label><input id="rp-pod" list="rp-pod-list" autocomplete="off" value="${esc(c.pod||'')}" placeholder="Type POD..."><datalist id="rp-pod-list">${listOptions(masters.pod,c.pod)}</datalist></div>
+        <div><label>Container</label><input id="rp-container" list="rp-container-list" autocomplete="off" value="${esc(c.container||'')}" placeholder="Type Container..."><datalist id="rp-container-list">${listOptions(containerList,c.container)}</datalist></div>
+        <div><label>Cargo</label><input id="rp-commodity" list="rp-commodity-list" autocomplete="off" value="${esc(c.commodity||'NON HAZ')}" placeholder="Type or select Cargo..."><datalist id="rp-commodity-list">${listOptions(cargoList,c.commodity)}</datalist></div>
+        <div><label>Rate / Shipment Date</label><input id="rp-date" type="date" value="${esc(c.targetDate||today())}"></div>
+        <button class="btn btn-quoted routing-search-btn" id="routing-search">🔎 Search Routing</button><button class="btn btn-clear" id="routing-reset">↻ Reset</button>
+      </div>
+      <div class="routing-path-strip">${routeBoxes||'<span class="routing-empty-state">Enter POL and POD to search routing.</span>'}</div>
+      <div class="routing-popup-tabs"><button class="active" data-tab="routes">🧭 Route Options (${rows.length})</button><button data-tab="rates">💰 Rate Details</button><button data-tab="schedule">🚢 Transit &amp; Schedule</button><button data-tab="alternatives">🔀 Alternative Routes</button></div>
+      <div class="routing-popup-body">
+        <section class="routing-tab-panel active" data-panel="routes"><div class="routing-popup-grid wide"><div class="routing-popup-panel"><h4>Matching Routing / Services</h4><div class="inner table-scroll"><table class="routing-popup-table"><thead><tr><th>Select</th><th>Carrier / Service</th><th>Transit</th><th>Frequency</th><th>Route Type</th><th>Rate Status</th><th>Rate Validity</th><th></th></tr></thead><tbody>${routeRows}</tbody></table></div></div><div class="routing-popup-panel"><h4>Selected Route Details</h4><div class="inner">${selected?detailHTML(selected):'<div class="routing-empty-state">Select a routing service.</div>'}</div></div></div></section>
+        <section class="routing-tab-panel" data-panel="rates"><div class="routing-popup-grid"><div class="routing-popup-panel"><h4>Rate Details — Admin Database</h4><div class="inner"><div class="routing-db-note">💾 Buy rates are read live from <strong>Admin → Rate Sheet / existing SEA charge masters</strong>. Ocean Freight Buy = Rate Sheet Buy (or Manual Buy) + Additional Buy. Sell rates default to Buy and can be changed for this quotation only.</div><div class="table-scroll"><table class="routing-popup-table"><thead><tr><th>Charge</th><th>Buy Rate</th><th>Currency</th><th>Buy INR</th><th>Sell Rate (Editable)</th></tr></thead><tbody>${lineRows}</tbody></table></div>${calc.missingFx?'<div class="routing-fx-error">⚠ Exchange rate missing in Admin Exchange Rate Master. INR total cannot be calculated.</div>':''}</div></div><div class="routing-popup-panel"><h4>💰 Selling &amp; Margin</h4><div class="inner"><div class="routing-freight-buy-card"><div class="routing-section-title">🚢 SEA Freight Buy</div><div class="routing-money-row"><span>${fs.fromRateSheet?'Rate Sheet Buy Rate':'Manual Buy Rate'} (${freightCurrency})</span><input id="rp-freight-buy" type="number" min="0" step="0.01" value="${esc(baseBuyValue)}" ${fs.fromRateSheet?'readonly':''}><span>${fs.fromRateSheet?'From Rate Sheet':'Manual'}</span></div><div class="routing-money-row"><span>Additional Buy / Surcharge (${freightCurrency})</span><input id="rp-freight-additional" type="number" min="0" step="0.01" value="${esc(addBuyValue)}"><span></span></div><div class="routing-money-row"><span><strong>SEA Freight Buy Total (${freightCurrency})</strong></span><strong>${freightTotalValue}</strong><span></span></div><div class="routing-money-row"><span>Admin ${freightCurrency}/INR Rate</span><strong>${freightCurrency==='INR'?'1.00':(getFx(freightCurrency)!=null?money(getFx(freightCurrency)):'—')}</strong><span>From Exchange Rate Master</span></div><div class="routing-money-row"><span><strong>SEA Freight Buy Total (INR)</strong></span><strong>${freightTotalInr==null?'—':fmtINR(freightTotalInr)}</strong><span></span></div></div><div class="routing-money-row"><span>Ocean Freight Margin % (On Selling)</span><input id="rp-margin" type="number" min="0" max="99.99" step="0.01" value="${Number(state.margin).toFixed(2)}"><span>%</span></div><div class="routing-money-row"><span>Ocean Freight Margin Amount (INR)</span><strong>${calc.finalSell==null||!calc.freight?'—':fmtINR(calc.marginAmount||0)}</strong><span></span></div><div class="routing-money-row"><span>Ocean Freight Sell (INR)</span><strong>${calc.freight?.sellInr==null?'—':fmtINR(calc.freight.sellInr)}</strong><span></span></div><div class="routing-final-sell"><span>Final Total Sell Amount (INR)</span><strong>${calc.finalSell==null?'—':fmtINR(calc.finalSell)}</strong></div><div class="routing-db-note">Ocean Freight Buy = Rate Sheet Buy (or Manual Buy if no valid rate) + Additional Buy. Margin applies only to Ocean Freight. Other charges default Sell = Buy and remain individually editable.</div></div></div></div></section>
+        <section class="routing-tab-panel" data-panel="schedule"><div class="routing-popup-grid"><div class="routing-popup-panel"><h4>🚢 Transit &amp; Schedule</h4><div class="inner">${selected?detailHTML(selected,true):'<div class="routing-empty-state">Select a service.</div>'}</div></div><div class="routing-popup-panel"><h4>Route Path</h4><div class="inner routing-route-flow">${routePath.map((p,i)=>`<div><span>${i===0?'POL':i===routePath.length-1?'POD':'VIA'}</span><strong>${esc(p)}</strong></div>${i<routePath.length-1?'<b>↓</b>':''}`).join('')}</div></div></div></section>
+        <section class="routing-tab-panel" data-panel="alternatives"><div class="routing-popup-panel"><h4>🔀 Alternative Routes</h4><div class="inner"><div class="routing-db-note">Alternatives are informational only and will never replace the requested route automatically.</div><div id="routing-alt-list">${alternativeHTML(c)}</div></div></div></section>
+      </div>
+      <div class="routing-popup-footer"><div class="left"><button class="btn btn-export" id="routing-export">📤 Export to Excel</button><span class="routing-footer-note">Rates &amp; validity: Admin database</span></div><div class="right"><button class="btn btn-clear" id="routing-close-bottom">Close</button><button class="btn btn-quoted" id="routing-select" ${selected?'':'disabled'}>✓ ${selected?'Select '+esc(selected.carrier)+' &amp; Continue':'Select &amp; Continue'}</button></div></div>
+    </div>`;
+  }
+  function detailHTML(r,full){
+    const rate=r?.__rate||{};
+    const transit=r?.__rateTransit||r?.transitDays||rate.transitTime||rate.transit||rate.tt||'-';
+    const inventory=rate.inventory||rate.containerType||r?.container||'-';
+    const cargo=rate.commodity||r?.commodity||'-';
+    const validityFrom=rate.validFrom||r?.effectiveFrom;
+    const validityTo=rate.validTo||r?.effectiveUntil;
+    return `<div class="routing-detail-list"><div><span>Carrier</span><strong>${esc(r.carrier||'-')}</strong></div><div><span>Service</span><strong>${esc(r.serviceName||r.serviceId||'-')}</strong></div><div><span>POL</span><strong>${esc(r.pol||rate.pol||'-')}</strong></div><div><span>Via</span><strong>${esc(r.viaPort||rate.viaPort||rate.via||'-')}</strong></div><div><span>POD</span><strong>${esc(r.pod||rate.pod||'-')}</strong></div><div><span>Inventory / Container</span><strong>${esc(inventory)}</strong></div><div><span>Cargo</span><strong>${esc(cargo)}</strong></div><div><span>Route Type</span><strong>${esc(r.directTs||'-')}</strong></div><div><span>Transit</span><strong>${esc(String(transit).replace(/\s*days?\s*$/i,''))} Days</strong></div><div><span>Frequency</span><strong>${esc(r.frequency||'-')}</strong></div><div><span>Rate Valid From</span><strong>${dateText(validityFrom)}</strong></div><div><span>Rate Valid Until</span><strong>${dateText(validityTo)}</strong></div><div><span>Status</span><strong class="routing-status ok">${esc(r.status||'ACTIVE')}</strong></div>${rate.freightAmount!=null?`<div><span>Future Buy Rate</span><strong>${esc(String(rate.currency||'USD'))} ${money(rate.freightAmount)}</strong></div>`:''}${full?`<div><span>Remarks</span><strong>${esc(rate.remarks||r.remarks||'-')}</strong></div>`:''}</div>`;
+  }
+  function alternativeHTML(c){const rows=(dbReady().routing||[]).filter(r=>norm(r.mode||'SEA')==='SEA'&&norm(r.pol)===norm(c.pol)&&norm(r.pod)!==norm(c.pod)&&(!r.status||norm(r.status)==='ACTIVE')).slice(0,8);return rows.length?`<table class="routing-popup-table"><thead><tr><th>Carrier</th><th>POL</th><th>Via</th><th>POD</th><th>Transit</th><th>Frequency</th><th>Type</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.carrier)}</td><td>${esc(r.pol)}</td><td>${esc(r.viaPort||'-')}</td><td>${esc(r.pod)}</td><td>${esc(r.transitDays||'-')}</td><td>${esc(r.frequency||'-')}</td><td><span class="routing-status warn">Alternative</span></td></tr>`).join('')}</tbody></table>`:'<div class="routing-empty-state">No configured alternatives found.</div>';}
+  function currentCriteria(){return {shipmentType:getField('rp-shipment')||state.shipmentType,pol:getField('rp-pol'),pod:getField('rp-pod'),container:getField('rp-container'),commodity:getField('rp-commodity')||'NON HAZ',targetDate:getField('rp-date')||today(),via:[...document.querySelectorAll('#rp-via-chips span')].map(x=>x.textContent.replace(/×$/,'').trim()).filter(Boolean)};}
+  function setRouteFields(c){state.pol=c.pol;state.pod=c.pod;state.container=c.container;state.commodity=c.commodity;state.shipmentType=c.shipmentType;state.targetDate=c.targetDate;state.via=c.via;state.selected=null;state.sellOverrides={};state.freightManualBuy='';state.freightAdditionalBuy=0;render();}
+  function bindPopup(c,selected){
+    const root=document.getElementById('routing-suggestion-popup');
+    root.querySelectorAll('.routing-popup-tabs button').forEach(btn=>btn.onclick=()=>{root.querySelectorAll('.routing-popup-tabs button').forEach(x=>x.classList.remove('active'));root.querySelectorAll('.routing-tab-panel').forEach(x=>x.classList.remove('active'));btn.classList.add('active');root.querySelector(`[data-panel="${btn.dataset.tab}"]`)?.classList.add('active');});
+    root.querySelectorAll('input[name="routing-service"]').forEach(el=>el.onchange=()=>{state.selected=el.dataset.routeKey;state.sellOverrides={};state.freightManualBuy='';state.freightAdditionalBuy=0;render();});
+    root.querySelectorAll('.routing-popup-table tbody tr[data-route-key]').forEach(row=>row.onclick=e=>{if(e.target.closest('button,input,select'))return;state.selected=row.dataset.routeKey;state.sellOverrides={};state.freightManualBuy='';state.freightAdditionalBuy=0;render();});
+    root.querySelectorAll('.routing-view-btn').forEach(el=>el.onclick=()=>{state.selected=el.dataset.routeKey;state.sellOverrides={};state.freightManualBuy='';state.freightAdditionalBuy=0;render();setTimeout(()=>root.querySelector('[data-tab="schedule"]')?.click(),0);});
+    root.querySelectorAll('.routing-sell-input').forEach(el=>el.onchange=()=>{
+      const key=el.dataset.sellCharge; const value=Math.max(0,Number(el.value)||0); state.sellOverrides[key]=value;
+      if(key==='OCEAN FREIGHT'){
+        const current=selected?.__calc?.freight; const buyInr=Number(current?.inr)||0; const sellInr=toINRStrict(value,current?.currency||'INR');
+        state.margin=(sellInr!=null&&sellInr>0&&buyInr>=0)?Math.max(0,Math.min(99.99,((sellInr-buyInr)/sellInr)*100)):state.margin;
+      }
+      render();setTimeout(()=>root.querySelector('[data-tab="rates"]')?.click(),0);
