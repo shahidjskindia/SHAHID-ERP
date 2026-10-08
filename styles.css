@@ -1380,3 +1380,187 @@ button:disabled:hover {
     max-height:none !important;
   }
 }
+
+
+
+/* ============================================================
+   SHAHID ERP — PHASE 8D MOBILE SCROLL ARCHITECTURE
+   Single scroll owner per surface. This replaces the conflicting
+   Phase 8B/8C overflow rules.
+   ============================================================ */
+@media (max-width: 900px) {
+  /* Main mobile document: the page itself owns normal vertical scrolling. */
+  html,
+  body {
+    width:100% !important;
+    max-width:100% !important;
+    overflow-x:hidden !important;
+    overflow-y:auto !important;
+  }
+
+  .app-wrapper {
+    height:auto !important;
+    min-height:calc(100dvh - 60px) !important;
+    position:relative !important;
+  }
+
+  .content-area {
+    height:auto !important;
+    min-height:0 !important;
+    max-height:none !important;
+    overflow-x:hidden !important;
+    overflow-y:visible !important;
+  }
+
+  /* Database: this panel is its own vertical scroll surface. */
+  .content-area.database-content-active {
+    min-height:0 !important;
+    max-height:none !important;
+    overflow:visible !important;
+  }
+
+  #database.database-management-active {
+    box-sizing:border-box !important;
+    width:100% !important;
+    min-width:0 !important;
+    max-width:100% !important;
+    height:calc(100dvh - 84px) !important;
+    min-height:0 !important;
+    max-height:calc(100dvh - 84px) !important;
+    overflow-y:auto !important;
+    overflow-x:auto !important;
+    overscroll-behavior:contain !important;
+    -webkit-overflow-scrolling:touch !important;
+    scrollbar-width:thin !important;
+    padding:0 8px 24px 0 !important;
+  }
+
+  /* Standard modal: overlay never scrolls; modal body owns vertical scroll. */
+  .modal:not(#login-overlay),
+  .modal-overlay:not(#login-overlay) {
+    position:fixed !important;
+    inset:0 !important;
+    width:100vw !important;
+    height:100dvh !important;
+    max-width:100vw !important;
+    max-height:100dvh !important;
+    padding:8px !important;
+    box-sizing:border-box !important;
+    overflow:hidden !important;
+    align-items:center !important;
+    justify-content:center !important;
+  }
+
+  .modal:not(#login-overlay) .modal-content,
+  .modal-overlay:not(#login-overlay) .modal-content {
+    width:min(100%,860px) !important;
+    max-width:100% !important;
+    max-height:calc(100dvh - 16px) !important;
+    min-height:0 !important;
+    margin:0 auto !important;
+    overflow:hidden !important;
+    display:flex !important;
+    flex-direction:column !important;
+  }
+
+  .modal:not(#login-overlay) .modal-body,
+  .modal-overlay:not(#login-overlay) .modal-body {
+    min-height:0 !important;
+    max-height:none !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    -webkit-overflow-scrolling:touch !important;
+    overscroll-behavior:contain !important;
+    flex:1 1 auto !important;
+  }
+
+  /* Wide data inside ordinary modals gets its own two-axis scroll wrapper. */
+  .modal:not(#login-overlay) .modal-body .table-wrap,
+  .modal:not(#login-overlay) .modal-body .table-scroll,
+  .modal-overlay:not(#login-overlay) .modal-body .table-wrap,
+  .modal-overlay:not(#login-overlay) .modal-body .table-scroll {
+    width:100% !important;
+    max-width:100% !important;
+    overflow-x:auto !important;
+    overflow-y:auto !important;
+    -webkit-overflow-scrolling:touch !important;
+  }
+
+  /* Quote Preview: only the quotation viewport scrolls.
+     The overlay and modal window never become horizontal scroll owners. */
+  #previewModal {
+    align-items:center !important;
+    justify-content:center !important;
+    overflow:hidden !important;
+  }
+
+  #previewModal .modal-content {
+    width:calc(100vw - 16px) !important;
+    max-width:calc(100vw - 16px) !important;
+    height:calc(100dvh - 16px) !important;
+    max-height:calc(100dvh - 16px) !important;
+    min-height:0 !important;
+    margin:0 !important;
+    overflow:hidden !important;
+    display:flex !important;
+    flex-direction:column !important;
+  }
+
+  #previewModal .modal-body,
+  #previewModal #previewBody {
+    width:100% !important;
+    min-width:0 !important;
+    max-width:100% !important;
+    min-height:0 !important;
+    max-height:none !important;
+    overflow:hidden !important;
+    padding:10px !important;
+    display:flex !important;
+    flex-direction:column !important;
+    flex:1 1 auto !important;
+    box-sizing:border-box !important;
+  }
+
+  #previewModal .quotation-preview-actions {
+    flex:0 0 auto !important;
+    width:100% !important;
+    max-width:100% !important;
+    overflow:hidden !important;
+    display:flex !important;
+    flex-wrap:wrap !important;
+    gap:6px !important;
+    margin-bottom:10px !important;
+  }
+
+  #previewModal .quotation-preview-scroll {
+    display:block !important;
+    width:100% !important;
+    min-width:0 !important;
+    max-width:100% !important;
+    min-height:0 !important;
+    flex:1 1 auto !important;
+    overflow-x:auto !important;
+    overflow-y:auto !important;
+    -webkit-overflow-scrolling:touch !important;
+    overscroll-behavior:contain !important;
+    touch-action:auto !important;
+    box-sizing:border-box !important;
+    background:#fff !important;
+  }
+
+  #previewModal .quotation-preview-canvas,
+  #previewModal #preview-content-container {
+    width:745px !important;
+    min-width:745px !important;
+    max-width:745px !important;
+    margin:0 !important;
+    transform:none !important;
+    box-sizing:border-box !important;
+  }
+
+  #previewModal .quotation-preview-canvas #preview-content-container {
+    width:745px !important;
+    min-width:745px !important;
+    max-width:745px !important;
+  }
+}
